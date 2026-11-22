@@ -1600,8 +1600,14 @@ html[data-kb="open"] .gc-tray-qa {
   color: var(--t3);
   font: 500 0.71875rem/1rem var(--sans);
 }
-.gc-earlier-div::before,
-.gc-earlier-div::after {
+.gc-earlier-div:empty::before {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--bd);
+}
+.gc-earlier-div:not(:empty)::before,
+.gc-earlier-div:not(:empty)::after {
   content: "";
   flex: 1;
   min-width: 12px;

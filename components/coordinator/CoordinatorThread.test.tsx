@@ -688,10 +688,16 @@ it.each([true, false])("asked for the pinned thread, the Chief of staff page lea
     if (path.endsWith("/execution")) return { records: [], sources: [] };
     return pinned;
   });
-  mount({ compact: true, standalone });
-  // The earlier thread is the top of the chat: its divider loads it, greyed; tapping its own divider continues it.
-  fireEvent.click(await screen.findByRole("button", { name: /^Earlier · Last week/ }));
-  fireEvent.click(await screen.findByRole("button", { name: /^Continue Last week/ }));
+  // The panel is on an earlier thread (kept by its host, as the phone sheet does).
+  function Host() {
+    const [selection, setSelection] = useState({ sessionId: "earlier-thread" as string | null, fresh: false });
+    return <CoordinatorThread info={info} compact standalone={standalone} selection={selection} onSelection={setSelection} />;
+  }
+  render(
+    <QueryClientProvider client={client}>
+      <Host />
+    </QueryClientProvider>,
+  );
   expect(await screen.findByText("From last week")).toBeTruthy();
   expect(screen.getByRole("group", { name: "Earlier thread" })).toBeTruthy();
   act(() => void window.dispatchEvent(new Event(COORDINATOR_PINNED_THREAD)));
@@ -733,7 +739,7 @@ it.each([true, false])("a message link opens that reply on the Chief of staff pa
 });
 
 // The host can keep which thread the panel is on (the phone sheet unmounts the panel when it closes).
-it("the thread the panel is on can be kept by the host: it is reported when it changes and honoured on mount", async () => {
+it("the thread the panel is on can be kept by the host: it is honoured on mount and a change is reported", async () => {
   const earlier = { session: { id: "earlier-thread", pinned: false, archived: false }, timeline: [{ kind: "assistant", id: "old", text: "From last week" }] };
   const pinned = client.getQueryData(["session", "same-session"]);
   vi.mocked(api.get).mockImplementation(async (path: string) => {
@@ -753,10 +759,8 @@ it("the thread the panel is on can be kept by the host: it is reported when it c
       <Host />
     </QueryClientProvider>
   );
+  kept = { sessionId: "earlier-thread", fresh: false };
   const first = render(ui());
-  // The earlier thread is the top of the chat: its divider loads it, greyed; tapping its own divider continues it.
-  fireEvent.click(await screen.findByRole("button", { name: /^Earlier · Last week/ }));
-  fireEvent.click(await screen.findByRole("button", { name: /^Continue Last week/ }));
   expect(await screen.findByText("From last week")).toBeTruthy();
   expect(kept).toEqual({ sessionId: "earlier-thread", fresh: false });
   // The sheet closes and opens again: a new panel, on the same thread.
@@ -770,7 +774,7 @@ it("the thread the panel is on can be kept by the host: it is reported when it c
 });
 
 // Earlier threads are the top of one continuous chat: grey dividers and greyed, read-only messages. Nothing folds.
-it("shows earlier threads above the current one as grey dividers with their messages greyed, one more at a time", async () => {
+it("shows earlier threads above the current one: one Earlier divider loads the thread before, greyed", async () => {
   const thread = (id: string, text: string) => ({
     session: { id, pinned: false, archived: false },
     timeline: [
@@ -795,26 +799,26 @@ it("shows earlier threads above the current one as grey dividers with their mess
     return pinned;
   });
   mount({ compact: true });
-  // No collapse: the newest earlier thread is one grey divider at the top, and nothing of it is loaded yet.
+  // No collapse and no list: one quiet "Earlier" divider at the top, and nothing of the history loaded yet.
   expect(screen.queryByText("Earlier threads")).toBeNull();
-  const more = await screen.findByRole("button", { name: /^Earlier · Last week/ });
+  const more = await screen.findByRole("button", { name: "Earlier" });
   expect(more.closest("details")).toBeNull();
   expect(screen.queryByText("From last week")).toBeNull();
-  // Smoke-test chats and other areas' threads are not this bot's history.
-  expect(screen.queryByText(/zz-smoke|Another area/)).toBeNull();
   fireEvent.click(more);
-  const week = await screen.findByRole("region", { name: /^Earlier thread: Last week/ });
+  const week = await screen.findByRole("region", { name: "Earlier thread: Last week" });
   expect(await within(week).findByText("From last week")).toBeTruthy();
   expect(within(week).getByText("Asked in week")).toBeTruthy();
-  // History is read-only: no rating, no actions; a divider closes it above the thread you are in.
+  // Read-only history: no rating, no actions, nothing to continue. A hairline marks where this thread begins.
   expect(within(week).queryByTestId("coordinator-rate")).toBeNull();
+  expect(within(week).queryAllByRole("button")).toHaveLength(0);
   expect(screen.getByRole("separator", { name: "This thread" })).toBeTruthy();
-  // The next one up is its own divider, loaded on its own; the older thread sits above the newer.
-  fireEvent.click(screen.getByRole("button", { name: /^Earlier · Last month/ }));
-  const month = await screen.findByRole("region", { name: /^Earlier thread: Last month/ });
+  // The same divider loads the one before; the older thread sits above the newer. Smoke chats and other areas' threads never come.
+  fireEvent.click(screen.getByRole("button", { name: "Earlier" }));
+  const month = await screen.findByRole("region", { name: "Earlier thread: Last month" });
   expect(await within(month).findByText("From last month")).toBeTruthy();
   expect(month.compareDocumentPosition(week) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(screen.queryByRole("button", { name: /^Earlier · / })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Earlier" })).toBeNull();
+  expect(screen.queryByText(/zz-smoke|Another area/)).toBeNull();
   // The current thread is where it was, below the history, and nothing was sent.
   expect(screen.getByText("Reply to correct")).toBeTruthy();
   expect(api.post).not.toHaveBeenCalled();

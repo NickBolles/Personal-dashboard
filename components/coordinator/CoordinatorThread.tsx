@@ -719,14 +719,7 @@ export function CoordinatorThread({
   // On an earlier thread the bar says so and leads back: the history is drawn above the current thread only.
   const earlierThreads =
     previous.length && !viewingEarlier && (!sid || hiddenGroups === 0) ? (
-      <EarlierThreads
-        threads={previous}
-        shown={backShown}
-        onMore={loadEarlierThread}
-        render={earlierMessage}
-        current={fresh || !sid ? "New thread" : (detail.data?.session?.title ?? "This thread")}
-        onContinue={openThread}
-      />
+      <EarlierThreads threads={previous} shown={backShown} onMore={loadEarlierThread} render={earlierMessage} />
     ) : null;
   const loadEarlier = () => {
     const body = bodyRef.current;

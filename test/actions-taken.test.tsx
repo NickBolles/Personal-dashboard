@@ -505,14 +505,16 @@ describe("coordinator parity controls", () => {
     render(<CoordinatorThread info={info} />, { wrapper });
     // No fold-out list: the newest earlier thread is a divider at the top of the chat that loads it in place.
     expect(screen.queryByText("Earlier threads", { exact: true })).toBeNull();
-    await screen.findByRole("button", { name: /^Earlier · Earlier 0/ });
+    await screen.findByRole("button", { name: "Earlier" });
     expect(api.get).toHaveBeenCalledWith("/api/work/conversations?view=all&areaId=wk_area");
     expect(screen.queryByRole("list", { name: "Earlier threads" })).toBeNull();
     // One divider at a time; never a /chat link; direct children only, never the current one.
-    expect(screen.getAllByRole("button", { name: /^Earlier · / })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Earlier" })).toHaveLength(1);
     expect(within(screen.getByTestId("gc-earlier")).queryAllByRole("link")).toHaveLength(0);
     expect(screen.queryByText(/Nested conversation/)).toBeNull();
-    expect(screen.queryByRole("button", { name: /^Earlier · Current/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Earlier" }));
+    expect(await screen.findByRole("region", { name: "Earlier thread: Earlier 0" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Earlier thread: Current" })).toBeNull();
     // New thread asks first; nothing is created until the first message.
     fireEvent.click(screen.getByRole("button", { name: "New thread" }));
     expect(screen.getByTestId("coordinator-input")).toBeTruthy();

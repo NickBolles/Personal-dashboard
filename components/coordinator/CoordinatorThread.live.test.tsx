@@ -6,6 +6,7 @@
  */
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useState } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { api } from "@/lib/client/api";
 import { LINGER_MS, openRunStreams } from "@/lib/client/run-streams";
@@ -214,7 +215,20 @@ it("a stream that cannot reach the run does not block the composer, and the conv
 });
 
 it("a run that finished clears only its own live copy: another thread opened meanwhile keeps the run it is following", async () => {
-  const stream = await mount();
+  const moveTo: { current: ((id: string) => void) | null } = { current: null };
+  function Host() {
+    const [selection, setSelection] = useState<{ sessionId: string | null; fresh: boolean }>({ sessionId: null, fresh: false });
+    moveTo.current = (id) => setSelection({ sessionId: id, fresh: false });
+    return <CoordinatorThread info={info} compact name="Chief of staff" selection={selection} onSelection={setSelection} />;
+  }
+  render(
+    <QueryClientProvider client={client}>
+      <Host />
+    </QueryClientProvider>,
+  );
+  await settle(10);
+  expect(open()).toHaveLength(1);
+  const stream = FakeSource.all[0]!;
   const OTHER = "earlier-thread";
   const first = runId;
   const second = "run_in_other_thread";
@@ -234,15 +248,12 @@ it("a run that finished clears only its own live copy: another thread opened mea
     if (path.endsWith("/execution")) return { records: [], sources: [] };
     return {};
   });
-  // The thread list was read at mount, before this earlier thread existed: read it again.
-  await act(() => client.invalidateQueries({ queryKey: ["work", "conversations"] }));
-  await settle(10);
-  fireEvent.click(screen.getByRole("button", { name: /^Earlier · Last week/ }));
   await settle(10);
   ended = true;
   act(() => stream.emit({ type: "run.terminal", status: "completed", output: "Done." }, 1));
   await settle(50);
-  fireEvent.click(screen.getByRole("button", { name: /^Continue Last week/ }));
+  // The owner moves the panel to the other thread (its host keeps which thread it is on).
+  act(() => moveTo.current?.(OTHER));
   await settle(50);
   const following = () => open().map((s) => s.url);
   expect(following()).toEqual([`/api/hermes/runs/${second}/events?format=agui`]);

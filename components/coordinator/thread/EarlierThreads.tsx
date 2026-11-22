@@ -10,67 +10,43 @@ import { shortWhen } from "@/lib/task-state";
 export type EarlierThread = { id: string; title: string; lastActiveAt: string | null };
 type Message = Extract<TimelineItem, { kind: "user" | "assistant" }>;
 
-/** "Furnace planning · 18 Nov": the thread's name and when it was last active. */
-const label = (t: EarlierThread, now: number) => [t.title, shortWhen(t.lastActiveAt, now)].filter(Boolean).join(" · ");
-
 /**
- * A bot's earlier threads, as the top of one continuous chat: each is a grey divider (its title and date) and its
- * messages, greyed and read-only. Nothing folds. The divider above the oldest one shown loads the one before it; a
- * thread's own divider, tapped, continues that thread. `threads` is newest first; the `shown` newest are drawn,
- * oldest at the top.
+ * A bot's earlier threads, as the top of one continuous chat. Nothing folds and nothing else is offered: a grey
+ * "Earlier" divider loads the thread before; each thread drawn starts with a hairline showing when it was, then its
+ * messages, greyed and read-only. `threads` is newest first; the `shown` newest are drawn, oldest at the top.
  */
 export function EarlierThreads({
   threads,
   shown,
   onMore,
   render,
-  current,
-  onContinue,
 }: {
   threads: readonly EarlierThread[];
   shown: number;
   onMore: () => void;
   /** Draws one message the way the chat does (the same text renderer, without its actions). */
   render: (m: Message) => ReactNode;
-  /** The name of the thread below them (the one you are in): its divider closes the history. */
-  current: string;
-  /** Continue an earlier thread: the chat moves to it. */
-  onContinue?: (id: string) => void;
 }) {
   const now = useNow();
   if (!threads.length) return null;
   const drawn = threads.slice(0, shown).reverse();
-  const next = threads[shown];
   return (
     <div className="gc-earlier" data-testid="gc-earlier">
-      {next ? (
+      {shown < threads.length ? (
         <Button variant="ghost" size="sm" className="gc-earlier-div gc-earlier-more" onClick={onMore} data-testid="gc-earlier-more">
-          <span>Earlier · {label(next, now)}</span>
+          <span>Earlier</span>
         </Button>
       ) : null}
       {drawn.map((t) => (
-        <EarlierThreadBlock key={t.id} thread={t} title={label(t, now)} render={render} onContinue={onContinue} />
+        <EarlierThreadBlock key={t.id} thread={t} when={shortWhen(t.lastActiveAt, now)} render={render} />
       ))}
-      {drawn.length ? (
-        <div role="separator" aria-label={current} className="gc-earlier-div">
-          <span>{current}</span>
-        </div>
-      ) : null}
+      {/* Where the thread you are in begins. */}
+      {drawn.length ? <div role="separator" aria-label="This thread" className="gc-earlier-div" /> : null}
     </div>
   );
 }
 
-function EarlierThreadBlock({
-  thread,
-  title,
-  render,
-  onContinue,
-}: {
-  thread: EarlierThread;
-  title: string;
-  render: (m: Message) => ReactNode;
-  onContinue?: (id: string) => void;
-}) {
+function EarlierThreadBlock({ thread, when, render }: { thread: EarlierThread; when: string; render: (m: Message) => ReactNode }) {
   const detail = useQuery({
     queryKey: ["session", thread.id],
     queryFn: ({ signal }) => api.get<{ session: SessionSummary; timeline: TimelineItem[] }>(`/api/hermes/sessions/${encodeURIComponent(thread.id)}`, signal),
@@ -78,19 +54,12 @@ function EarlierThreadBlock({
   });
   const messages = (detail.data?.timeline ?? []).filter((m): m is Message => (m.kind === "user" || m.kind === "assistant") && !!m.text.trim());
   return (
-    <section aria-label={`Earlier thread: ${title}`} className="gc-earlier-thread" data-thread={thread.id}>
-      {onContinue ? (
-        <Button variant="ghost" size="sm" className="gc-earlier-div gc-earlier-more" aria-label={`Continue ${title}`} onClick={() => onContinue(thread.id)}>
-          <span>{title}</span>
-        </Button>
-      ) : (
-        <div role="separator" aria-label={title} className="gc-earlier-div">
-          <span>{title}</span>
-        </div>
-      )}
+    <section aria-label={`Earlier thread: ${thread.title}`} className="gc-earlier-thread" data-thread={thread.id}>
+      <div role="separator" aria-label={when || thread.title} className="gc-earlier-div">
+        {when ? <span>{when}</span> : null}
+      </div>
       {detail.isLoading ? <p className="gc-earlier-note">Loading…</p> : null}
       {detail.error ? <p className="gc-earlier-note">Couldn&apos;t load this thread</p> : null}
-      {detail.isSuccess && !messages.length ? <p className="gc-earlier-note">No messages</p> : null}
       {messages.length ? (
         <ol>
           {messages.map((m) => (
