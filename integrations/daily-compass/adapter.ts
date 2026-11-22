@@ -13,11 +13,15 @@ import { runChecks } from "@/integrations/testing";
 import { baseAction } from "@/integrations/actions";
 import type { AdapterContext, CompassState, SourceAdapter } from "@/integrations/types";
 import type { NextAction } from "@/lib/contracts";
+import { journalCompass } from "@/server/brief/journal";
 
 const STALE = 10 * MINUTE;
 
 /** Optional, bounded: today's priorities as the check-in recorded them. Home uses them to rank; never invented. */
 const prioritiesSchema = z.array(z.string().trim().min(1).max(120)).max(5).nullish();
+
+/** Optional: what the check-in named as the one thing for the next day. Never invented. */
+const tomorrowSchema = z.string().trim().max(200).nullish();
 
 const remoteSchema = z.object({
   date: z.string(),
@@ -25,6 +29,7 @@ const remoteSchema = z.object({
   completedAt: z.string().nullish(),
   url: z.string().nullish(),
   priorities: prioritiesSchema,
+  tomorrow: tomorrowSchema,
 });
 
 /** Hermes-owned Daily Compass: the structured answer Jarvis requires. */
@@ -34,6 +39,7 @@ const hermesSchema = z.object({
   completedAt: z.string().nullish(),
   summary: z.string().max(500).nullish(),
   priorities: prioritiesSchema,
+  tomorrow: tomorrowSchema,
 });
 type HermesCompass = z.infer<typeof hermesSchema>;
 const HERMES_EXAMPLE: HermesCompass = {
@@ -42,6 +48,7 @@ const HERMES_EXAMPLE: HermesCompass = {
   completedAt: null,
   summary: "optional one-line status",
   priorities: ["only priorities the check-in actually recorded for this date; [] if none"],
+  tomorrow: "the one thing the check-in named for the NEXT day, only if it recorded one; else null",
 };
 
 function cfg() {
@@ -115,6 +122,7 @@ export async function compassState(ctx: AdapterContext): Promise<CompassState> {
       completedAt: snap.data.completedAt ?? undefined,
       summary: snap.data.summary ?? undefined,
       priorities: snap.data.priorities ?? undefined,
+      tomorrow: snap.data.tomorrow ?? undefined,
       sessionId: localState(ctx.today)?.sessionId ?? undefined,
       inWindow: within,
       windowStart: c.windowStart,
@@ -129,6 +137,7 @@ export async function compassState(ctx: AdapterContext): Promise<CompassState> {
       completed: r.completed,
       completedAt: r.completedAt ?? undefined,
       priorities: r.priorities ?? undefined,
+      tomorrow: r.tomorrow ?? undefined,
       inWindow: within,
       windowStart: c.windowStart,
       windowEnd: c.windowEnd,
@@ -170,6 +179,17 @@ export async function completeCompass(date: string, actor: string, correlationId
     // Readback is part of the contract: only an answer saying "completed" counts.
     if (!answer.completed) throw new UpstreamError("Daily Compass", "bad_response", "Hermes did not confirm the check-in as complete");
     saveSnapshot("daily_compass", date, answer);
+    try {
+      journalCompass({
+        date: answer.date,
+        completed: answer.completed,
+        summary: answer.summary ?? undefined,
+        priorities: answer.priorities ?? undefined,
+        tomorrow: answer.tomorrow ?? undefined,
+      });
+    } catch {
+      /* the journal is best effort */
+    }
   } else {
     const now = new Date().toISOString();
     getDb()
@@ -190,6 +210,12 @@ export const dailyCompassAdapter: SourceAdapter = {
   staleAfterMs: STALE,
   async fetch(ctx) {
     const state = await compassState(ctx);
+    // Keep each day's recorded answer so the brief can look back (server/brief/journal.ts). Never blocks a read.
+    try {
+      journalCompass(state);
+    } catch {
+      /* the journal is best effort */
+    }
     const { asOf } = state;
     const actions: NextAction[] = [];
     if (!state.completed) {
