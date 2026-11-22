@@ -29,7 +29,7 @@ test("item header: one ⋯ menu and one primary action; the chat is a pane of th
   await expect(focus).toHaveCount(1);
   // The header holds the breadcrumb, the title and the one menu: no chat button, no second action.
   await expect(header.getByRole("button", { name: /chat|focused work/i })).toHaveCount(0);
-  const more = header.getByRole("button", { name: "More item actions" });
+  const more = header.getByRole("button", { name: "More actions" });
   await expect(more).toBeVisible();
   await more.click();
   await expect(page.getByRole("menuitem", { name: "Open chat", exact: true })).toBeVisible();

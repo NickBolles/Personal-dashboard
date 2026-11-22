@@ -157,7 +157,7 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
   const router = useRouter();
   const actions = [
     { label: model ? `${model.kind} · ${model.headline.label}` : name, heading: true },
-    { label: model ? `Open ${model.container ? model.kind.toLowerCase() : "item"}` : "Try opening it", onSelect: () => router.push(href) },
+    { label: model ? `Open ${model.container ? model.kind.toLowerCase() : "task"}` : "Try opening it", onSelect: () => router.push(href) },
     onAsk ? { label: "Ask in chat", onSelect: () => onAsk(name) } : null,
     ...(model?.decisions ?? []).slice(0, 3).map((d) => ({ label: named(`Review ${d.ref}`, d.question), disabled: !onRef, onSelect: () => onRef?.(d.ref) })),
     ...runs.slice(0, 3).map((r) => ({ label: named(`Go to ${r.ref}`, r.title), disabled: !onRef, onSelect: () => onRef?.(r.ref) })),
@@ -205,7 +205,7 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
           ) : null}
         </Button>
         {model ? (
-          <Link className="ic-open" href={href} aria-label={`Open ${name}`} title={`Open ${model.container ? model.kind.toLowerCase() : "item"}`}>
+          <Link className="ic-open" href={href} aria-label={`Open ${name}`} title={`Open ${model.container ? model.kind.toLowerCase() : "task"}`}>
             <ExternalIcon className="h-3.5 w-3.5" />
           </Link>
         ) : null}
@@ -349,7 +349,7 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
           <div className="rc-actions">
             {model ? (
               <ButtonLink size="sm" variant="ghost" className="rc-act" href={href} icon={<AreasIcon className="h-3.5 w-3.5" />}>
-                Open {model.container ? model.kind.toLowerCase() : "item"}
+                Open {model.container ? model.kind.toLowerCase() : "task"}
               </ButtonLink>
             ) : null}
             {onAsk ? (

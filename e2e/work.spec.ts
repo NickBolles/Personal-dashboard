@@ -19,7 +19,7 @@ async function showTree(page: Page) {
 }
 /** Item actions live in the ⋯ menu. */
 async function itemAction(page: Page, name: string) {
-  await page.getByRole("button", { name: "More item actions" }).click();
+  await page.getByRole("button", { name: "More actions" }).click();
   await page.getByRole("menuitem", { name, exact: true }).click();
 }
 async function pick(page: Page, title: string) {
@@ -30,10 +30,10 @@ async function pick(page: Page, title: string) {
 }
 async function newChild(page: Page, parent: string, title: string) {
   await pick(page, parent);
-  // Containers lead with "+ Project" (areas) / "+ Item" (projects).
+  // Containers lead with "+ Project" (areas) / "+ Task" (projects).
   await page
     .getByRole("article")
-    .getByRole("button", { name: /^\+ (Project|Item)$/ })
+    .getByRole("button", { name: /^\+ (Project|Task)$/ })
     .click();
   await page.getByRole("dialog").getByLabel("Title", { exact: true }).fill(title);
   await page.getByRole("button", { name: "Create", exact: true }).click();
@@ -70,7 +70,7 @@ test("work: organize, hand off, merge, validate, settle and reopen", async ({ pa
   await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText("Momentum Bets›Criteria evaluator›");
 
   // Split the perf bug out of V5; the source is untouched and lineage is recorded.
-  await page.getByRole("button", { name: "More item actions" }).click();
+  await page.getByRole("button", { name: "More actions" }).click();
   await page.getByRole("menuitem", { name: "Split into child" }).click();
   await page.getByLabel("Child title").fill("Hydration perf bug");
   await page.getByLabel("Summary excerpt").fill("p95 hydration regressed after the V5 contract change");
@@ -79,7 +79,7 @@ test("work: organize, hand off, merge, validate, settle and reopen", async ({ pa
   await expect(await openItemLog(page)).toContainText("Split from V5 evaluator contract");
 
   // Fork it too: a sibling with forked_from lineage.
-  await page.getByRole("button", { name: "More item actions" }).click();
+  await page.getByRole("button", { name: "More actions" }).click();
   await page.getByRole("menuitem", { name: "Fork" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Fork", exact: true }).click();
   await expect(page.getByRole("heading", { level: 2, name: "Hydration perf bug (fork)" })).toBeVisible();
@@ -434,7 +434,7 @@ test("work: conversation picker, unfiled filing, continue in a new conversation 
 
   // Undo an archive from the item menu.
   await page.goto(`/areas?item=${ids["V5 evaluator contract"]}`);
-  await page.getByRole("button", { name: "More item actions" }).click();
+  await page.getByRole("button", { name: "More actions" }).click();
   await page.getByRole("menuitem", { name: "Archive" }).click();
   await expect.poll(async () => (await items(page)).some((i) => i.id === ids["V5 evaluator contract"])).toBe(false);
   await page.getByRole("status").filter({ hasText: "Archived" }).getByRole("button", { name: "Undo" }).click();

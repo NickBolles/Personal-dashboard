@@ -193,7 +193,7 @@ function tidyDates(verb: string): string | null {
 
 /** A change in plain words; a decision or an agent run is named for what it is, whatever row type recorded it. */
 export function changeLabel(row: Pick<ActivityItem, "type" | "verb">): string {
-  if (row.type === "created") return "Created item";
+  if (row.type === "created") return "Created task";
   if (/needs your decision/i.test(row.verb)) return "Raised decision";
   if (/started.*run/i.test(row.verb)) return "Started agent run";
   if (/finished.*run|run.*(done|finished)/i.test(row.verb)) return "Finished agent run";

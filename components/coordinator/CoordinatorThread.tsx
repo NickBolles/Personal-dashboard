@@ -68,6 +68,8 @@ import type { ConversationListResponse } from "@/lib/work";
 import { parseUserMessage, splitAttachedContext } from "@/lib/chat/display";
 // PR A (pinned Chief of staff thread): thread switcher, paging, live decisions and questionnaire replies.
 import { ThreadBar, usePinThread } from "@/components/coordinator/thread/ThreadBar";
+import { EarlierThreads } from "@/components/coordinator/thread/EarlierThreads";
+import { isOpsConversation } from "@/lib/coordinator/thread";
 import { CHIEF_THREAD, THREAD_FIRST_PAGE, THREAD_PAGE, visibleGroupCount, type ThreadSelection } from "@/lib/coordinator/thread";
 import { SmartScope } from "@/components/smart/SmartScope";
 import { smartDecisionRefs } from "@/lib/jarvis-ui/live";
@@ -177,7 +179,8 @@ export function CoordinatorThread({
   const select = onSelection ?? setOwnSelection;
   const setSessionId = (id: string | null) => select((now) => ({ ...now, sessionId: id }));
   const setFresh = (value: boolean) => select((now) => ({ ...now, fresh: value }));
-  const [earlier, setEarlier] = useState(false);
+  /** How many earlier threads are drawn above this one (greyed, behind their dividers). */
+  const [back, setBack] = useState<{ sid: string | null; n: number }>({ sid: null, n: 0 });
   const [shown, setShown] = useState<{ sid: string | null; n: number }>({ sid: null, n: THREAD_FIRST_PAGE });
   const composer = useRef<ComposerHandle>(null);
   useEffect(() => {
@@ -339,7 +342,8 @@ export function CoordinatorThread({
   const discussions = useQuery({
     queryKey: ["work", "conversations", "coordinator-earlier", d.area.id],
     queryFn: () => api.get<ConversationListResponse>(`/api/work/conversations?view=all&areaId=${encodeURIComponent(d.area.id)}`),
-    enabled: earlier && !d.excluded,
+    enabled: !d.excluded,
+    staleTime: 60_000,
   });
   const postInput = (
     target: string,
@@ -585,10 +589,13 @@ export function CoordinatorThread({
     />
   );
   const sourceDown = !!execution.error || !!execution.data?.sources?.some((source) => source.state === "unavailable");
-  const previous = (discussions.data?.conversations?.filter((c) => c.placement?.parentId === d.area.id && c.id !== sid) ?? []).map((c) => ({
-    id: c.id,
-    title: c.title,
-  }));
+  // This bot's other threads, newest first: the top of the chat, above the one on screen.
+  const previous = (discussions.data?.conversations ?? [])
+    .filter((c) => c.placement?.parentId === d.area.id && c.id !== sid && !isOpsConversation(c))
+    .sort((a, b) => (b.lastActiveAt ?? "").localeCompare(a.lastActiveAt ?? ""))
+    .slice(0, 20)
+    .map((c) => ({ id: c.id, title: c.title, lastActiveAt: c.lastActiveAt }));
+  const backShown = back.sid === sid ? back.n : 0;
   // "Load earlier" pages through the thread already loaded (no extra Hermes requests); the first page always reaches
   // back to the "Since …" divider.
   const allGroups = groupMessages(timeline);
@@ -691,6 +698,29 @@ export function CoordinatorThread({
     target.querySelector<HTMLElement>(".k-thing-title, [data-thing-toggle]")?.focus({ preventScroll: true });
   };
   const refChip = onRef ? (ref: string) => <RefPill id={ref} onClick={() => jumpTo(ref)} className="gc-inline-ref" /> : null;
+  /** One more earlier thread above the ones drawn, keeping what the owner was reading where it was. */
+  const loadEarlierThread = () => {
+    const body = bodyRef.current;
+    const before = body ? body.scrollHeight - body.scrollTop : 0;
+    setBack({ sid, n: backShown + 1 });
+    requestAnimationFrame(() => {
+      if (body) body.scrollTop = body.scrollHeight - before;
+    });
+  };
+  const earlierMessage = (m: Extract<TimelineItem, { kind: "user" | "assistant" }>) =>
+    m.kind === "assistant" ? (
+      <>
+        <p className="text-xs font-semibold text-muted">{name}</p>
+        <AssistantText text={m.text} messageId={m.id} />
+      </>
+    ) : (
+      <UserMessage text={m.text} />
+    );
+  // On an earlier thread the bar says so and leads back: the history is drawn above the current thread only.
+  const earlierThreads =
+    previous.length && !viewingEarlier && (!sid || hiddenGroups === 0) ? (
+      <EarlierThreads threads={previous} shown={backShown} onMore={loadEarlierThread} render={earlierMessage} />
+    ) : null;
   const loadEarlier = () => {
     const body = bodyRef.current;
     const before = body ? body.scrollHeight - body.scrollTop : 0;
@@ -743,9 +773,6 @@ export function CoordinatorThread({
                 viewingTitle={detail.data?.session?.title ?? null}
                 fresh={fresh}
                 busy={send.isPending || control.isPending}
-                earlier={previous}
-                earlierState={discussions.isLoading ? "loading" : discussions.error ? "error" : discussions.isSuccess ? "ready" : "idle"}
-                onEarlierOpen={setEarlier}
                 pinned={!!d.pinned}
                 onOpen={openThread}
                 onNew={() => {
@@ -776,6 +803,7 @@ export function CoordinatorThread({
                 </span>
               ) : null}
             </div>
+            {!sid ? earlierThreads : null}
             {!sid ? (
               <div>
                 <p className="text-sm text-muted" data-testid={compact ? "gc-empty" : "coordinator-empty"}>
@@ -800,7 +828,9 @@ export function CoordinatorThread({
                   <Button size="sm" variant="ghost" className="gc-load-earlier" data-testid="gc-load-earlier" onClick={loadEarlier}>
                     Load earlier ({hiddenGroups})
                   </Button>
-                ) : null}
+                ) : (
+                  earlierThreads
+                )}
                 <ol aria-label="Latest messages">
                   {msgs.map((m, index) => (
                     <Fragment key={m.id}>
@@ -1229,7 +1259,7 @@ export function ChatWork({ work, render, onActivity }: { work: BackgroundWork[];
           </Button>
           {onActivity ? (
             <Button size="sm" variant="ghost" onClick={onActivity}>
-              Activity
+              Tasks
             </Button>
           ) : null}
           {open ? <div aria-label="Stalled run history">{quiet.map(render)}</div> : null}

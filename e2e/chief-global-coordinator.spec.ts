@@ -4,7 +4,7 @@ import { appPost, expectNoHorizontalOverflow } from "./helpers";
 /**
  * Expand: /chief is the Chief of staff conversation as the page. It is the shell's one panel at full size (not a
  * second copy), so the draft and the place in the thread carry over; wide screens show the conversation beside
- * Needs you / Activity; and the pinned thread's own chat address leads here.
+ * Tasks; and the pinned thread's own chat address leads here.
  * The file name matches the desktop project's `global-coordinator.spec.ts` pattern. "Whitebeam" is unique to this spec.
  */
 
@@ -99,19 +99,17 @@ test("Expand: the same thread at full size keeps the draft and the place; wide s
   const viewport = page.viewportSize()!;
   if (desktop) {
     // The conversation and the side column are on screen together; the tabs choose the side column only.
-    await expect(panel().getByRole("tab")).toHaveText([/^Needs you/, /^Activity/]);
+    await expect(panel().getByRole("tab")).toHaveText([/^Tasks/]);
     await expect(panel().getByRole("region", { name: "Conversation" })).toBeVisible();
-    await panel()
-      .getByRole("tab", { name: /^Activity/ })
-      .click();
-    await expect(panel().getByRole("tabpanel", { name: /^Activity/ })).toBeVisible();
+    await expect(panel().getByRole("tabpanel", { name: /^Tasks/ })).toBeVisible();
+    await expect(panel().getByTestId("task-list")).toBeVisible();
     await expect(panel().getByTestId("gc-input")).toBeVisible();
     // It takes the page's place beside the sidebar: much wider than a rail, flush with the right edge.
     expect(box.width).toBeGreaterThan(viewport.width * 0.6);
     expect(Math.round(box.x + box.width)).toBe(viewport.width);
   } else {
     // Below the split width the sheet covers the screen and keeps its tabs.
-    await expect(panel().getByRole("tab")).toHaveText([/^Chat/, /^Needs you/, /^Activity/]);
+    await expect(panel().getByRole("tab")).toHaveText([/^Chat/, /^Tasks/]);
     expect(Math.round(box.height)).toBe(viewport.height);
     expect(Math.round(box.y)).toBe(0);
   }

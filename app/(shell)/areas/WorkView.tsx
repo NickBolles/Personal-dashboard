@@ -30,7 +30,8 @@ import { EscalationBanner } from "@/components/work/EscalationBanner";
 import { CaptureTriageCard } from "@/components/capture/CaptureTriageCard";
 import { itemAgentChip } from "@/components/work/AgentChip";
 import { ItemTimeline, ItemWorkList, useItemWork, workRowId } from "@/components/work/ItemWork";
-import { TaskChat } from "@/components/work/TaskChat";
+import { TaskChat, draftFromUrl, type TaskDraft } from "@/components/work/TaskChat";
+import { ProjectTasks } from "@/components/tasks/ProjectTasks";
 import { ChatMadeRows, TaskDecisions, TaskStatusBar, useChatMade, useTaskDecisions, type ChatMade, type TaskStatus } from "@/components/work/TaskOverview";
 import { canHaveChat, taskChats } from "@/lib/task-chat";
 import { ItemRows, RollupGroups } from "@/components/work/Rollup";
@@ -277,12 +278,16 @@ export function WorkView({
   const contextNode = open ? (isContainer(open) ? open : (list.find((i) => i.id === open.parentId) ?? null)) : null;
   // A task (a leaf: not an area or project) has two panes, Overview and Chat; areas and projects have no Chat tab.
   const leaf = !!open && !isContainer(open);
+  /** A project is a task with tasks inside: it uses the task page (Overview and Chat) with a Tasks section. */
+  const project = !!open && isContainer(open) && open.parentId !== null && open.kind !== "conversation";
   /** The task can have a chat of its own (a note cannot), and this person can chat. */
-  const chatTab = leaf && canChat && canHaveChat(open!);
+  const chatTab = (leaf || project) && canChat && canHaveChat(open!);
+  /** The two-pane page: every task, and a project when its chat can be shown. */
+  const paged = leaf || (project && chatTab);
   // A task's log opens in place on its Overview: the old Activity address lands there, with the log open.
   const shownTab: AreaTab = (tab === "chat" && !chatTab) || (tab === "portfolio" && current) || (tab === "activity" && leaf) ? "overview" : tab;
   /** The task page itself (Overview and Chat); Board and Graph are views it can be opened in. */
-  const taskPage = !!current && leaf && (shownTab === "overview" || shownTab === "chat");
+  const taskPage = !!current && paged && (shownTab === "overview" || shownTab === "chat");
   // With 600px of content the two panes sit side by side (unfolded Fold, tablets, desktop).
   const contentRef = useRef<HTMLDivElement>(null);
   const split = useSplitWidth(contentRef, 600);
@@ -381,6 +386,7 @@ export function WorkView({
               onMove={(ids) => setMoving(ids)}
               section={shownTab === "chat" ? "chat" : "overview"}
               onSection={setTab}
+              onOpenTask={(id, to) => go({ kind: "item", id }, { push: true, tab: to })}
               chatTab={chatTab}
               split={split}
               logOpen={tab === "activity"}
@@ -388,7 +394,15 @@ export function WorkView({
           ) : view.kind === "today" || current ? (
             // Areas v2: one tab bar in a fixed spot; a tab swaps only the pane below it and keeps the selection.
             <div className="min-w-0">
-              <AreaTabs tab={shownTab} item={current} leaf={leaf} chat={chatTab} onTab={setTab} className="mx-3 mt-2 sm:mx-5 lg:mx-6 lg:mt-3" />
+              <AreaTabs
+                tab={shownTab}
+                item={current}
+                leaf={paged}
+                chat={chatTab}
+                project={project}
+                onTab={setTab}
+                className="mx-3 mt-2 sm:mx-5 lg:mx-6 lg:mt-3"
+              />
               <div id={AREA_PANEL_ID} role="tabpanel" aria-labelledby={`areas-tab-${shownTab}`} className="ar-panel min-w-0">
                 {current && (shownTab === "board" || shownTab === "graph" || (shownTab === "activity" && !leaf)) ? (
                   <NodeHeader id={current} items={list} onSelect={select} />
@@ -802,6 +816,7 @@ function ItemDetail({
   onMove,
   section,
   onSection,
+  onOpenTask,
   chatTab = false,
   split = false,
   logOpen = false,
@@ -809,6 +824,8 @@ function ItemDetail({
   id: string;
   items: WorkItem[];
   onSelect: (id: string) => void;
+  /** Open another task on its Overview or its Chat (a project's rows). */
+  onOpenTask?: (id: string, to: "overview" | "chat") => void;
   onOp: OnOp;
   /** from the command palette / Today: packet | continue | settle | validate */
   initialAction?: string;
@@ -828,8 +845,11 @@ function ItemDetail({
   const q = useQuery({ queryKey: ["work", "item", id], queryFn: () => api.get<WorkDetail>(`/api/work/items/${encodeURIComponent(id)}`) });
   const tab: ItemSection = section ?? "overview";
   const setTab = useCallback((next: AreaTab) => onSection?.(next), [onSection]);
-  /** A draft handed to the task's chat (a work packet's handoff): the Chat pane puts it in its composer. */
-  const [prefill, setPrefill] = useState<{ text: string; at: number }>();
+  /**
+   * A draft handed to the task's chat: a work packet's handoff, or what a list row's Steer / Retry / Resume opened
+   * the task with (`?compose=1`, `?draft=retry|resume`). The Chat pane puts it in its composer; nothing is sent.
+   */
+  const [prefill, setPrefill] = useState<TaskDraft | undefined>(draftFromUrl);
   const [dialog, setDialog] = useState<DialogKind>(
     initialAction === "packet" ? "packet" : initialAction === "continue" ? "continue" : initialAction === "settle" ? "settle" : null,
   );
@@ -873,7 +893,7 @@ function ItemDetail({
   // "Continue" on a task hands the packet to the task's own chat: the handoff becomes a draft there (never sent here).
   const handoffToChat = useEffectEvent(() => {
     if (!q.data) return;
-    setPrefill({ text: handoffMarkdown(q.data, window.location.origin), at: Date.now() });
+    setPrefill({ text: handoffMarkdown(q.data, window.location.origin), at: Date.now(), handoff: true });
     setDialog(null);
     setTab("chat");
     // A task that has its chat already: the handoff is recorded on the task now (nothing is created or sent).
@@ -951,7 +971,7 @@ function ItemDetail({
     prLinks.find((l) => l.externalState !== "merged" && l.externalState !== "closed") ??
     prLinks[0];
   const reopenable = item.status === "settled" || item.status === "awaiting_validation" || d.validations.some((v) => v.status === "fail");
-  const childLabel = isArea ? "Project" : "Item";
+  const childLabel = isArea ? "Project" : "Task";
   const usedAsWork = d.packets.length > 0 || d.validations.length > 0;
   const hasBlockers = d.blockedBy.length + d.blocking.length > 0;
   const rollup = containerRollup({ item, items, agents: work.agents, runs: work.runs, decisions: work.decisions, now: nowMs });
@@ -973,6 +993,7 @@ function ItemDetail({
           ? { label: "Open chat", onSelect: () => setTab("chat") }
           : { label: "Chat here", onSelect: () => newChat.start({ areaId: item.id }) }
         : null,
+      container && chatTab ? { label: "Open chat", onSelect: () => setTab("chat") } : null,
       container && canChat ? { label: "New chat here", onSelect: () => newChat.start({ areaId: item.id }) } : null,
       isArea && canChat && isOwner ? { label: "Adopt existing chat…", onSelect: () => setDialog("adopt") } : null,
       ...aiItems,
@@ -996,13 +1017,14 @@ function ItemDetail({
     ]),
     // A task's tab bar is Overview · Chat: its other views open from here.
     ...group("View", [
-      leaf && kidCount ? { label: "Board", onSelect: () => setTab("board") } : null,
-      leaf ? { label: "Graph", onSelect: () => setTab("graph") } : null,
+      (leaf && kidCount) || (container && chatTab) ? { label: "Board", onSelect: () => setTab("board") } : null,
+      container && chatTab ? { label: "Activity", onSelect: () => setTab("activity") } : null,
+      leaf || (container && chatTab) ? { label: "Graph", onSelect: () => setTab("graph") } : null,
     ]),
     ...group("Add", [
-      container || item.kind === "note" ? null : { label: "Add sub-item", onSelect: () => onAdd("thread", item) },
+      container || item.kind === "note" ? null : { label: "Add sub-task", onSelect: () => onAdd("thread", item) },
       // Areas: "+ Project" is the one primary add; a loose item goes through ⋯.
-      isArea ? { label: "Add item to area", onSelect: () => onAdd("thread", item) } : null,
+      isArea ? { label: "Add task to area", onSelect: () => onAdd("thread", item) } : null,
       isArea ? null : { label: "Link PR", onSelect: () => setDialog("github_pr") },
       isArea || !canChat ? null : { label: "Link conversation", onSelect: () => setDialog("chat_session") },
       isArea ? null : { label: "Link URL", onSelect: () => setDialog("url") },
@@ -1092,7 +1114,7 @@ function ItemDetail({
       : shown === "record"
         ? `${pending} check${pending === 1 ? " still needs" : "s still need"} a result.`
         : shown === "resolve_blocker"
-          ? `Blocked by ${openBlockers.length === 1 ? openBlockers[0]!.title : `${openBlockers.length} items`}.`
+          ? `Blocked by ${openBlockers.length === 1 ? openBlockers[0]!.title : `${openBlockers.length} tasks`}.`
           : shown === "reopen"
             ? item.settledReason
             : null;
@@ -1128,7 +1150,7 @@ function ItemDetail({
         !item.summary && !item.builtIn && editing !== "summary" ? (
           <AddChip key="summary" label="Summary" name="Add a summary" onClick={() => setEditing("summary")} />
         ) : null,
-        !kidCount && item.kind !== "note" ? <AddChip key="sub" label="Sub-item" name="Add sub-item" onClick={() => onAdd("thread", item)} /> : null,
+        !kidCount && item.kind !== "note" ? <AddChip key="sub" label="Sub-task" name="Add sub-task" onClick={() => onAdd("thread", item)} /> : null,
         !d.links.length ? (
           <AddMenuChip
             key="link"
@@ -1289,7 +1311,7 @@ function ItemDetail({
           // "Continue in chat" is the page's primary while a packet is ready: not offered twice.
           onContinue={canChat && shown !== "continue" ? () => setDialog("continue") : undefined}
         />
-        <div className="ip-adds" role="group" aria-label="Add to this item">
+        <div className="ip-adds" role="group" aria-label="Add to this task">
           {adds}
         </div>
       </section>
@@ -1340,6 +1362,24 @@ function ItemDetail({
       {wide && !chatTab ? <ItemRail d={d} onSelect={onSelect} /> : null}
     </div>
   ) : null;
+  /** An area's page, and a project's Overview pane: what is inside it, then what it carries itself. */
+  const containerBody = container ? (
+    <ContainerBody
+      d={d}
+      items={items}
+      rollup={rollup}
+      reports={work.rows.filter((row) => row.kind === "job" || row.kind === "report")}
+      workOpen={workOpen}
+      onToggleWork={toggleWork}
+      onSelect={onSelect}
+      onOp={onOp}
+      canChat={canChat}
+      onDialog={setDialog}
+      onCopy={() => void copyHandoff()}
+      onFull={(next) => setTab(next)}
+      onOpenTask={onOpenTask ?? ((taskId) => onSelect(taskId))}
+    />
+  ) : null;
   /** The tab bar shows while one pane shows at a time; side by side there is nothing to switch. */
   const tabsShown = chatTab && !split;
 
@@ -1360,7 +1400,7 @@ function ItemDetail({
               {isArea && item.settings?.color ? (
                 <span className={`jv-pick-dot jv-tag-${item.settings.color}`} aria-hidden="true" data-testid="area-color" />
               ) : null}
-              {isArea ? "Area" : item.kind === "thread" ? "Item" : KIND_LABEL[item.kind]}
+              {isArea ? "Area" : item.kind === "thread" ? "Task" : KIND_LABEL[item.kind]}
             </li>
           </ol>
         </nav>
@@ -1383,8 +1423,8 @@ function ItemDetail({
                 + {childLabel}
               </KButton>
             ) : null}
-            <MenuButton menu={menu} label="More item actions" />
-            <AnchoredMenu menu={menu} label="More item actions" items={menuItems} />
+            <MenuButton menu={menu} label="More actions" />
+            <AnchoredMenu menu={menu} label="More actions" items={menuItems} />
           </div>
         </div>
         {leaf ? null : headFields}
@@ -1417,20 +1457,8 @@ function ItemDetail({
         }
       />
 
-      {container ? (
-        <ContainerBody
-          d={d}
-          items={items}
-          rollup={rollup}
-          reports={work.rows.filter((row) => row.kind === "job" || row.kind === "report")}
-          workOpen={workOpen}
-          onToggleWork={toggleWork}
-          onSelect={onSelect}
-          onOp={onOp}
-          canChat={canChat}
-          onDialog={setDialog}
-          onCopy={() => void copyHandoff()}
-        />
+      {container && !chatTab ? (
+        containerBody
       ) : (
         <>
           {tabsShown ? <AreaTabs tab={tab} item={item.id} leaf chat onTab={setTab} className="task-tabs px-3 sm:px-5 lg:px-6" /> : null}
@@ -1448,7 +1476,18 @@ function ItemDetail({
                 value={tab}
                 onChange={(next) => setTab(next as AreaTab)}
                 panes={[
-                  { id: "overview", label: "Overview", content: overview },
+                  {
+                    id: "overview",
+                    label: "Overview",
+                    content: container ? (
+                      <>
+                        {containerBody}
+                        {!split ? <TaskStatusBar status={status} onOpen={() => setTab("chat")} /> : null}
+                      </>
+                    ) : (
+                      overview
+                    ),
+                  },
                   {
                     id: "chat",
                     label: "Chat",
@@ -1518,6 +1557,8 @@ function ContainerBody({
   canChat,
   onDialog,
   onCopy,
+  onFull,
+  onOpenTask,
 }: {
   d: WorkDetail;
   items: WorkItem[];
@@ -1531,6 +1572,10 @@ function ContainerBody({
   canChat: boolean;
   onDialog: (k: DialogKind) => void;
   onCopy: () => void;
+  /** Open Board or Graph as a full view of this project. */
+  onFull: (view: "board" | "graph") => void;
+  /** Open a task inside this project on its Overview or its Chat. */
+  onOpenTask: (id: string, to: "overview" | "chat") => void;
 }) {
   const { item } = d;
   const isArea = item.parentId === null;
@@ -1562,13 +1607,14 @@ function ContainerBody({
   return (
     <div className="wk-panel wk-cpage px-3 py-3 sm:px-5 lg:px-6 lg:py-4" data-side={side ? undefined : "none"}>
       <div className="wk-cpage-main ip-body min-w-0">
-        <RollupGroups id={item.id} rollup={rollup} onSelect={onSelect} />
+        {/* An area keeps its Needs you / Working roll-up; a project's tasks say the same in its Tasks section. */}
+        {isArea ? <RollupGroups id={item.id} rollup={rollup} onSelect={onSelect} /> : null}
         {coord ? <AreaCoordinator variant="sheet" {...coord} /> : null}
-        {/* Areas: project cards + item tree (AreaProjects) are the only lists; adding goes through "+ Project" / ⋯ "Add item to area". */}
+        {/* Areas: project cards + item tree (AreaProjects) are the only lists; adding goes through "+ Project" / ⋯ "Add task to area". */}
         {isArea ? (
           <AreaProjects areaId={item.id} onOpen={onSelect} />
         ) : (
-          <ItemsSection label="Items" testId="work" parent={item} open={rollup.items} done={rollup.done} onSelect={onSelect} />
+          <ProjectTasks parent={item} items={items} done={rollup.done} onSelect={onSelect} onOpenTask={onOpenTask} onFull={onFull} />
         )}
         {usedAsWork ? (
           <>
@@ -1638,7 +1684,7 @@ function NodeHeader({ id, items, onSelect }: { id: string; items: WorkItem[]; on
             </li>
           ))}
           <li aria-current="page" className="px-1">
-            {node.parentId === null ? "Area" : node.kind === "thread" ? "Item" : KIND_LABEL[node.kind]}
+            {node.parentId === null ? "Area" : node.kind === "thread" ? "Task" : KIND_LABEL[node.kind]}
           </li>
         </ol>
       </nav>
@@ -1653,7 +1699,7 @@ function NodeHeader({ id, items, onSelect }: { id: string; items: WorkItem[]; on
 /**
  * The items under a project (or the sub-items under an item): one row per open item with its one headline, then
  * "Done · N" as one tight row that expands. A tag / assignee filter appears once rows carry either. A project's
- * heading carries a quiet "+" that adds in place; with no items yet nothing is drawn (the header's "+ Item" adds).
+ * heading carries a quiet "+" that adds in place; with no items yet nothing is drawn (the header's "+ Task" adds).
  */
 function ItemsSection({
   label,
@@ -1696,17 +1742,17 @@ function ItemsSection({
           ) : (
             <h3 id={`kids-${testId}`} className="ip-label">
               {label} <span className="ip-count">{count}</span>
-              {/* The header's "+ Item" opens the full dialog; this adds in place (type "Sub-project / item" to nest). */}
+              {/* The header's "+ Task" opens the full dialog; this adds in place (type "Sub-project / item" to nest). */}
               <span className="ip-label-acts">
                 <KButton
                   variant="ghost"
                   size="sm"
                   iconOnly
                   icon={<PlusIcon className="h-4 w-4" />}
-                  title="Add item, sub-project or path"
+                  title="Add task, sub-project or path"
                   onClick={() => setAdding(true)}
                 >
-                  Add item, sub-project or path
+                  Add task, sub-project or path
                 </KButton>
               </span>
             </h3>

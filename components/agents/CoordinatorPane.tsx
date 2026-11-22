@@ -5,7 +5,8 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { relativeTime } from "@/lib/time";
 import { AgentChip } from "@/components/agents/AgentChip";
-import { Button, CoordinatorGlyph, IconAction } from "@/components/ui";
+import { Button, CoordinatorGlyph, IconAction, Tabs } from "@/components/ui";
+import { TaskList, useTaskList } from "@/components/tasks/TaskList";
 import { useAgentRuns } from "@/components/agents/AgentRuns";
 import { coordinatorDot, coordinatorEntries } from "@/lib/agent-runs";
 import { CoordinatorThread, type CoordinatorResponse } from "@/components/coordinator/CoordinatorThread";
@@ -46,6 +47,8 @@ export function CoordinatorButton({ areaId, areaTitle, className }: { areaId: st
 export function CoordinatorPane({ areaId, onClose }: { areaId: string; onClose: () => void }) {
   const titleId = useId();
   const ref = useRef<HTMLDivElement>(null);
+  const [tab, setTab] = useState<"chat" | "tasks">("chat");
+  const flight = useTaskList(areaId, "flight");
   const info = useQuery({
     queryKey: ["work", "coordinator", areaId],
     queryFn: () => api.get<CoordinatorResponse>(`/api/work/items/${encodeURIComponent(areaId)}/coordinator`),
@@ -93,7 +96,36 @@ export function CoordinatorPane({ areaId, onClose }: { areaId: string; onClose: 
         </div>
         {info.isLoading ? <p className="co-body text-sm text-muted">Loading…</p> : null}
         {info.error ? <p className="co-body text-sm text-danger">Couldn&apos;t load the coordinator: {(info.error as Error).message}</p> : null}
-        {d ? <CoordinatorThread key={areaId} info={d} /> : null}
+        {/* A bot chat has two tabs: Chat, and Tasks (In flight for this channel). The thread stays mounted behind Tasks. */}
+        {d ? (
+          <>
+            <div className="co-tabs">
+              <Tabs
+                label="Coordinator tabs"
+                value={tab}
+                onChange={(next) => setTab(next === "tasks" ? "tasks" : "chat")}
+                tabs={[
+                  { id: "chat", label: "Chat" },
+                  { id: "tasks", label: "Tasks", count: flight.data?.needs || undefined },
+                ]}
+              />
+            </div>
+            <div hidden={tab !== "chat"} className="co-tabpane">
+              <CoordinatorThread key={areaId} info={d} />
+            </div>
+            {tab === "tasks" ? (
+              <div className="co-body co-tabpane" data-testid="coordinator-tasks">
+                <TaskList
+                  scope={areaId}
+                  view="flight"
+                  bare
+                  empty={<p className="text-sm text-muted">Nothing in flight</p>}
+                  reviewHref={`/resume/review?scope=${encodeURIComponent(areaId)}`}
+                />
+              </div>
+            ) : null}
+          </>
+        ) : null}
       </div>
     </>
   );

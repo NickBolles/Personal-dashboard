@@ -2,7 +2,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { appPost, expectNoHorizontalOverflow } from "./helpers";
 
 /**
- * Coordinator workflow v3 (CW, PR 2): decisions raised over MCP show in Needs you and are answered in
+ * Coordinator workflow v3 (CW, PR 2): decisions raised over MCP show on their task's row under Tasks and are answered in
  * two taps from the tray (low risk) or behind a Confirm (risk-flagged); run notices fold into the run;
  * the coordinator chat opens with one "Since HH:MM" divider. The file name matches the desktop project's
  * `global-coordinator.spec.ts` pattern, so it runs on phone and desktop: every title carries a nonce with
@@ -30,8 +30,8 @@ async function decisionState(page: Page, ref: string) {
   return body.decisions.find((d) => d.ref === ref);
 }
 
-/** Opens Needs you: the tray (phones) then the tab; the rail tab on desktop. Returns the panel scope. */
-async function openNeeds(page: Page, desktop: boolean): Promise<Locator> {
+/** Opens Tasks: the tray (phones) then the tab; the rail tab on desktop. Returns the panel scope. */
+async function openTasks(page: Page, desktop: boolean): Promise<Locator> {
   if (!desktop) {
     const tray = page.locator(".gc-tray");
     // The tray's one sentence says something is waiting before we open it.
@@ -39,7 +39,7 @@ async function openNeeds(page: Page, desktop: boolean): Promise<Locator> {
     await tray.getByRole("button", { name: "Chief of staff", exact: true }).click();
   }
   const scope = desktop ? page.getByRole("complementary", { name: "Chief of staff" }) : page.getByRole("dialog", { name: "Chief of staff" });
-  await scope.getByRole("tab", { name: /^Needs you/ }).click();
+  await scope.getByRole("tab", { name: /^Tasks/ }).click();
   return scope;
 }
 
@@ -86,17 +86,22 @@ test("MCP-raised decisions: tray → answer in 2 taps with Undo; risk-flagged ne
   expect(low.ref).toMatch(/^D-\d+$/);
 
   await page.goto("/home");
-  // Open Needs you (tray → tab on phones, the rail tab on desktop), then one tap on the recommended answer.
-  const scope = await openNeeds(page, desktop);
-  await scope.getByRole("button", { name: `${low.ref}: Ship it (recommended)`, exact: true }).click();
-  // The row becomes its receipt: what was asked, what was answered, and Undo.
+  // Open Tasks (tray → tab on phones, the rail tab on desktop). The task that asked is one row; its first question,
+  // with two short choices, is answered from the row in one tap.
+  const scope = await openTasks(page, desktop);
+  const row = scope.getByTestId("task-row").filter({ hasText: `Sedge ledger ${nonce}` });
+  await expect(row).toHaveAttribute("data-task-state", "needs");
+  await expect(row.getByRole("button", { name: `Decision ${low.ref.replace("-", " ")}` })).toBeVisible();
+  await row.getByRole("button", { name: "Ship it", exact: true }).click();
+  // The answer leaves its receipt: what was asked, what was answered, and Undo.
   await expect(scope.getByTestId("decision-receipt").filter({ hasText: "Ship it" }).first()).toBeVisible();
   await expect(scope.getByRole("button", { name: `Undo ${low.ref}`, exact: true }).first()).toBeVisible();
   await expect.poll(async () => (await decisionState(page, low.ref))?.state).toBe("answered");
 
-  // Risk-flagged: the row has no one-tap chips. It opens the card, a choice arms, and nothing is answered until Confirm.
-  await expect(scope.getByRole("button", { name: new RegExp(`^${risky.ref}: `) })).toHaveCount(0);
-  await scope.getByRole("button", { name: new RegExp(`^Open decision ${risky.ref}:`) }).click();
+  // The task's next question is risk-flagged: the row offers no one-tap choice. "Answer" opens its card, a choice
+  // arms, and nothing is answered until Confirm.
+  await expect(row.getByRole("button", { name: /^Rotate/ })).toHaveCount(0);
+  await row.getByRole("button", { name: "Answer", exact: true }).click();
   await scope
     .getByRole("group", { name: `Answers for ${risky.ref}` })
     .getByRole("button", { name: /^Rotate/ })
@@ -218,8 +223,8 @@ test("coordinator chat: one Since divider after 2 h away, D-n/R-n chips, run not
   await scope.getByRole("button", { name: "Run R 7", exact: true }).last().click();
   await expect(row).toHaveAttribute("data-landed", "");
   await expect(scope.getByRole("tab", { name: "Chat", exact: true })).toHaveAttribute("aria-selected", "true");
-  // A reference with no row in the conversation opens its tab: the decision goes to Needs you.
+  // A reference with no row in the conversation opens Tasks, where a decision's answer card shows.
   await scope.getByRole("button", { name: "Decision D 48", exact: true }).click();
-  await expect(scope.getByRole("tab", { name: /^Needs you/ })).toHaveAttribute("aria-selected", "true");
+  await expect(scope.getByRole("tab", { name: /^Tasks/ })).toHaveAttribute("aria-selected", "true");
   await expectNoHorizontalOverflow(page);
 });

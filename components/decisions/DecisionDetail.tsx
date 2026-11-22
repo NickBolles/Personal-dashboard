@@ -51,7 +51,7 @@ export function DecisionDetail({ id, initialChoice = "" }: { id: string; initial
           <p className="text-sm text-muted">Your answer is on the item. Nothing was settled or sent to a conversation.</p>
           <div className="flex flex-wrap gap-2">
             <ButtonLink href={`/areas?item=${encodeURIComponent(receipt.view.itemId)}`} size="sm">
-              Open item
+              Open task
             </ButtonLink>
             <ButtonLink href="/decisions" size="sm" variant="ghost">
               Back to Needs you
@@ -88,7 +88,7 @@ export function DecisionDetail({ id, initialChoice = "" }: { id: string; initial
               />
               <div className="flex flex-wrap gap-2">
                 <ButtonLink href={e.href} size="sm">
-                  Open item
+                  Open task
                 </ButtonLink>
                 {conversation ? (
                   <ButtonLink href={`/chat/${encodeURIComponent(conversation)}`} size="sm" variant="ghost">
@@ -111,7 +111,7 @@ export function DecisionDetail({ id, initialChoice = "" }: { id: string; initial
                 <div className="flex flex-wrap gap-2">
                   <ButtonLink href={e.href} size="sm">
                     {e.kind === "item"
-                      ? "Open item"
+                      ? "Open task"
                       : e.kind === "approval"
                         ? "Open conversation to approve or deny"
                         : e.kind === "workflow"

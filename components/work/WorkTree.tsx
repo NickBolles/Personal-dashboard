@@ -275,7 +275,7 @@ export function WorkTree({
               setAdding(`add:${i.id}`);
             }
           : undefined,
-      addLabel: i.parentId === null ? "Add project" : "Add item",
+      addLabel: i.parentId === null ? "Add project" : "Add task",
     };
   }
 

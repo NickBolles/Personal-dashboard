@@ -21,6 +21,7 @@ export function AreaTabs({
   item,
   leaf = false,
   chat = false,
+  project = false,
   onTab,
   className,
 }: {
@@ -30,10 +31,12 @@ export function AreaTabs({
   leaf?: boolean;
   /** the task can have a chat (it is not a note, and the person can chat) */
   chat?: boolean;
+  /** a project (a task with tasks inside): Activity is one of the views it can be opened in */
+  project?: boolean;
   onTab: (t: AreaTab) => void;
   className?: string;
 }) {
-  const tabs = tabsFor({ item, task: leaf, chat }, tab);
+  const tabs = tabsFor({ item, task: leaf, chat, project }, tab);
   const href = (t: AreaTab) => areasHref(item ? `/areas?item=${encodeURIComponent(item)}` : "/areas", { tab: t });
   const pick = (e: MouseEvent, t: AreaTab) => {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;

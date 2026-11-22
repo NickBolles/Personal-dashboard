@@ -161,7 +161,7 @@ describe("changes", () => {
     expect(said(row("status", "moved to Exploring", "Captured → Exploring: Predates the new checkout"))).toBe("Moved to Exploring: Predates the new checkout");
     expect(said(row("status", "moved to Ready"))).toBe("Moved to Ready");
     // the full sentence (for Undo's accessible name) is unchanged
-    expect(changeLabel(row("created", "created"))).toBe("Created item");
+    expect(changeLabel(row("created", "created"))).toBe("Created task");
     expect(changeLabel(row("edit", "edited summary"))).toBe("Edited summary");
   });
   it("turns the raw date edit into what changed, with what it was before", () => {

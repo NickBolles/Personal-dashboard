@@ -2580,6 +2580,46 @@ button:active > .dock-orb {
   .k-thing[data-stacked] .k-thing-open {
     margin-inline: 12px 8px;
   }
+  /* The peek: the latest activity, fading into the one before it to show there is more. A button when it opens
+     the row in place. Two lines at most; the fade is a mask, so it holds on any surface colour. */
+  .k-thing-peek {
+    display: flex;
+    min-width: 0;
+    max-height: 38px;
+    flex-direction: column;
+    overflow: hidden;
+    border: 0;
+    border-radius: var(--r1);
+    background: none;
+    padding: 0;
+    color: var(--t2);
+    font: 400 13px/19px var(--sans);
+    text-align: left;
+    -webkit-mask-image: linear-gradient(#000 45%, transparent 98%);
+    mask-image: linear-gradient(#000 45%, transparent 98%);
+  }
+  /* Over a peek that is itself a control, the title keeps a 24px target of its own. */
+  .k-thing-main:has(> button.k-thing-peek) > :is(a, button).k-thing-title {
+    padding-block: 2px;
+  }
+  /* One line has nothing to fade into. */
+  .k-thing-peek:not(:has(> span:not(.sr-only) ~ span:not(.sr-only))) {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+  button.k-thing-peek {
+    min-height: 24px;
+    cursor: pointer;
+  }
+  button.k-thing-peek:hover {
+    color: var(--t1);
+  }
+  .k-thing-peek > span:not(.sr-only) {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .k-thing-chev {
     transition: transform var(--d1) var(--ease);
   }

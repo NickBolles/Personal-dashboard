@@ -346,7 +346,7 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
                           }}
                           className="flex min-h-11 w-full items-center rounded-[8px] px-2.5 text-left text-sm hover:bg-surface-2"
                         >
-                          {kind === "thread" ? "Item" : kind === "project" ? "Project" : "Area"}
+                          {kind === "thread" ? "Task" : kind === "project" ? "Project" : "Area"}
                         </button>
                       ))
                     : null}

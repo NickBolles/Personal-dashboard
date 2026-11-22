@@ -99,6 +99,7 @@ function MenuDemo() {
 /** The one row for a decision, a piece of work or an item; lists run Needs you, Working, Done. */
 function ThingRowDemo() {
   const [open, setOpen] = useState(true);
+  const [peekOpen, setPeekOpen] = useState(false);
   const ic = "h-4 w-4";
   return (
     <Block id="thing-rows" title="ThingRow (decision, work, item) with state words and icon actions">
@@ -152,6 +153,29 @@ function ThingRowDemo() {
           </p>
         </ThingRow>
         <ThingRow state="idle" title="Renew car registration" sub="Next · upload the insurance card · due Mon" href="/dev/ui" />
+        {/* A task row: state, title, then the latest activity fading into the one before (it opens the row in place). */}
+        <ThingRow
+          state="working"
+          title="Reconcile the inventory export"
+          status={
+            <>
+              <StateWord state="working" live />
+              <span> · 6m · @devchief</span>
+            </>
+          }
+          href="/dev/ui"
+          peek={
+            <>
+              <span>40 mismatches so far, all in one category</span>
+              <span>Matched 172 of 212 rows</span>
+            </>
+          }
+          expanded={peekOpen}
+          onToggle={() => setPeekOpen((v) => !v)}
+          toggleLabel="Timeline for Reconcile the inventory export"
+        >
+          <p className="text-xs">Started from your message in Chat</p>
+        </ThingRow>
         <ThingRow
           state="done"
           refId="R-36"
@@ -355,7 +379,7 @@ export function LibraryGallery() {
           </div>
         </Block>
         <Block id="states" title="States (loading, empty, error, banner, toast)">
-          <SectionHeader label="Open items" count={0} />
+          <SectionHeader label="Open tasks" count={0} />
           <EmptyState title="Nothing open" action={<Button size="sm">Add item</Button>}>
             New items land here.
           </EmptyState>

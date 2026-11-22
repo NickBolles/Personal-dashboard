@@ -30,11 +30,16 @@ export function parseTab(v: string | null | undefined): AreaTab {
 }
 
 /**
- * The tabs a node's page shows. A task: Overview, Chat (when it can have one), and the view it is open in while
- * that is Board or Graph. An area or project: Overview, Board, Activity, Graph. The landing adds Portfolio.
+ * The tabs a node's page shows. A task or a project: Overview, Chat (when it can have one), and the view it is open
+ * in while that is Board, Graph or (a project's) Activity. An area: Overview, Board, Activity, Graph. The landing
+ * adds Portfolio.
  */
-export function tabsFor(node: { item: string | null; task: boolean; chat: boolean }, current: AreaTab): AreaTab[] {
-  if (node.task) return ["overview", ...(node.chat ? (["chat"] as const) : []), ...(current === "board" || current === "graph" ? [current] : [])];
+export function tabsFor(node: { item: string | null; task: boolean; chat: boolean; project?: boolean }, current: AreaTab): AreaTab[] {
+  if (node.task) {
+    // A task's log opens in place on its Overview; a project's Activity is a view of everything inside it.
+    const view = current === "board" || current === "graph" || (current === "activity" && node.project);
+    return ["overview", ...(node.chat ? (["chat"] as const) : []), ...(view ? [current] : [])];
+  }
   return AREA_TABS.filter((t) => t !== "chat" && (t !== "portfolio" || !node.item));
 }
 

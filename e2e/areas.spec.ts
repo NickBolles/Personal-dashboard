@@ -109,7 +109,7 @@ test("area settings: agent mode, default repo and settle policy save on the area
   const { item: area } = await post<{ item: { id: string } }>(page, "/api/work/items", { kind: "area", title: `Settings check ${nonce}` });
   await page.goto(`/areas?item=${area.id}`);
   // A3: settings live under the area header's ⋯ › Area settings…
-  await page.getByRole("button", { name: "More item actions" }).click();
+  await page.getByRole("button", { name: "More actions" }).click();
   await page.getByRole("menuitem", { name: "Area settings…" }).click();
   const card = page.getByRole("dialog").getByTestId("area-settings");
   await card.getByLabel("Agent mode").fill("momentumchief");
@@ -129,7 +129,7 @@ test("area settings: agent mode, default repo and settle policy save on the area
   });
   await expect(page.getByTestId("area-color")).toBeVisible();
   // Archiving an area is confirmed first; Cancel leaves it alone.
-  await page.getByRole("button", { name: "More item actions" }).click();
+  await page.getByRole("button", { name: "More actions" }).click();
   await page.getByRole("menuitem", { name: "Archive area…" }).click();
   await expect(page.getByRole("dialog", { name: /Archive Settings check/ })).toBeVisible();
   await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();

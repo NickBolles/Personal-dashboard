@@ -109,7 +109,8 @@ test("areas landing: card opens the area in place, Back returns; /map redirects 
   // Area → project → item, all in place.
   await page.getByText(`Marigold dock ${nonce}`, { exact: true }).first().click();
   await expect(page).toHaveURL(new RegExp(`item=${ids.project}`));
-  await page.getByText(`Heron ledger ${nonce}`, { exact: true }).first().click();
+  // The project's Tasks section (the tree, hidden on a phone, lists the same title).
+  await page.getByTestId("children-work").getByText(`Heron ledger ${nonce}`, { exact: true }).first().click();
   await expect(page).toHaveURL(new RegExp(`item=${ids.heron}`));
   await page.goto("/areas");
   await card.click();

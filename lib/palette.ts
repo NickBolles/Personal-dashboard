@@ -20,7 +20,7 @@ export type ActionId = "new-item" | "ask" | "move" | "assign" | "status" | "open
 
 export type ActionDef = {
   id: ActionId;
-  /** row label before the chips, e.g. "New item in" */
+  /** row label before the chips, e.g. "New task in" */
   label: string;
   /** phrases that start this action when typed (lower case, longest first) */
   phrases: string[];
@@ -36,8 +36,23 @@ export type ActionDef = {
 export const ACTIONS: ActionDef[] = [
   {
     id: "new-item",
-    label: "New item in",
-    phrases: ["new item in", "new item", "add item to", "add item", "add to", "create item in", "create item"],
+    label: "New task in",
+    // "item" is the older word for a task: both are understood.
+    phrases: [
+      "new task in",
+      "new task",
+      "add task to",
+      "add task",
+      "create task in",
+      "create task",
+      "new item in",
+      "new item",
+      "add item to",
+      "add item",
+      "add to",
+      "create item in",
+      "create item",
+    ],
     slash: "new",
     args: [
       { kind: "area", name: "Area" },
@@ -62,7 +77,7 @@ export const ACTIONS: ActionDef[] = [
     phrases: ["move", "file"],
     slash: "move",
     args: [
-      { kind: "item", name: "Item" },
+      { kind: "item", name: "Task" },
       { kind: "area", name: "Area", joiner: "to" },
     ],
     write: true,
@@ -127,8 +142,8 @@ export type TypedMatch = {
 };
 
 /**
- * Typed actions matching the query: "new item in ho" → New item in (rest "ho");
- * "new it" → New item in (prefix, rest ""). "/" lists every action, "/mo" filters by
+ * Typed actions matching the query: "new item in ho" → New task in (rest "ho");
+ * "new it" → New task in (prefix, rest ""). "/" lists every action, "/mo" filters by
  * command name. Context-bound actions are left out when there's nothing to act on.
  */
 export function matchActions(q: string, has: { item?: boolean; area?: boolean } = {}): TypedMatch[] {
@@ -302,11 +317,11 @@ export function confirmText(def: ActionDef, chips: Chip[], here?: { title: strin
     case "assign":
       return `Assign ${here?.title ?? "this area"} to ${v(0)}?`;
     case "status":
-      return `Set ${here ? `“${here.title}”` : "this item"} to ${v(0)}?`;
+      return `Set ${here ? `“${here.title}”` : "this task"} to ${v(0)}?`;
     case "assign-item":
-      return `Assign ${here ? `“${here.title}”` : "this item"} to ${v(0)}?`;
+      return `Assign ${here ? `“${here.title}”` : "this task"} to ${v(0)}?`;
     case "tag":
-      return `Tag ${here ? `“${here.title}”` : "this item"} ${v(0)}?`;
+      return `Tag ${here ? `“${here.title}”` : "this task"} ${v(0)}?`;
     default:
       return `${def.label} ${chips.map((c) => c.value.label).join(" ")}`;
   }
@@ -319,7 +334,7 @@ export type Suggestion = { id: string; action?: ActionId; label: string; score: 
 
 /**
  * Root-list Suggestions for where you are: on an item → Set status, Move, Ask its area;
- * on an area/project → New item in it, Ask it, Assign; in chat → Start chat with @;
+ * on an area/project → New task in it, Ask it, Assign; in chat → Start chat with @;
  * elsewhere → New item, Ask, Open PR. Recently used actions get a boost (max 6 shown).
  */
 export function rankSuggestions(here: Here, recent: string[] = [], has: { item?: boolean; area?: boolean } = {}): Suggestion[] {

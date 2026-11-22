@@ -28,10 +28,11 @@ import { awayFixture, schedulesFixture } from "./fixtures/away";
 import { feedbackVisual } from "./fixtures/feedback";
 import { EMPTY_AWAY } from "../lib/client/away";
 import { localDate } from "../lib/time";
-import type { ResumeResponse } from "../lib/resume";
+import { stubTasks } from "./fixtures/tasks";
 import { skylightTaskUxFixture } from "./fixtures/skylight-task-ux";
 import type { CaptureTriageView } from "../lib/capture-triage";
-import type { InboxEntry } from "../lib/work";
+import type { InboxEntry, WorkItem } from "../lib/work";
+import { buildTaskList, type TaskView } from "../lib/task-list";
 
 for (const scheme of ["light", "dark"] as const) {
   test(`visual: task UX skipped recap and daily filtering (${scheme})`, async ({ page }) => {
@@ -86,6 +87,13 @@ test.beforeEach(async ({ request, page }) => {
         conversationsUnavailable: false,
         fetchedAt: "2026-11-07T14:05:00Z",
       },
+    }),
+  );
+  // The task list (In flight, the sidebar badge, a bot's Tasks tab) would show other specs' tasks: empty unless a
+  // test stubs it (a route added later in a test wins).
+  await page.route(/\/api\/work\/tasks(?:\?.*)?$/, (route) =>
+    route.fulfill({
+      json: { view: "flight", scope: "all", groups: [], needs: 0, review: null, done: null, open: 0, fetchedAt: "2026-11-07T14:05:00Z" },
     }),
   );
   await page.route("**/api/agents/away", (route) => route.fulfill({ json: EMPTY_AWAY }));
@@ -711,6 +719,16 @@ for (const [name, detail] of [
     );
     await page.route(/\/api\/work\/agent-runs(?:\?.*)?$/, (route) => route.fulfill({ json: { items: {}, active: [] } }));
     await page.route(/\/api\/work\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: { count: 0, entries: [] } }));
+    // A project's Tasks section reads the task list: build it from the same stubbed tree.
+    await page.route(/\/api\/work\/tasks(?:\?.*)?$/, (route) => {
+      const q = new URL(route.request().url()).searchParams;
+      return route.fulfill({
+        json: buildTaskList(
+          { items: areasVisual.items as unknown as WorkItem[], runs: [], events: [], decisions: [], info: {}, lastLooked: null },
+          { scope: q.get("scope") ?? "all", view: (q.get("view") ?? "flight") as TaskView, now: Date.parse(visualNow) },
+        ),
+      });
+    });
     await page.goto(`/areas?item=${detail.item.id}`);
     await expect(page.getByRole("heading", { level: 2, name: detail.item.title })).toBeVisible();
     await page.waitForTimeout(800);
@@ -1696,7 +1714,10 @@ async function stubGlobalCoordinator(page: Page) {
   await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
   await page.route(/\/api\/work\/conversations\/unfiled(?:\?.*)?$/, (route) => route.fulfill({ json: { conversations: [], total: 0, unavailable: [] } }));
   await page.route(/\/api\/notifications\/count$/, (route) => route.fulfill({ json: { unread: 0 } }));
-  // CW v3 lists (tray line, Needs you, Running): empty so other specs' decisions/runs never leak in.
+  // The Tasks tab's list, and the lists behind the tray line: empty so other specs' tasks, decisions and runs never leak in.
+  await page.route(/\/api\/work\/tasks(?:\?.*)?$/, (route) =>
+    route.fulfill({ json: { view: "flight", scope: "all", groups: [], needs: 0, review: null, done: null, open: 0, fetchedAt: new Date(0).toISOString() } }),
+  );
   await page.route(/\/api\/coordinator\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: { decisions: [], counts: { open: 0, deferred: 0 } } }));
   await page.route(/\/api\/coordinator\/runs$/, (route) =>
     route.fulfill({ json: { runs: [], events: [], lastLooked: { chat: null, needs: null, running: null, changes: null, context: null } } }),
@@ -1726,7 +1747,7 @@ for (const scheme of ["light", "dark"] as const) {
     await expect(rail.getByTestId("quick-action-proposal")).toContainText("Weekly review");
     await expect(rail.getByTestId("quick-actions-row").getByRole("button", { name: "Daily brief", exact: true })).toBeVisible();
     // v3: no priority line inside the rail (the tray/strip carry it); counts sit on the tabs.
-    await expect(rail.getByRole("tab", { name: /^Needs you/ })).toBeVisible();
+    await expect(rail.getByRole("tab", { name: /^Tasks/ })).toBeVisible();
     // A chip only fills the composer.
     await rail.getByTestId("quick-actions-row").getByRole("button", { name: "Plan my week", exact: true }).click();
     await expect(rail.getByTestId("gc-input")).toHaveValue("Help me plan this week");
@@ -1805,11 +1826,11 @@ for (const scheme of ["light", "dark"] as const) {
     await page.waitForTimeout(400);
     await expectNoHorizontalOverflow(page);
     await withoutTray(page, () => expect(sheet).toHaveScreenshot(`gc-sheet-chat-${scheme}.png`, { animations: "disabled", mask: gcMask(sheet) }));
-    // Activity = runs + what the Chief of staff changed (the old Changes tab).
-    await sheet.getByRole("tab", { name: /^Activity/ }).click();
-    await expect(sheet.getByRole("button", { name: /^Undo Created item/ })).toBeVisible();
+    // Tasks = the task list, then what the Chief of staff changed (with Undo).
+    await sheet.getByRole("tab", { name: /^Tasks/ }).click();
+    await expect(sheet.getByRole("button", { name: /^Undo Created task/ })).toBeVisible();
     await page.waitForTimeout(200);
-    await withoutTray(page, () => expect(sheet).toHaveScreenshot(`gc-sheet-activity-${scheme}.png`, { animations: "disabled", mask: gcMask(sheet) }));
+    await withoutTray(page, () => expect(sheet).toHaveScreenshot(`gc-sheet-tasks-${scheme}.png`, { animations: "disabled", mask: gcMask(sheet) }));
   });
 }
 
@@ -1913,7 +1934,7 @@ test("chief of staff phone tray: a long failing line truncates inside the viewpo
     // The sheet's composer is on screen and takes a tap (nothing is sent).
     await tray.click();
     const sheet = page.getByRole("dialog", { name: "Chief of staff" });
-    // The tray opens where its sentence points (Activity, for stuck runs); the composer is on the Chat tab.
+    // The tray opens where its sentence points (Tasks, for stuck work); the composer is on the Chat tab.
     await sheet.getByRole("tab", { name: "Chat", exact: true }).click();
     const input = sheet.getByTestId("gc-input");
     await expect(input).toBeVisible();
@@ -2061,7 +2082,7 @@ for (const scheme of ["light", "dark"] as const) {
     await expect(page.getByRole("heading", { level: 2, name: "Momentum Bets" })).toBeVisible();
     await expect(page.getByTestId("area-color")).toBeVisible();
     await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
-    await page.getByRole("button", { name: "More item actions" }).click();
+    await page.getByRole("button", { name: "More actions" }).click();
     await page.getByRole("menuitem", { name: "Area settings…" }).click();
     const dialog = page.getByRole("dialog", { name: "Momentum Bets settings" });
     await expect(dialog).toBeVisible();
@@ -2127,6 +2148,8 @@ for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     const now = await freezeSkylightClock(page);
     await page.route(/\/api\/sources\/skylight(?:\?.*)?$/, (route) => route.fulfill({ json: skylightVisual(now) }));
+    // The sidebar's area tree would list other specs' areas: a fixed tree.
+    await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
     await page.goto("/skylight");
     await page.locator("h1").first().waitFor();
     await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
@@ -2588,81 +2611,25 @@ for (const scheme of ["light", "dark"] as const) {
   });
 }
 
-test("visual: resume hub", async ({ page }) => {
-  // Row times sit 5 minutes before the frozen browser clock, so the relative label ("5 min ago")
-  // and its width are the same at any hour (a fixed wall time read "in 8 hours" before 08:05 CT).
-  const frozen = await freezeMiddayCT(page);
-  const at = new Date(frozen - 5 * 60_000).toISOString();
-  const run = { kind: "run" as const, path: "General Dev › Jarvis › Resume hub", approval: false, stalled: false, who: "@devchief", at };
-  const conversation = {
-    kind: "conversation" as const,
-    preview: null,
-    path: "General Dev › Jarvis",
-    parentId: "resume_project",
-    unfiled: false,
-    unread: false,
-    unreadCount: null,
-    agentProfile: "devchief",
-    at,
-    itemHref: "/areas?item=resume_project",
-  };
-  const fixture: ResumeResponse = {
-    runs: [
-      {
-        ...run,
-        key: "waiting",
-        itemId: "resume_waiting",
-        title: "Review the resume hub",
-        live: "waiting",
-        approval: true,
-        href: "/chat/resume_waiting",
-        itemHref: "/areas?item=resume_waiting",
-        sessionId: "resume_waiting",
-      },
-      {
-        ...run,
-        key: "running",
-        itemId: "resume_running",
-        title: "Verify navigation",
-        live: "running",
-        href: "/chat/resume_running",
-        itemHref: "/areas?item=resume_running",
-        sessionId: "resume_running",
-      },
-    ],
-    conversations: [
-      { ...conversation, key: "unread", sessionId: "resume_unread", title: "Navigation review", unread: true, unreadCount: 2, href: "/chat/resume_unread" },
-      { ...conversation, key: "recent", sessionId: "resume_recent", title: "Plan the next iteration", href: "/chat/resume_recent" },
-      {
-        ...conversation,
-        key: "unfiled",
-        sessionId: "resume_unfiled",
-        title: "A thought to file",
-        unfiled: true,
-        path: null,
-        parentId: null,
-        itemHref: null,
-        href: "/chat/resume_unfiled",
-      },
-    ],
-    counts: { running: 1, waiting: 1, unread: 1, unfiled: 1 },
-    conversationsUnavailable: false,
-    fetchedAt: at,
-  };
-  await page.route("**/api/work/resume", (route) => route.fulfill({ json: fixture }));
+test("visual: in flight", async ({ page }) => {
+  // Everything in the list is stubbed, so the browser clock is pinned to ONE fixed instant (12:00 CDT) and the rows
+  // are built from it: every age ("6m") and clock time ("no word since 09:37") is the same on any day, at any hour.
+  const frozen = Date.parse("2026-10-11T17:00:00.000Z");
+  await page.clock.setFixedTime(new Date(frozen));
+  await stubTasks(page, frozen);
+  // "Add a task" offers the channels: stub the tree so another spec's areas never show in the picker.
+  await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
   const viewport = page.viewportSize()!;
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     await page.goto("/resume");
-    await expect(page.getByTestId("resume-row")).toHaveCount(5);
+    await expect(page.getByTestId("task-row")).toHaveCount(4);
     await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
     await expectNoHorizontalOverflow(page);
     const main = page.locator("main").first();
     const height = await main.evaluate((el) => Math.ceil(el.getBoundingClientRect().height));
     if (height + 160 > viewport.height) await page.setViewportSize({ width: viewport.width, height: height + 160 });
-    await withoutTray(page, () =>
-      expect(main).toHaveScreenshot(`resume-hub-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => main.locator(m)) }),
-    );
+    await withoutTray(page, () => expect(main).toHaveScreenshot(`in-flight-${scheme}.png`, { animations: "disabled" }));
     await page.setViewportSize(viewport);
   }
 });
