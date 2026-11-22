@@ -2601,6 +2601,8 @@ test("visual: in flight", async ({ page }) => {
   // Times sit minutes before the frozen browser clock, so every age and time on a row is the same at any hour.
   const frozen = await freezeMiddayCT(page);
   await stubTasks(page, frozen);
+  // "Add a task" offers the channels: stub the tree so another spec's areas never show in the picker.
+  await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
   const viewport = page.viewportSize()!;
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
