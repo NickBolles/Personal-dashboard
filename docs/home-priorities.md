@@ -154,11 +154,13 @@ These rules replace "suggestions never call a model" (owner decisions, 21 Nov 20
 - **H8** The rule-based cards above stay, cost nothing and use the same card
   (`AgentSurface`, docs/ui-library.md).
 
-Start creates the task when the suggestion names none (attributed to the
-coordinator, as if it had created it) and starts it in its chat with the
-suggestion's text; the card becomes the done card with Open task and Undo (the
-run stops; a task Start made is removed if untouched, else archived). Send posts
-the text into the working task's chat; a sent message has nothing to undo.
+Start creates the task when the suggestion names none and starts it in its chat
+with the suggestion's text, both attributed to the coordinator (so Undo has the
+agent window, a week); the card becomes the done card with Open task and Undo
+(the turn is stopped; a task Start made is removed if untouched, else archived).
+Send posts the text into the working task's chat; a sent message has nothing to
+undo. Not now and "Don't suggest this" leave a line with Undo where the card was,
+in a list or a chat.
 
 ## For Hermes: reading and tuning feedback
 

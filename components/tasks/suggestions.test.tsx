@@ -154,6 +154,17 @@ describe("in a coordinator's chat", () => {
     await waitFor(() => expect(posts.map((p) => p.path)).toEqual(["/api/work/ops/op_start/undo", "/api/work/ops/op_create/undo"]));
   });
 
+  it("Not now on a card in a chat leaves the line with Undo there too", async () => {
+    render(<ActionsTaken actions={[action({ id: "t4:suggested", kind: "suggested", label: "Suggested", undoOpId: null, suggestionId: "sug_1" })]} />, {
+      wrapper,
+    });
+    fireEvent.click(within(await screen.findByTestId("suggestion")).getByRole("button", { name: "Not now" }));
+    const line = await screen.findByText("Hidden for a week");
+    fireEvent.click(within(line.closest("p")!).getByRole("button", { name: "Undo" }));
+    await waitFor(() => expect(posts.at(-1)?.body).toEqual({ action: "show_again" }));
+    expect(await screen.findByTestId("suggestion")).toBeTruthy();
+  });
+
   it("a suggestion a coordinator left in the chat is read back and drawn as its card", async () => {
     render(<ActionsTaken actions={[action({ id: "t3:suggested", kind: "suggested", label: "Suggested", undoOpId: null, suggestionId: "sug_1" })]} />, {
       wrapper,

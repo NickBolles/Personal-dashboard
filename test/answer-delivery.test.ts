@@ -21,7 +21,7 @@ const cid = "test";
 let owner: CurrentUser;
 let task: WorkItem;
 let chat: TimelineItem[];
-let hermes: Map<string, { status: string; pendingSteer?: string }>;
+let hermes: Map<string, { status: string; pendingSteer?: string; forgotten?: true }>;
 
 beforeEach(() => {
   __setTestDatabase();
@@ -51,6 +51,7 @@ function deps(over: Partial<DeliveryDeps> = {}) {
   const reconcile = vi.fn(async (runId: string) => ({
     status: hermes.get(runId)?.status ?? getDb().select().from(schema.runs).where(eq(schema.runs.runId, runId)).get()?.status ?? "completed",
     pendingSteer: hermes.get(runId)?.pendingSteer,
+    ...(hermes.get(runId)?.forgotten ? { forgotten: true as const } : {}),
   }));
   const d: DeliveryDeps = {
     startRun: startRun as never,
@@ -139,8 +140,29 @@ describe("an answer reaches the agent's chat", () => {
     await deliverAnswers(after(DELIVERY_DELAY_MS + 62_000), d);
     expect(row(q.ref).deliveryState).toBe("sent");
     hermes.set("hr1", { status: "completed" });
+    // A turn still going is looked at again 30 s later.
     await deliverAnswers(after(DELIVERY_DELAY_MS + 63_000), d);
+    expect(row(q.ref).deliveryState).toBe("sent");
+    await deliverAnswers(after(DELIVERY_DELAY_MS + 93_000), d);
     expect(row(q.ref).deliveryState).toBe("delivered");
+  });
+
+  it("guidance waiting on a busy turn is checked again later, behind the rest; a turn Hermes forgot is not called delivered", async () => {
+    setPrimary("sess-task");
+    const q = ask();
+    answerDecisionRef(owner.id, q.ref, "$300", "queue", cid);
+    getDb().insert(schema.runs).values({ runId: "hr4", userId: owner.id, sessionId: "sess-task", status: "running", idempotencyKey: "k-hr4" }).run();
+    const { d } = deps();
+    const t1 = after(DELIVERY_DELAY_MS + 1);
+    await deliverAnswers(t1, d);
+    expect(row(q.ref).deliveryState).toBe("sent");
+    const t2 = after(DELIVERY_DELAY_MS + 2_000);
+    await deliverAnswers(t2, d);
+    // Still running: pushed back, not due on every pass.
+    expect(Date.parse(row(q.ref).deliverAfter!)).toBeGreaterThan(t2.getTime());
+    hermes.set("hr4", { status: "interrupted", forgotten: true });
+    await deliverAnswers(after(DELIVERY_DELAY_MS + 60_000), d);
+    expect(row(q.ref)).toMatchObject({ deliveryState: "failed", deliveryError: "Couldn't confirm the agent read it" });
   });
 
   it("guidance the turn handed back unread is posted as the next message", async () => {

@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, inArray, lte } from "drizzle-orm";
+import { and, asc, eq, inArray, lte } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { audit } from "@/server/audit";
 import { userById, type CurrentUser } from "@/server/auth";
@@ -29,12 +29,14 @@ const PER_PASS = 10;
 /** A post that failed is tried again after this long, until the answer is this old. */
 const RETRY_MS = 60_000;
 const GIVE_UP_MS = 30 * 60_000;
+/** Guidance waiting on a turn that is still going is checked again after this long. */
+const CHECK_AGAIN_MS = 30_000;
 
 export type DeliveryDeps = {
   startRun: typeof assistant.startRun;
   steerRun: typeof assistant.steerRun;
   /** The run's state as Hermes has it now (its local record can lag when no chat is open). */
-  reconcile: (runId: string) => Promise<{ status: string; pendingSteer?: string }>;
+  reconcile: (runId: string) => Promise<{ status: string; pendingSteer?: string; forgotten?: true }>;
   sessionDetail: (user: CurrentUser, id: string) => Promise<{ timeline: TimelineItem[] }>;
   user: (id: string) => CurrentUser | null;
 };
@@ -67,6 +69,8 @@ async function pass(now: Date, deps: DeliveryDeps) {
     .select()
     .from(D)
     .where(and(inArray(D.deliveryState, ["pending", "sent"]), lte(D.deliverAfter, at), inArray(D.state, ["answered", "defaulted"])))
+    // Longest-waiting first; an answer still waiting on its turn is pushed back, so it never holds up the rest.
+    .orderBy(asc(D.deliverAfter))
     .limit(PER_PASS)
     .all();
   let sent = 0;
@@ -141,7 +145,16 @@ async function pass(now: Date, deps: DeliveryDeps) {
       try {
         const run = await deps.reconcile(row.deliveryRun);
         const live = liveOfRun(run.status);
-        if (live === "running" || live === "waiting") continue;
+        if (live === "running" || live === "waiting") {
+          set(row.id, { deliverAfter: new Date(now.getTime() + CHECK_AGAIN_MS).toISOString() }, "sent");
+          continue;
+        }
+        if (run.forgotten) {
+          // Hermes no longer has the turn, so whether it read the guidance can't be known: say so, never "delivered".
+          set(row.id, { deliveryState: "failed", deliveryError: "Couldn't confirm the agent read it" }, "sent");
+          failed++;
+          continue;
+        }
         const handedBack = !!run.pendingSteer && (run.pendingSteer.includes(outbound) || run.pendingSteer.includes(answer));
         if (handedBack) {
           // The turn ended before reading it: post it as the next message instead.
@@ -151,7 +164,8 @@ async function pass(now: Date, deps: DeliveryDeps) {
           delivered++;
         }
       } catch {
-        /* the turn could not be read: try again next pass */
+        // The turn could not be read: try again shortly, behind the rest of the queue.
+        set(row.id, { deliverAfter: new Date(now.getTime() + CHECK_AGAIN_MS).toISOString() }, "sent");
       }
       continue;
     }
