@@ -117,7 +117,7 @@ test("bulk select → Move to…, and file unfiled conversations in bulk", async
   const bulk = page.getByRole("region", { name: "Selection" });
   await expect(bulk).toContainText("2 selected");
   await bulk.getByRole("button", { name: "Move to…" }).click();
-  const picker = page.getByRole("dialog", { name: "Move 2 items" });
+  const picker = page.getByRole("dialog", { name: "Move 2 tasks" });
   await picker.getByRole("combobox", { name: "Search destinations" }).fill(`Target ${nonce}`);
   await picker.getByRole("combobox", { name: "Search destinations" }).press("Enter");
   await expect(picker).toHaveCount(0);

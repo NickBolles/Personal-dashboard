@@ -33,7 +33,7 @@ async function newChild(page: Page, parent: string, title: string) {
   // Containers lead with "+ Project" (areas) / "+ Task" (projects).
   await page
     .getByRole("article")
-    .getByRole("button", { name: /^\+ (Project|Item)$/ })
+    .getByRole("button", { name: /^\+ (Project|Task)$/ })
     .click();
   await page.getByRole("dialog").getByLabel("Title", { exact: true }).fill(title);
   await page.getByRole("button", { name: "Create", exact: true }).click();
