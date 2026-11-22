@@ -44,6 +44,13 @@ import { recentJournal, type JournalEntry } from "./journal";
  * longer place.
  */
 
+/**
+ * The local day an event is on. An all-day event carries a date ("2026-11-22"), not an instant: read as an
+ * instant it is UTC midnight, which west of UTC is the evening before, and the event lands on the wrong day.
+ */
+export const eventDay = (e: Pick<CalendarEvent, "startsAt" | "allDay">, tz: string) =>
+  e.allDay || /^\d{4}-\d{2}-\d{2}$/.test(e.startsAt) ? e.startsAt.slice(0, 10) : localDate(new Date(e.startsAt), tz);
+
 export const CANDIDATE_LIMIT = 40;
 const TITLE_MAX = 110;
 const CONTEXT_MAX = 12_000;
@@ -201,7 +208,7 @@ export async function briefContext(user: CurrentUser, now = new Date()): Promise
   const calendarAllowed = can(user, "skylight.view") || can(user, "home_assistant.calendar");
   const calendarKnown = payload.sources.some((s) => (s.source === "skylight" || s.source === "home_assistant") && (s.state === "ok" || s.state === "stale"));
   const allEvents = calendarAllowed ? visibleEvents(user, now).sort((a, b) => a.startsAt.localeCompare(b.startsAt)) : [];
-  const dayOf = (e: CalendarEvent) => localDate(new Date(e.startsAt), tz);
+  const dayOf = (e: CalendarEvent) => eventDay(e, tz);
   const events = allEvents.filter((e) => dayOf(e) === today || dayOf(e) === tomorrow).slice(0, 24);
   const weekAhead = allEvents.filter((e) => dayOf(e) > tomorrow && dayOf(e) <= addDays(today, 6)).slice(0, 20);
 
@@ -400,7 +407,7 @@ export function renderContext(c: BriefContext): string {
       "calendar today and tomorrow (cite as src:calendar): day | time | title",
       (c.share.calendar ? c.events : []).map((e) => {
         const at = new Date(e.startsAt);
-        const day = localDate(at, tz) === c.today ? "today" : "tomorrow";
+        const day = eventDay(e, tz) === c.today ? "today" : "tomorrow";
         const time = e.allDay ? "all day" : `${hhmm(localMinutes(at, tz))}${e.endsAt ? `-${hhmm(localMinutes(new Date(e.endsAt), tz))}` : ""}`;
         return `${day} | ${time} | ${line(e.title, 80)}`;
       }),
@@ -449,7 +456,7 @@ export function renderContext(c: BriefContext): string {
       (c.share.calendar ? c.weekAhead : []).map((e) => {
         const at = new Date(e.startsAt);
         const time = e.allDay ? "all day" : hhmm(localMinutes(at, tz));
-        return `${localDate(at, tz)} | ${time} | ${line(e.title, 80)}`;
+        return `${eventDay(e, tz)} | ${time} | ${line(e.title, 80)}`;
       }),
     ),
     block(

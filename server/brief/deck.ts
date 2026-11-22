@@ -7,9 +7,9 @@ import { listDecisions } from "@/server/work/decisions";
 import { sortDecisions } from "@/lib/decisions";
 import { decisionHref } from "@/lib/decision-route";
 import { STATUS_LABELS, type WorkStatus } from "@/lib/work";
-import { addDays, localDate } from "@/lib/time";
+import { addDays } from "@/lib/time";
 import { BRIEF_LIMITS, type BriefDeckCard, type BriefDeckRow } from "@/lib/brief";
-import type { BriefContext } from "./context";
+import { eventDay, type BriefContext } from "./context";
 import { assistForAction, assistForItem, assistIndex } from "./assist";
 
 /**
@@ -144,7 +144,7 @@ export function briefDeck(user: CurrentUser, c: BriefContext, picked: Set<string
   // falls today leads the card: it is not a calendar event, so nothing else on the page would say it.
   const ahead: (BriefDeckRow & { sort: string })[] = [];
   for (const e of [...c.events, ...c.weekAhead]) {
-    const day = localDate(new Date(e.startsAt), c.timezone);
+    const day = eventDay(e, c.timezone);
     if (day <= c.today) continue;
     ahead.push({ id: `ev-${e.id}`, title: e.title, at: e.startsAt, ...(e.allDay ? { allDay: true } : {}), sort: e.startsAt });
   }

@@ -28,7 +28,7 @@ import { briefAutoTick, briefJobStale, getBriefView, saveBuiltBrief, startBuild 
 import { runAnyway } from "@/server/ai/jobs";
 import { sourceCapability } from "@/lib/modules";
 import * as restoreRoute from "@/app/api/brief/profile/restore/route";
-import { briefContext, renderContext } from "@/server/brief/context";
+import { briefContext, eventDay, renderContext } from "@/server/brief/context";
 import { journalCompass, recentJournal } from "@/server/brief/journal";
 import { addNote, getBriefSettings, latestBrief, listNotes, proposeNotes, resetProfile, restoreProfile, saveBriefSettings } from "@/server/brief/store";
 
@@ -675,6 +675,33 @@ describe("the day and the small steps", () => {
     expect(v.day!.events.length).toBeGreaterThan(0);
     for (const e of v.day!.events)
       expect(e).toEqual(expect.objectContaining({ id: expect.any(String), title: expect.any(String), startsAt: expect.any(String) }));
+  });
+
+  it("an all-day event is on its own date, not the evening before", async () => {
+    // It carries a date, not an instant: read as UTC midnight it would fall on the day before in Chicago.
+    expect(eventDay({ startsAt: "2026-11-22", allDay: true }, "America/Chicago")).toBe("2026-11-22");
+    expect(eventDay({ startsAt: "2026-11-22" }, "America/Chicago")).toBe("2026-11-22");
+    expect(eventDay({ startsAt: "2026-11-22T03:30:00.000Z", allDay: false }, "America/Chicago")).toBe("2026-11-21");
+
+    const tomorrowOf = (d: string) => new Date(Date.parse(`${d}T12:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+    const c = await briefContext(me());
+    expect(c.timezone).toBe("America/Chicago");
+    const v = await view();
+    const allDay = [...c.events, ...c.weekAhead].filter((e) => e.allDay);
+    expect(allDay.length, "the mock calendars hold an all-day event this week").toBeGreaterThan(0);
+    const ahead = v.deck.find((d) => d.kind === "ahead");
+    const coming = new Set([...(ahead?.rows ?? []), ...(ahead?.extra ?? [])].map((r) => r.id));
+    const text = renderContext(c);
+    for (const e of allDay) {
+      const day = e.startsAt.slice(0, 10);
+      // Filed under the day it is on: today and tomorrow in one list, the rest of the week in the other.
+      expect(c.events.includes(e)).toBe(day === c.today || day === tomorrowOf(c.today));
+      // Today's go on the day arc, later ones under Coming up, and the model is told the same day.
+      expect(v.day!.events.some((x) => x.id === e.id)).toBe(day === c.today);
+      expect(coming.has(`ev-${e.id}`)).toBe(day > c.today);
+      if (c.events.includes(e)) expect(text).toContain(`${day === c.today ? "today" : "tomorrow"} | all day | ${e.title.slice(0, 20)}`);
+      else expect(text).toContain(`${day} | all day | ${e.title.slice(0, 20)}`);
+    }
   });
 
   it("a step on a card can be ticked and unticked, only by its owner, and the next day's build is told", async () => {

@@ -31,7 +31,7 @@ import {
   type BriefWidgetKind,
   type PickState,
 } from "@/lib/brief";
-import { briefContext, feedbackRef, noteRef, renderContext, type BriefContext } from "./context";
+import { briefContext, eventDay, feedbackRef, noteRef, renderContext, type BriefContext } from "./context";
 import { resolveOutput, rulesBrief } from "./compose";
 import { briefDeck } from "./deck";
 import { improveView } from "./improve";
@@ -116,7 +116,7 @@ function pickView(p: BriefPickDoc, c: BriefContext, outcomes: Record<string, str
 function widgetData(kind: BriefWidgetKind, c: BriefContext, user: CurrentUser): BriefWidgetData | null {
   if (kind === "schedule") {
     const events = c.events
-      .filter((e) => localDate(new Date(e.startsAt), c.timezone) === c.today)
+      .filter((e) => eventDay(e, c.timezone) === c.today)
       .map((e) => ({
         id: e.id,
         title: e.title,
