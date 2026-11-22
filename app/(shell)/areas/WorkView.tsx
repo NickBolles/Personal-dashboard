@@ -32,7 +32,7 @@ import { itemAgentChip } from "@/components/work/AgentChip";
 import { ItemWorkList, useItemWork, workRowId } from "@/components/work/ItemWork";
 import { TaskChat, draftFromUrl, type TaskDraft } from "@/components/work/TaskChat";
 import { ProjectTasks } from "@/components/tasks/ProjectTasks";
-import { TaskTimelineSection } from "@/components/tasks/TaskList";
+import { TaskHeaderActions, TaskTimelineSection } from "@/components/tasks/TaskList";
 import { ChatMadeRows, TaskDecisions, TaskStatusBar, useChatMade, useTaskDecisions, type ChatMade, type TaskStatus } from "@/components/work/TaskOverview";
 import { canHaveChat, taskChats } from "@/lib/task-chat";
 import { ItemRows, RollupGroups } from "@/components/work/Rollup";
@@ -1417,6 +1417,16 @@ function ItemDetail({
               <KButton size="sm" variant="primary" onClick={() => onAdd(isArea ? "project" : "thread", item)}>
                 + {childLabel}
               </KButton>
+            ) : null}
+            {/* A task: Stop while it works, Resume or Retry once it stopped (C8). */}
+            {!container && chatTab ? (
+              <TaskHeaderActions
+                taskId={item.id}
+                onChat={(draft) => {
+                  setPrefill({ text: draft === "retry" ? "Try again from where it failed." : "Carry on from where you stopped.", at: Date.now() });
+                  setTab("chat");
+                }}
+              />
             ) : null}
             <MenuButton menu={menu} label="More actions" />
             <AnchoredMenu menu={menu} label="More actions" items={menuItems} />

@@ -81,6 +81,8 @@ export type TaskListResponse = {
   done: { count: number; titles: string[] } | null;
   /** Open tasks in scope (the All view's size). */
   open: number;
+  /** One task's own row (`focus`): its state and what can be done (a task page's header). */
+  focus?: TaskRow;
   /** One project's page (`scope` is a project): what is inside it by state, who is working in it, what happened last. */
   project?: {
     rollup: TaskRollup;
@@ -210,7 +212,7 @@ type Built = { row: TaskRow; item: WorkItem };
  * - all: every open task by channel, then project; a project row rolls up what is inside and carries two levels.
  * - review: finished and unreviewed tasks, grouped by project.
  */
-export function buildTaskList(src: TaskSource, opts: { scope: string; view: TaskView; now?: number }): TaskListResponse {
+export function buildTaskList(src: TaskSource, opts: { scope: string; view: TaskView; now?: number; focus?: string }): TaskListResponse {
   const now = opts.now ?? Date.now();
   const byId = new Map(src.items.map((i) => [i.id, i]));
   const kids = new Map<string, WorkItem[]>();
@@ -409,10 +411,12 @@ export function buildTaskList(src: TaskSource, opts: { scope: string; view: Task
           .slice(0, PROJECT_MOMENTS),
       }
     : undefined;
+  const focusItem = opts.focus ? byId.get(opts.focus) : undefined;
   return {
     view: opts.view,
     scope: opts.scope,
     ...(project ? { project } : {}),
+    ...(focusItem && isTask(focusItem) ? { focus: rowOf(focusItem) } : {}),
     groups,
     needs: open.filter((r) => r.state === "needs").length,
     review: reviewRows.length

@@ -2077,11 +2077,22 @@ export const decisions = sqliteTable(
     raisedBy: text("raised_by").notNull(),
     /** legacy askedAt of the work_items.decision JSON this row mirrors (pairs restores on undo) */
     askedAt: text("asked_at").notNull().default(now),
+    /**
+     * Task threads E3/E4: the answer is posted into the agent's chat once the Undo window has passed.
+     * pending (waits for deliver_after) | sent (posted, read-back due) | delivered (read back) | failed | null (nowhere to post).
+     */
+    deliveryState: text("delivery_state"),
+    /** the chat the answer goes to: the task's primary chat, else the raising run's */
+    deliverySession: text("delivery_session"),
+    deliverAfter: text("deliver_after"),
+    deliveredAt: text("delivered_at"),
+    deliveryError: text("delivery_error"),
     createdAt: text("created_at").notNull().default(now),
     updatedAt: text("updated_at").notNull().default(now),
   },
   (t) => [
     uniqueIndex("decisions_seq_idx").on(t.userId, t.seq),
+    index("decisions_delivery_idx").on(t.deliveryState, t.deliverAfter),
     index("decisions_item_idx").on(t.userId, t.itemId, t.state),
     index("decisions_state_idx").on(t.userId, t.state, t.expiresAt),
   ],

@@ -274,3 +274,9 @@
   color: var(--t3);
   font: 400 12px/18px var(--mono);
 }
+
+/* Stop's question under a task's title: the full width of the header. */
+.tl-confirm-head {
+  flex-basis: 100%;
+  order: 10;
+}

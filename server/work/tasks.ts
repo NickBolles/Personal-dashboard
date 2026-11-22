@@ -44,8 +44,18 @@ export function taskList(user: CurrentUser, opts: { scope: string; view: TaskVie
   return buildTaskList(src, { ...opts, now });
 }
 
+/** One task's own row: its state, reason and what can be done (the task page's header). */
+export function taskRowFor(user: CurrentUser, itemId: string, now = Date.now()) {
+  const src = source(user);
+  const row = buildTaskList(src, { scope: "all", view: "flight", now, focus: itemId }).focus;
+  if (!row) throw new HttpError(404, "not_found", "Task not found");
+  return row;
+}
+
 /** How many of the owner's tasks need them: the navigation badge. */
 export const tasksNeedingYou = (user: CurrentUser) => taskList(user, { scope: "all", view: "flight" }).needs;
+
+const DELIVERY_WORD: Record<string, string> = { pending: " · sending", sent: " · sending", delivered: " · delivered", failed: " · not delivered" };
 
 /**
  * A task's timeline, newest first: every report of every run on it and each question it raised, then how it
@@ -69,7 +79,8 @@ export function taskTimeline(user: CurrentUser, itemId: string): { moments: Task
         id: `decided:${d.id}`,
         label: "Decided",
         tone: "ok",
-        text: `${d.question.replace(/\s+/g, " ").trim()} → ${d.answeredChoice}`,
+        // Whether the agent has the answer (task threads E4): said only once the chat confirmed it.
+        text: `${d.question.replace(/\s+/g, " ").trim()} → ${d.answeredChoice}${DELIVERY_WORD[d.delivery?.state ?? ""] ?? ""}`,
         at: d.answeredAt,
       });
   moments.push({

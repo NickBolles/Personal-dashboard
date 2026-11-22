@@ -176,3 +176,8 @@
   z-index: 16;
   background: var(--s1);
 }
+
+/* The task's open questions sit at the end of its chat, right above the composer. */
+.tc-questions {
+  margin-top: 4px;
+}

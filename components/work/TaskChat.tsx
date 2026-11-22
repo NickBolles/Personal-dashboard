@@ -5,6 +5,7 @@
  * other chats under "Other chats" (any of them can be made primary), and, while the task has no chat yet, a
  * composer whose first message creates it. Nothing is created before there is a message to put in it.
  */
+import { ItemDecisions } from "@/components/decisions/DecisionBlock";
 import Link from "next/link";
 import { useLayoutEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -157,6 +158,8 @@ export function TaskChat({
       frame="embedded"
       scroll={scroll}
       lead={lead}
+      // The task's open questions, answered here; the answer reaches the agent in this chat (task threads E1, E3).
+      tail={<ItemDecisions itemId={d.item.id} className="tc-questions" />}
       prefill={prefill}
       onForked={(session) => {
         // The fork is filed under this task as another chat; this one stays primary.
