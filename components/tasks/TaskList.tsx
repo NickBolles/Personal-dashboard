@@ -251,7 +251,7 @@ export function TaskRowView({ row, depth = 0, ...hooks }: { row: TaskRow; depth?
               variant="ghost"
               className="tl-tick"
               aria-pressed={!!ticked}
-              aria-label={`Select ${row.title}`}
+              aria-label={`${ticked ? "Selected" : "Select"} ${row.title}`}
               onClick={() => hooks.select!.toggle(row.id)}
             >
               {ticked ? "Selected" : "Select"}

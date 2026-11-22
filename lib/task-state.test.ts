@@ -66,6 +66,7 @@ describe("one state per task", () => {
     const captured = taskState({ ...base, status: "captured", nextAction: "Confirm the sale dates" });
     expect(captured).toMatchObject({ state: "idle", cause: "captured", line: "Confirm the sale dates", since: base.createdAt });
     expect(taskDetail(captured, "@dev", NOW)).toEqual(["captured 3d ago"]);
+    expect(taskDetail(taskState({ ...base, status: "captured", createdAt: ago(0.2) }), null, NOW)).toEqual(["captured just now"]);
     expect(taskDetail(taskState({ ...base, status: "on_hold" }), null, NOW)).toEqual(["on hold"]);
     expect(taskState(base).cause).toBe("in progress, no agent on it");
   });

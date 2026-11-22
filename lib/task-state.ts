@@ -175,7 +175,8 @@ export function taskDetail(status: TaskStatus, who: string | null, now: number):
   const age = shortAge(status.since, now);
   const parts: string[] = [];
   if (status.state === "stalled") parts.push(status.cause ?? `no word since ${shortWhen(status.since, now)}`);
-  else if (status.state === "idle") parts.push(status.cause === "captured" && age ? `captured ${age} ago` : (status.cause ?? age));
+  else if (status.state === "idle")
+    parts.push(status.cause === "captured" && age ? (age === "now" ? "captured just now" : `captured ${age} ago`) : (status.cause ?? age));
   else if (status.state === "done") parts.push(shortWhen(status.since, now));
   else if (age) parts.push(age);
   if (who && status.state !== "done" && status.state !== "idle") parts.push(who);
