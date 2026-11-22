@@ -2937,6 +2937,26 @@ button:active > .dock-orb {
     gap: 6px;
     margin-top: 6px;
   }
+  /* Cards in a run (a chat reply's task cards): stacked, a little apart. */
+  .k-surface-stack {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 6px;
+  }
+  .k-surface-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding-left: 16px;
+  }
+  .k-surface-brief {
+    color: var(--t2);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
   .k-propbox {
     padding: 12px;
     border-radius: var(--r3);

@@ -7,7 +7,9 @@ import { Button, ChipButton, Menu, cx, useToast, type KMenuItem } from "@/compon
 import { CheckIcon, ChevronIcon } from "@/components/icons";
 import { api } from "@/lib/client/api";
 import { refreshSessionLists } from "@/lib/client/session-lists";
-import { actionRows, focusTarget, summarizeActions, type ActionRow, type ChatAction } from "@/lib/chat/actions";
+import { actionRows, focusTarget, summarizeActions, taskCards, type ActionRow, type ChatAction, type TaskCard } from "@/lib/chat/actions";
+import { AgentSurface } from "@/components/ui";
+import { ChatSuggestion } from "@/components/tasks/Suggestions";
 
 /** Bridge to Conversation's existing tray callback, scoped so the global rail cannot open another chat. */
 export const OPEN_CHAT_RUNNING = "jarvis:chat-running";
@@ -21,6 +23,82 @@ const PROPOSED = new Set<ChatAction["kind"]>(["device_proposal", "quick_action"]
  * Each row keeps its menu (Open / Undo / Focus); handed-off work opens the chat's Running tab.
  */
 export function ActionsTaken({
+  actions: all,
+  sessionId,
+  areaHint,
+  compact = false,
+}: {
+  actions: ChatAction[];
+  sessionId?: string;
+  areaHint?: string | null;
+  compact?: boolean;
+}) {
+  const { cards, rest } = useMemo(() => taskCards(all), [all]);
+  return (
+    <>
+      {cards.length ? (
+        <div className="k-surface-stack" data-testid="task-cards">
+          {cards.map((c) => (c.kind === "suggested" ? <ChatSuggestion key={c.id} id={c.action.suggestionId!} /> : <TaskActionCard key={c.id} card={c} />))}
+        </div>
+      ) : null}
+      <ActionChips actions={rest} sessionId={sessionId} areaHint={areaHint} compact={compact} />
+    </>
+  );
+}
+
+const CARD_WHO: Partial<Record<ChatAction["kind"], string>> = {
+  task_started: "Started a task",
+  handed_off: "Handed off a task",
+  task_steered: "Steered a task",
+};
+
+/**
+ * What the coordinator did with a task, on the agent surface (F2): done (solid), with Open task and Undo where
+ * the write can be undone. A steer that was sent has nothing to undo.
+ */
+function TaskActionCard({ card }: { card: TaskCard }) {
+  const router = useRouter();
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [undone, setUndone] = useState(false);
+  const a = card.action;
+  const undo = useMutation({
+    mutationFn: async () => {
+      for (const op of card.undoOpIds) await api.post(`/api/work/ops/${encodeURIComponent(op)}/undo`);
+    },
+    onSuccess: () => {
+      setUndone(true);
+      toast("Undone", "ok");
+      void qc.invalidateQueries({ queryKey: ["work"] });
+    },
+    onError: (err) => toast(`Not undone: ${(err as Error).message}`, "danger"),
+  });
+  const href = a.href && /^\/(?![\\/])/.test(a.href) ? a.href : null;
+  return (
+    <AgentSurface
+      variant="done"
+      testId="task-card"
+      who={undone ? "Undone" : card.created ? "Created a task" : (CARD_WHO[a.kind] ?? a.label)}
+      title={a.title ?? "A task"}
+      actions={
+        <>
+          {href ? (
+            <Button size="sm" variant="secondary" onClick={() => router.push(href)}>
+              Open task
+            </Button>
+          ) : null}
+          {card.undoOpIds.length && !undone ? (
+            <Button size="sm" variant="ghost" loading={undo.isPending} onClick={() => undo.mutate()}>
+              Undo
+            </Button>
+          ) : null}
+        </>
+      }
+    />
+  );
+}
+
+function ActionChips({
   actions,
   sessionId,
   areaHint,

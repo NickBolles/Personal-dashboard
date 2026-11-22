@@ -1,9 +1,8 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import type { AssistCard as Assist } from "@/lib/contracts";
-import { cx } from "@/components/ui";
-import { Button, ButtonLink } from "@/components/ui/legacy";
-import { ChevronIcon } from "@/components/icons";
+import { AgentSurface, Button } from "@/components/ui";
 import { chatHref } from "./chat";
 import { FeedbackBar } from "./Feedback";
 
@@ -14,50 +13,42 @@ const ORIGIN_LABEL: Record<Assist["origin"], string> = {
   seasonal: "Seasonal idea",
 };
 
-const TONE_BAR: Record<Assist["tone"], string> = {
-  warn: "overdue_recent",
-  accent: "compass",
-  neutral: "today",
-};
-
 /**
- * A deterministic suggestion. The label says where it came from; the chat
- * button only opens a prefilled, read-only planning conversation.
+ * A deterministic suggestion (task threads H8): costs nothing, never calls a model, and uses the same agent
+ * surface as a coordinator's. The label says where it came from; the chat action only opens a prefilled,
+ * read-only planning conversation.
  */
 export function AssistCard({ card, onTriage }: { card: Assist; onTriage: (card: Assist) => void }) {
-  const titleId = `assist-${card.id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+  const router = useRouter();
+  const chat = card.chat;
+  const primary = card.triage
+    ? { label: "Review & reschedule", onClick: () => onTriage(card) }
+    : chat
+      ? { label: chat.label, onClick: () => router.push(chatHref(chat)) }
+      : undefined;
   return (
-    <article aria-labelledby={titleId} data-tier={TONE_BAR[card.tone]} className="card jv-accent jv-rise flex flex-col gap-1.5 px-3.5 py-3 pl-4 dense:py-2.5">
-      <p className={cx("text-xs font-semibold", card.origin === "seasonal" ? "text-muted" : "text-[var(--tier-compass)]")}>{ORIGIN_LABEL[card.origin]}</p>
-      <h3 id={titleId} className="text-[0.9375rem] leading-snug font-semibold dense:text-[0.875rem]">
-        {card.title}
-      </h3>
-      <p className="text-sm text-muted">{card.body}</p>
-      <div className="flex flex-wrap gap-2 pt-0.5">
-        {card.triage ? (
-          <Button variant="primary" size="sm" onClick={() => onTriage(card)} aria-describedby={titleId}>
-            Review &amp; reschedule
+    <AgentSurface
+      variant="proposed"
+      testId="assist-card"
+      who={ORIGIN_LABEL[card.origin]}
+      title={card.title}
+      why={card.body}
+      primary={primary}
+      actions={
+        card.triage && chat ? (
+          <Button size="sm" variant="ghost" onClick={() => router.push(chatHref(chat))}>
+            {chat.label}
           </Button>
-        ) : null}
-        {card.chat ? (
-          <ButtonLink href={chatHref(card.chat)} variant={card.triage ? "secondary" : "primary"} size="sm" aria-describedby={titleId}>
-            {card.chat.label}
-          </ButtonLink>
-        ) : null}
-      </div>
-      <details className="jv-why group -mx-1">
-        <summary className="tap inline-flex items-center gap-1 rounded-[6px] px-1 text-xs font-medium text-muted hover:text-text dense:min-h-6">
-          <span>Why am I seeing this?</span>
-          <span className="sr-only"> ({card.title})</span>
-          <ChevronIcon className="h-3.5 w-3.5 transition-transform group-open:rotate-90" />
-        </summary>
-        <div className="jv-rise space-y-3 px-1 pb-1 pt-1">
-          <ul className="space-y-0.5 text-sm text-muted">
-            <li>· {card.basis}</li>
+        ) : null
+      }
+      more={
+        <>
+          <ul className="k-surface-list">
+            <li>{card.basis}</li>
             {card.why.map((w) => (
-              <li key={w}>· {w}</li>
+              <li key={w}>{w}</li>
             ))}
-            {card.chat ? <li>· The chat opens with a draft. Hermes only runs when you press send, and it’s told not to change anything.</li> : null}
+            {chat ? <li>The chat opens with a draft. Hermes only runs when you press send, and it’s told not to change anything.</li> : null}
           </ul>
           <FeedbackBar
             rate
@@ -71,8 +62,8 @@ export function AssistCard({ card, onTriage }: { card: Assist; onTriage: (card: 
               sources: card.provenance.sources,
             }}
           />
-        </div>
-      </details>
-    </article>
+        </>
+      }
+    />
   );
 }

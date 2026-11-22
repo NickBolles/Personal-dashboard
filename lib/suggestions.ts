@@ -45,9 +45,7 @@ export type Suggestion = {
 
 export type SuggestionsResponse = { suggestions: Suggestion[] };
 
-export const suggestionActionSchema = z
-  .object({ action: z.enum(["start", "not_now", "show_again", "stop_topic", "allow_topic", "undo"]) })
-  .strict();
+export const suggestionActionSchema = z.object({ action: z.enum(["start", "not_now", "show_again", "stop_topic", "allow_topic", "undo"]) }).strict();
 export type SuggestionAction = z.infer<typeof suggestionActionSchema>["action"];
 
 /** The primary action's word: Start a task, Send a steer. */

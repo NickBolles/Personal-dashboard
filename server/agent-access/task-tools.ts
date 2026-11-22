@@ -3,7 +3,9 @@ import { z } from "zod";
 import { agentProfileSchema } from "@/lib/agent-access";
 import { HttpError } from "@/server/http/errors";
 import { startTask, steerTask, type TaskCaller } from "@/server/work/task-runs";
-import { visible, type ToolDef } from "./tools";
+import { writeSuggestion } from "@/server/work/suggestions";
+import { areaIndex } from "@/lib/map-rollup";
+import { agentItems, visible, type ToolDef } from "./tools";
 
 // Local generic helper avoids evaluating the tools.ts registry during its own initialization.
 const tool = <S extends z.ZodType>(t: ToolDef<S>) => t as unknown as ToolDef;
@@ -32,7 +34,7 @@ export const TASK_TOOLS: ToolDef[] = [
   tool({
     name: "jarvis_steer_task",
     description:
-      "Tell a task's agent something, in the task's chat: guidance for the run in flight, or the next message when nothing is running. ownerAsked must be true, and only when the owner asked for this steer in the conversation you are in. A steer that is your own idea is a proposal: raise it with jarvis_raise_decision and let the owner send it. Returns {itemId, sessionId, delivered: guidance|message, href}.",
+      "Tell a task's agent something, in the task's chat: guidance for the run in flight, or the next message when nothing is running. ownerAsked must be true, and only when the owner asked for this steer in the conversation you are in. A steer that is your own idea is a proposal: suggest it with jarvis_suggest (act \"steer\") and the owner sends it. Returns {itemId, sessionId, delivered: guidance|message, href}.",
     scope: "tasks.run",
     input: z
       .object({
@@ -47,7 +49,7 @@ export const TASK_TOOLS: ToolDef[] = [
         throw new HttpError(
           403,
           "owner_only",
-          "A steer you thought of yourself is a proposal, not a message: raise it with jarvis_raise_decision and the owner decides whether it is sent",
+          'A steer you thought of yourself is a proposal, not a message: suggest it with jarvis_suggest (act "steer") and the owner decides whether it is sent',
         );
       return steerTask(caller(agent), item, { message }, correlationId);
     },
@@ -68,7 +70,42 @@ export const TASK_TOOLS: ToolDef[] = [
     run: ({ itemId, toProfile, brief, title }, { agent, correlationId }) =>
       startTask(caller(agent), visible(agent.user.id, itemId), { brief, title, toProfile }, correlationId),
   }),
+  tool({
+    name: "jarvis_suggest",
+    description:
+      'Suggest a next step to the owner, as a card they may Start or Send (it is never done by itself). act "start": start a task (itemId), or a new task titled `title` when itemId is left out. act "steer": tell a working task (itemId) something. why is one line from the owner\'s own work (counts, dates, task names); evidence lists the itemIds of the tasks it comes from (at least one, all in one channel); text is exactly what the agent will be told; topic is a short kind such as "review" or "follow_up". Refused for Finance, a channel closed to AI, a kind the owner turned off, or a repeat. Returns {suggestionId, channelId, title, act}.',
+    scope: "decisions.write",
+    input: z
+      .object({
+        act: z.enum(["start", "steer"]),
+        itemId: id.optional(),
+        title: z.string().trim().min(1).max(200),
+        why: z.string().trim().min(1).max(300),
+        text: z.string().trim().min(1).max(4000),
+        evidence: z.array(id).min(1).max(5),
+        topic: z
+          .string()
+          .trim()
+          .regex(/^[a-z][a-z_]{1,39}$/)
+          .optional(),
+      })
+      .strict(),
+    run: (input, { agent }) => {
+      const channelId = channelOfItem(agent.user.id, input.itemId ?? input.evidence[0]!);
+      if (!channelId) throw new HttpError(409, "refused", "Suggestions are only for tasks in a channel open to AI");
+      const written = writeSuggestion(agent.user, channelId, agent.profile, input, null);
+      if (!written.ok) throw new HttpError(409, "refused", `Not suggested: ${written.reason}`);
+      return { suggestionId: written.id, channelId, title: input.title, act: input.act };
+    },
+  }),
 ];
+
+/** The top-level area (channel) a visible item sits in. */
+function channelOfItem(userId: string, itemId: string): string | null {
+  const { items, byId } = agentItems(userId);
+  if (!byId.has(itemId)) return null;
+  return areaIndex(items).get(itemId) ?? null;
+}
 
 function caller(agent: { user: TaskCaller["user"]; profile: string; tokenId: string }): TaskCaller {
   return { user: agent.user, profile: agent.profile, tokenId: agent.tokenId };

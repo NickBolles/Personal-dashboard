@@ -67,13 +67,20 @@ export function AgentSurface({
       {primary || actions || more ? (
         <div className="k-surface-acts">
           {primary ? (
-            <Button size="sm" variant={quiet ? "secondary" : "agent"} loading={primary.busy} onClick={primary.onClick}>
+            <Button size="sm" variant={quiet ? "secondary" : "agent"} loading={primary.busy} onClick={primary.onClick} aria-describedby={`${id}-t`}>
               {primary.label}
             </Button>
           ) : null}
           {actions}
           {more ? (
-            <Button size="sm" variant="ghost" aria-expanded={open} aria-controls={open ? `${id}-more` : undefined} onClick={() => setOpen((v) => !v)}>
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-expanded={open}
+              aria-controls={open ? `${id}-more` : undefined}
+              aria-describedby={`${id}-t`}
+              onClick={() => setOpen((v) => !v)}
+            >
               {open ? "Hide why" : "Why this?"}
             </Button>
           ) : null}

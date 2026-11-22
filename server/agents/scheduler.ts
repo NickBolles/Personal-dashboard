@@ -139,7 +139,13 @@ export function scheduledBudgetOk(now: Date) {
   const settings = getAiSettings();
   if (settings.billing.mode !== "api") return true;
   const t = spendToday(now);
-  return budgetGate({ spentToday: t.spentUsd, reserved: t.reservedUsd, estimate: settings.estimatesUsd.standard, daily: settings.dailyBudgetUsd, override: false }).ok;
+  return budgetGate({
+    spentToday: t.spentUsd,
+    reserved: t.reservedUsd,
+    estimate: settings.estimatesUsd.standard,
+    daily: settings.dailyBudgetUsd,
+    override: false,
+  }).ok;
 }
 
 /** Suggestions never read Finance (H7): a suggest job on it does not run. */

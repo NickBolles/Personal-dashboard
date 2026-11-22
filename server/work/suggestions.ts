@@ -25,7 +25,7 @@ import {
 } from "@/lib/suggestions";
 import { withVia } from "./actor";
 import { globalCoordinatorArea } from "./coordinator";
-import { createItem, listItems, undoOp, type OpOut } from "./store";
+import { createItem, listItems, undoOp, updateItem, type OpOut } from "./store";
 import { activeRun, startTask, steerTask, type TaskRunDeps } from "./task-runs";
 
 /**
@@ -39,7 +39,20 @@ const S = schema.suggestions;
 const T = schema.suggestionTopics;
 type Row = typeof S.$inferSelect;
 type Viewer = CurrentUser & Capable;
-type Result = { itemId: string; title: string; href: string; ops: string[]; at: string };
+/** `created`: Start made the task, so Undo also takes it away (removed if untouched, else archived: F3). */
+type Result = { itemId: string; title: string; href: string; ops: string[]; created?: boolean; at: string };
+
+/** Undo what Start did, newest first. A task it created that has a chat by now can't be removed: it is archived. */
+function undoStart(user: CurrentUser, ops: string[], createdId: string | null, correlationId: string) {
+  for (const op of ops) {
+    try {
+      undoOp(user, op, correlationId);
+    } catch (e) {
+      if (!createdId || op !== ops.at(-1)) throw e;
+      updateItem(user, createdId, { archived: true } as never, correlationId);
+    }
+  }
+}
 
 const taskHref = (id: string) => `/areas?item=${encodeURIComponent(id)}&tab=chat`;
 const parseJson = <T>(s: string | null, fallback: T): T => {
@@ -117,14 +130,7 @@ export type WriteResult = { ok: true; id: string } | { ok: false; reason: string
  * outside the channel, Finance or a channel closed to AI, credentials, a kind the owner turned off, a repeat.
  * At most five stay open per channel: a sixth replaces the weakest (H3).
  */
-export function writeSuggestion(
-  user: CurrentUser,
-  channelId: string,
-  profile: string,
-  p: SuggestInput,
-  runId: string | null,
-  now = new Date(),
-): WriteResult {
+export function writeSuggestion(user: CurrentUser, channelId: string, profile: string, p: SuggestInput, runId: string | null, now = new Date()): WriteResult {
   const view = readable(user.id);
   const channel = view.byId.get(channelId);
   if (!channel || channel.parentId !== null || view.channelOf(channelId)?.id !== channelId)
@@ -335,20 +341,27 @@ export async function actOnSuggestion(user: Viewer, id: string, action: Suggesti
         if (out.op) ops.push(out.op.id);
       }
       try {
-        const started = await startTask(caller, listItems(user.id).find((i) => i.id === item.id)!, { brief: r.brief, title: r.title }, correlationId, deps, now);
+        const started = await startTask(
+          caller,
+          listItems(user.id).find((i) => i.id === item.id)!,
+          { brief: r.brief, title: r.title },
+          correlationId,
+          deps,
+          now,
+        );
         if (started.undoOpId) ops.unshift(started.undoOpId);
       } catch (e) {
-        for (const op of ops) undoOp(user, op, correlationId);
+        undoStart(user, ops, r.itemId ? null : item.id, correlationId);
         throw e;
       }
-      const result: Result = { itemId: item.id, title: item.title, href: taskHref(item.id), ops, at };
+      const result: Result = { itemId: item.id, title: item.title, href: taskHref(item.id), ops, created: !r.itemId, at };
       set({ state: "started", resultItemId: item.id, resultJson: JSON.stringify(result) });
       break;
     }
     case "undo": {
       const result = parseJson<Result | null>(r.resultJson, null);
       if (r.state !== "started" || !result?.ops.length) throw new HttpError(409, "not_undoable", "Nothing to undo");
-      for (const op of result.ops) undoOp(user, op, correlationId);
+      undoStart(user, result.ops, result.created ? result.itemId : null, correlationId);
       set({ state: "open", resultItemId: null, resultJson: null });
       break;
     }
@@ -386,4 +399,17 @@ export function suggestContext(user: CurrentUser, channelId: string, now = new D
   ]
     .filter(Boolean)
     .join("\n\n");
+}
+
+/** One suggestion as it stands now (a card in a chat reads it back). */
+export function getSuggestion(user: CurrentUser, id: string, now = new Date()): Suggestion | null {
+  const r = ownRow(user.id, id);
+  const view = readable(user.id);
+  if (!view.byId.has(r.channelId)) return null;
+  if (r.state === "open" && staleReason(user.id, r, view, now.getTime())) {
+    getDb().update(S).set({ state: "stale", updatedAt: now.toISOString() }).where(eq(S.id, id)).run();
+    return null;
+  }
+  if (r.state !== "open" && r.state !== "started") return null;
+  return toSuggestion(user, r, view, 0);
 }

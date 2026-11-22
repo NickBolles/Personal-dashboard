@@ -39,14 +39,14 @@ token** the owner mints in **Settings → Agents → Agent access**. The proposa
 
 ## Scopes
 
-| Scope                | Lets the agent                                                                                                |
-| -------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `work.read`          | `jarvis_tree`, `jarvis_search`, `jarvis_get_item`, `jarvis_list_decisions`                                    |
-| `work.write`         | `jarvis_create_item`, `jarvis_update_item`, `jarvis_add_note`, `jarvis_link`, `jarvis_add_quick_action`       |
-| `decisions.write`    | `jarvis_raise_decision`, `jarvis_supersede_decision`, `jarvis_request_change`, `jarvis_propose_device_change` |
-| `runs.write`         | `jarvis_run_start`, `jarvis_run_update`, `jarvis_run_event`                                                   |
-| `conversations.file` | `jarvis_file_conversation` (also needs a route for the profile in Settings → Agents)                          |
-| `tasks.run`          | `jarvis_start_task`, `jarvis_steer_task`, `jarvis_hand_off` (not a default scope: the owner opts a token in)  |
+| Scope                | Lets the agent                                                                                                                  |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `work.read`          | `jarvis_tree`, `jarvis_search`, `jarvis_get_item`, `jarvis_list_decisions`                                                      |
+| `work.write`         | `jarvis_create_item`, `jarvis_update_item`, `jarvis_add_note`, `jarvis_link`, `jarvis_add_quick_action`                         |
+| `decisions.write`    | `jarvis_raise_decision`, `jarvis_supersede_decision`, `jarvis_request_change`, `jarvis_propose_device_change`, `jarvis_suggest` |
+| `runs.write`         | `jarvis_run_start`, `jarvis_run_update`, `jarvis_run_event`                                                                     |
+| `conversations.file` | `jarvis_file_conversation` (also needs a route for the profile in Settings → Agents)                                            |
+| `tasks.run`          | `jarvis_start_task`, `jarvis_steer_task`, `jarvis_hand_off` (not a default scope: the owner opts a token in)                    |
 
 `tools/list` returns only the tools the token's scopes allow.
 
@@ -93,6 +93,11 @@ A coordinator does three things with work: it **creates** a task (`jarvis_create
 - **Every brief ends with how to report**: the run's `R-n`, `jarvis_run_event` for key moments (`type: "progress"` with a `moment`: what it found, made, is blocked on or handed off; one line each, at least one before it finishes), `jarvis_run_update` at the end, `jarvis_raise_decision` to ask the owner. The run is registered under the **working** agent's profile, so that agent's own token can report on it.
 - **Undo** (Activity, 7 days for agent ops): a start or hand-off stops being "working" at once (the run is marked stopped and the assistant is asked to stop the turn); a hand-off also puts the assignee and the chat back. A task the same agent created is removed or archived by undoing its `create` op, as before.
 - **Nothing else changes**: these tools cannot settle, spend, send outside Jarvis or touch a device, and AI-excluded areas stay invisible.
+- **A steer that is the bot's own idea is a suggestion** (F4): `jarvis_suggest` with `act: "steer"`, which the owner sends from the card. `jarvis_steer_task` is only for a steer the owner asked for.
+- In every chat, what a coordinator started, handed off or steered is drawn as a done card on the agent surface with Open task and Undo (a task the same reply created and started is one card; Undo undoes both). A `jarvis_suggest` is drawn as its card, read back so it shows what it is now.
+
+`jarvis_suggest` (scope `decisions.write`): `act` (`start` | `steer`), `itemId?` (the task; for `start` without it, Start creates a task titled `title`), `title`, `why` (≤300, one line from the owner's own work), `text` (what the agent is told), `evidence` (1–5 itemIds, all in one channel), `topic?` (`^[a-z][a-z_]{1,39}$`). Returns `{suggestionId, channelId, title, act}`. Refused (`refused`) for Finance, a channel closed to AI, evidence outside the channel, a kind the owner turned off, a repeat, a steer for a task that is not working, or a start for one that already is. Rules: docs/home-priorities.md H1–H8.
+
 - The coordinator profiles' instructions (on the Hermes side) must tell them to use these tools; Jarvis cannot make an agent work in a particular chat.
 
 Tool errors come back as MCP tool results with `isError: true` and `{error, message}` (for example

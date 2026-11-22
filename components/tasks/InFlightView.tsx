@@ -29,6 +29,7 @@ import type { RunView } from "@/lib/hermes";
 import { SMART_CAPABILITY } from "@/lib/jarvis-ui/types";
 import type { ItemsResponse, WorkDetail, WorkItem } from "@/lib/work";
 import { TaskList, taskHref, useCanChat } from "./TaskList";
+import { Suggestions } from "./Suggestions";
 import "@/components/work/task-chat.css";
 
 const VIEWS = [
@@ -221,6 +222,8 @@ export function InFlightView() {
         selectedId={wide ? picked : null}
         empty={<EmptyState title={view === "flight" ? "Nothing in flight" : "No open tasks"} />}
       />
+      {/* One suggestion per channel (task threads H3); the view's own primary stays Add a task. */}
+      {view === "flight" ? <Suggestions scope="all" quiet /> : null}
       <AddTask />
     </div>
   );

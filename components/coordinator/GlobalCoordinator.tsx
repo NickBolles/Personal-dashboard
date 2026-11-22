@@ -41,6 +41,7 @@ import { DecisionFlowContext, useDecisionFlowController, type DecisionFlow } fro
 import { viewOfDecision } from "@/lib/decision-view";
 import { useCoordinatorDecisions } from "./needs/useCoordinatorDecisions";
 import { TaskList } from "@/components/tasks/TaskList";
+import { Suggestions } from "@/components/tasks/Suggestions";
 import { RunCard } from "./running/RunCard";
 import { useCoordinatorRuns, useMarkLooked, useResumeAll } from "./running/useCoordinatorRuns";
 // The design library's sleek density tier, right before this panel's own styles (see the file's header).
@@ -774,6 +775,7 @@ export function GlobalCoordinator() {
                   ) : null}
                   {interrupted.length ? <ResumeAll count={interrupted.length} refs={interrupted.map((r) => r.ref)} /> : null}
                   <TaskList scope="all" view="flight" onAnswer={(ref) => openAt("tasks", ref)} empty={<p className="gc-hint">Nothing in flight</p>} />
+                  <Suggestions scope="all" />
                   {things.changes.length ? (
                     <p className="gc-jump">
                       <Button variant="ghost" size="sm" onClick={() => document.getElementById(`${ids}-changes`)?.scrollIntoView({ block: "start" })}>
