@@ -688,3 +688,42 @@
   height: calc(100dvh - var(--k-dock-top, 0px) - var(--kb-inset, 0px));
 }
 /* ==== end embedded thread ==== */
+
+/* ==== "In this chat": a fixed section for each kind of thing (ChatPanel.tsx ChatSections) ==== */
+.cp-sections {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+.cp-sec {
+  min-width: 0;
+  padding: 10px 0 12px;
+  border-top: 1px solid var(--bd);
+  scroll-margin-top: 8px;
+}
+.cp-sec:first-child {
+  border-top: 0;
+  padding-top: 2px;
+}
+.cp-sec-h {
+  margin-bottom: 6px;
+  color: var(--t3);
+  font: 600 11px/1.4 var(--sans);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.cp-sec-n {
+  font-weight: 400;
+}
+.cp-quiet {
+  color: var(--t2);
+  font: 400 13px/1.4 var(--sans);
+}
+/* The sheet is a phone pattern: on a wide screen it is a centred card, not an edge-to-edge strip. */
+@media (min-width: 900px) {
+  .k-sheet-body {
+    inset-inline: 0;
+    max-width: 560px;
+    margin-inline: auto;
+  }
+}

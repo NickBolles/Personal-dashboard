@@ -93,7 +93,22 @@ export async function openChatContext(page: Page) {
   await page.getByRole("menuitem", { name: /^Context/ }).click();
 }
 
-/** Same tabs on the container-sized desktop panel and the narrow-screen sheet. */
+/** A workflow's own tabs in "In this chat"; everything of the chat itself is a fixed section, not a tab. */
+const WORKFLOW_TABS = ["Outline", "Form", "Notes", "Outputs"];
+/** The heading of each fixed section, by the name the tray's chips use. */
+const CHAT_SECTIONS: Record<string, string> = {
+  Running: "Running",
+  PRs: "Pull requests",
+  Artifacts: "Artifacts",
+  Files: "Files",
+  Links: "Links",
+  Context: "Context",
+};
+
+/**
+ * Opens "In this chat" (the container-sized desktop panel, or the sheet on narrow screens) at `tab`: one of a
+ * workflow's tabs, or one of the chat's fixed sections, which is brought into view.
+ */
 export async function openChatPanel(page: Page, tab = "Links") {
   const panel = page.getByTestId("chat-panel-content");
   const opener = page.getByRole("button", { name: "Open chat panel", exact: true });
@@ -101,7 +116,17 @@ export async function openChatPanel(page: Page, tab = "Links") {
   await expect(panel.or(opener).first()).toBeVisible();
   if (!(await panel.isVisible())) await opener.click();
   await expect(panel).toBeVisible();
-  await panel.getByRole("tab", { name: new RegExp(`^${tab}(?:\\s|$)`) }).click();
+  if (WORKFLOW_TABS.includes(tab)) {
+    await panel.getByRole("tab", { name: new RegExp(`^${tab}(?:\\s|$)`) }).click();
+    return panel;
+  }
+  // A workflow chat keeps the chat's sections behind one more tab.
+  const inChat = panel.getByRole("tab", { name: "In this chat", exact: true });
+  if (await inChat.count()) await inChat.click();
+  await panel
+    .getByRole("heading", { name: new RegExp(`^${CHAT_SECTIONS[tab] ?? tab}`) })
+    .first()
+    .scrollIntoViewIfNeeded();
   return panel;
 }
 export async function closeChatPanel(page: Page) {

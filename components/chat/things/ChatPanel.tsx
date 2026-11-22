@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useId, useState, type ReactNode, type CSSProperties } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode, type CSSProperties } from "react";
 import { Badge, Button, Spinner } from "@/components/ui/legacy";
 import { BrainIcon, ForkIcon, ToolIcon } from "@/components/icons";
 import { safeHref } from "@/components/markdown/Markdown";
@@ -50,7 +50,9 @@ export function RunningSection({
       <ParentChatLink parent={execution?.parent} />
       {pending}
       {loading && !execution ? <Spinner label="Loading agents and jobs…" /> : null}
-      {error || (!loading && !execution) || execution?.sources.length === 0 ? (
+      {/* One plain line when the check failed. Which source it was, and a saved status that may be old, are not
+          the owner's to read: what is known stays listed below either way. */}
+      {error || (!loading && !execution) || execution?.sources.length === 0 || execution?.sources.some((s) => s.state === "unavailable") ? (
         <p className="text-xs text-muted" role="status">
           Couldn&apos;t check background work.{" "}
           <Button size="sm" onClick={retry}>
@@ -58,23 +60,11 @@ export function RunningSection({
           </Button>
         </p>
       ) : null}
-      {execution?.sources
-        .filter((s) => s.state !== "ok")
-        .map((s) => (
-          <div key={s.source} className="rounded-lg border border-line p-2 text-xs text-muted" role="status">
-            Couldn&apos;t load {s.source.replaceAll("_", " ")}
-            {s.state === "stale" ? " · saved status may be stale" : " · source unavailable"}
-            {s.detail ? `: ${s.detail}` : ""}.{" "}
-            <Button size="sm" onClick={retry}>
-              Retry
-            </Button>
-          </div>
-        ))}
       {groups
         .filter((g) => g.records.length)
         .map((g) => (
           <section key={g.title} aria-label={g.title}>
-            <h3 className="mb-1 text-xs font-semibold text-muted">{g.title}</h3>
+            <h4 className="mb-1 text-xs font-semibold text-muted">{g.title}</h4>
             <ul className="space-y-2">
               {g.records.map((record) => (
                 <ExecutionRow key={record.key} record={record} />
@@ -188,8 +178,19 @@ type Props = {
   pending?: ReactNode;
   workflow?: { run: RunPanelView; target: string | null; onTarget: (field: string | null) => void; capture: AgentCaptureState } | null;
 };
-const chatTabs: ThingsTab[] = ["Links", "Artifacts", "PRs", "Running", "Files", "Context"];
 const workflowTabs: ThingsTab[] = ["Outline", "Form", "Notes", "Outputs"];
+/** The fixed sections of "In this chat", in the order they are always drawn. The tray's chips name them by tab. */
+const SECTIONS = ["Running", "Waiting", "PRs", "Artifacts", "Files", "Links", "Context"] as const;
+type SectionId = (typeof SECTIONS)[number];
+const SECTION_TITLE: Record<SectionId, string> = {
+  Running: "Running",
+  Waiting: "Waiting on you",
+  PRs: "Pull requests",
+  Artifacts: "Artifacts",
+  Files: "Files",
+  Links: "Links",
+  Context: "Context",
+};
 const clamp = (width: number) => Math.max(280, Math.min(480, width));
 export function ChatPanel(props: Props) {
   const { open, wide, onClose } = props;
@@ -261,70 +262,78 @@ export function ChatPanel(props: Props) {
     </aside>
   );
 }
-function PanelContent(p: Props) {
-  const id = useId();
-  const tabs = p.workflow ? [...workflowTabs, ...chatTabs] : chatTabs;
-  const selected = tabs.includes(p.tab) ? p.tab : "Links";
-  const count = (tab: ThingsTab): number | null | undefined => {
-    const c = p.things.counts;
-    return (
-      { Links: c.links, Artifacts: c.artifacts, PRs: c.prs.total, Running: c.running, Files: c.files, Context: c.context } as Partial<
-        Record<ThingsTab, number | null>
-      >
-    )[tab];
-  };
-  const navigation = (
-    <>
-      <div role="tablist" aria-label="Chat panel tabs" className="flex flex-wrap gap-1 border-b border-line py-2">
-        {tabs.map((tab, index) => (
-          <SummaryChip
-            key={tab}
-            kind={tab}
-            count={count(tab)}
-            role="tab"
-            id={`${id}-${tab}`}
-            aria-controls={`${id}-body-${tab}`}
-            aria-selected={selected === tab}
-            tabIndex={selected === tab ? 0 : -1}
-            tone={tab === "PRs" && p.things.counts.prs.failing ? "bad" : "neutral"}
-            onClick={() => p.onTab(tab)}
-            onKeyDown={(e) => {
-              let next: number;
-              if (e.key === "ArrowRight") next = (index + 1) % tabs.length;
-              else if (e.key === "ArrowLeft") next = (index + tabs.length - 1) % tabs.length;
-              else if (e.key === "Home") next = 0;
-              else if (e.key === "End") next = tabs.length - 1;
-              else return;
-              e.preventDefault();
-              p.onTab(tabs[next]);
-              document.getElementById(`${id}-${tabs[next]}`)?.focus();
-            }}
-          />
-        ))}
-      </div>
-      {tabs
-        .filter((tab) => tab !== selected)
-        .map((tab) => (
-          <div key={tab} role="tabpanel" id={`${id}-body-${tab}`} aria-labelledby={`${id}-${tab}`} hidden />
-        ))}
-    </>
+/** One kind of thing in the chat: its name, how many there are, then the things (or one quiet line). */
+function PanelSection({ id, uid, count, children }: { id: SectionId; uid: string; count?: number | null; children: ReactNode }) {
+  return (
+    <section className="cp-sec" aria-labelledby={`${uid}-${id}`} data-section={id}>
+      <h3 id={`${uid}-${id}`} className="cp-sec-h">
+        {SECTION_TITLE[id]}
+        {count != null ? <> </> : null}
+        {count != null ? <span className="cp-sec-n">· {count}</span> : null}
+      </h3>
+      {children}
+    </section>
   );
-  const linksProps = {
-    sessionId: p.sessionId,
-    links: p.links,
-    context: p.context,
-    readOnly: p.readOnly,
-    onPatch: p.onPatch,
-    onRemoveContext: p.onRemoveContext,
-  };
-  const body = (
-    <>
-      {selected === "Links" ? <LinksPanel {...linksProps} /> : null}
-      {selected === "Artifacts" ? (
-        <div className="grid grid-cols-2 gap-2">
-          {p.links
-            .filter((l) => l.kind === "artifact")
-            .map((l) => (
+}
+const Quiet = ({ children }: { children: ReactNode }) => <p className="cp-quiet">{children}</p>;
+
+/**
+ * "In this chat": a fixed place for each kind of thing, always in the same order: running work, what waits on the
+ * owner, pull requests, artifacts, files, links and context. An empty kind says so in one quiet line.
+ * `p.tab` (what the tray or the header asked for) is brought into view; nothing is hidden behind it.
+ */
+function ChatSections(p: Props) {
+  const uid = useId();
+  const root = useRef<HTMLDivElement>(null);
+  const wanted: SectionId = (SECTIONS as readonly string[]).includes(p.tab) ? (p.tab as SectionId) : "Running";
+  useEffect(() => {
+    if (wanted === "Running") return;
+    root.current?.querySelector<HTMLElement>(`[data-section="${wanted}"]`)?.scrollIntoView?.({ block: "start" });
+  }, [wanted]);
+  const records = p.execution?.records ?? [];
+  const waiting = records.filter((r) => r.state === "waiting");
+  const running = p.execution ? { ...p.execution, records: records.filter((r) => r.state !== "waiting") } : undefined;
+  const prs = p.links.filter((l) => l.kind === "github" && l.ghType === "pull");
+  const artifacts = p.links.filter((l) => l.kind === "artifact");
+  const others = p.links.filter((l) => l.kind !== "artifact" && !(l.kind === "github" && l.ghType === "pull"));
+  const c = p.things.counts;
+  const linksProps = { sessionId: p.sessionId, context: p.context, readOnly: p.readOnly, onPatch: p.onPatch, onRemoveContext: p.onRemoveContext };
+  return (
+    <div ref={root} className="cp-sections">
+      <PanelSection id="Running" uid={uid} count={c.running}>
+        <RunningSection execution={running} error={p.executionError} loading={p.executionLoading} retry={p.retry} />
+      </PanelSection>
+      <PanelSection id="Waiting" uid={uid} count={waiting.length + (p.pending ? 1 : 0)}>
+        {p.pending}
+        {waiting.length ? (
+          <ul className="space-y-2">
+            {waiting.map((record) => (
+              <ExecutionRow key={record.key} record={record} />
+            ))}
+          </ul>
+        ) : null}
+        {!p.pending && !waiting.length ? <Quiet>Nothing is waiting on you</Quiet> : null}
+      </PanelSection>
+      <PanelSection id="PRs" uid={uid} count={prs.length}>
+        {prs.length ? (
+          <>
+            <LinksPanel {...linksProps} links={prs} linksOnly bare />
+            {prs.map((l) =>
+              l.state === "merged" || isFailingLink(l) ? (
+                <p key={l.url} className="mt-2 text-xs text-muted">
+                  #{l.number}: {l.state === "merged" ? "Merged · no deploy record. Live status unknown." : `Reported state: ${l.state}`}
+                </p>
+              ) : null,
+            )}
+          </>
+        ) : (
+          <Quiet>None yet</Quiet>
+        )}
+      </PanelSection>
+      <PanelSection id="Artifacts" uid={uid} count={artifacts.length}>
+        {artifacts.length ? (
+          <div className="grid grid-cols-2 gap-2">
+            {artifacts.map((l) => (
               <a
                 href={safeHref(l.url) ?? undefined}
                 target="_blank"
@@ -336,61 +345,94 @@ function PanelContent(p: Props) {
                 <span className="mt-1 block text-xs text-muted">Artifact · {l.slug} ↗</span>
               </a>
             ))}
-          {!p.things.counts.artifacts ? <p className="col-span-2 text-sm text-muted">No artifacts in this chat yet.</p> : null}
-        </div>
-      ) : null}
-      {selected === "PRs" ? (
-        <>
-          <LinksPanel {...linksProps} links={p.links.filter((l) => l.kind === "github" && l.ghType === "pull")} linksOnly />
-          {p.links
-            .filter((l) => l.ghType === "pull")
-            .map((l) =>
-              l.state === "merged" || isFailingLink(l) ? (
-                <p key={l.url} className="mt-2 text-xs text-muted">
-                  #{l.number}: {l.state === "merged" ? "Merged · no deploy record. Live status unknown." : `Reported state: ${l.state}`}
-                </p>
-              ) : null,
-            )}
-        </>
-      ) : null}
-      {selected === "Running" ? (
-        <RunningSection execution={p.execution} error={p.executionError} loading={p.executionLoading} retry={p.retry} pending={p.pending} />
-      ) : null}
-      {selected === "Files" ? <FilesSection sessionId={p.sessionId} /> : null}
-      {selected === "Context" ? (
-        <section className="space-y-3 text-sm">
-          <h3 className="font-semibold">Context & usage</h3>
-          <p className="text-muted">{p.things.counts.context == null ? "Context usage unavailable" : `${p.things.counts.context}% context used`}</p>
-          <p className="text-xs text-muted">Token and cost breakdown unavailable.</p>
-          <LinksPanel {...linksProps} contextOnly />
-          <Button onClick={p.onAddContext}>Add context</Button>
-          <p className="text-xs text-muted">Areas excluded from AI are never sent.</p>
-        </section>
-      ) : null}
+          </div>
+        ) : (
+          <Quiet>None yet</Quiet>
+        )}
+      </PanelSection>
+      <PanelSection id="Files" uid={uid} count={c.files}>
+        <FilesSection sessionId={p.sessionId} bare />
+      </PanelSection>
+      <PanelSection id="Links" uid={uid} count={others.length}>
+        {others.length ? <LinksPanel {...linksProps} links={others} linksOnly bare /> : <Quiet>None yet</Quiet>}
+      </PanelSection>
+      <PanelSection id="Context" uid={uid}>
+        {c.context != null ? <p className="text-sm text-muted">{c.context}% context used</p> : null}
+        <LinksPanel {...linksProps} links={[]} contextOnly bare />
+        <Button size="sm" onClick={p.onAddContext}>
+          Add context
+        </Button>
+      </PanelSection>
+    </div>
+  );
+}
+
+function PanelContent(p: Props) {
+  const id = useId();
+  // A workflow chat keeps its own tabs (Outline, Form, Notes, Outputs); everything of the chat itself is one more.
+  const inChat = !workflowTabs.includes(p.tab);
+  const tabs: { id: ThingsTab; label?: string }[] = [...workflowTabs.map((tab) => ({ id: tab })), { id: "Links", label: "In this chat" }];
+  const selected: ThingsTab = inChat ? "Links" : p.tab;
+  if (!p.workflow)
+    return (
+      <div className="chat-panel-content p-3" data-testid="chat-panel-content">
+        <ParentChatLink parent={p.execution?.parent} />
+        <ChatSections {...p} />
+      </div>
+    );
+  const navigation = (
+    <>
+      <div role="tablist" aria-label="Chat panel tabs" className="flex flex-wrap gap-1 border-b border-line py-2">
+        {tabs.map((tab, index) => (
+          <SummaryChip
+            key={tab.id}
+            kind={tab.id}
+            role="tab"
+            id={`${id}-${tab.id}`}
+            aria-controls={`${id}-body-${tab.id}`}
+            aria-selected={selected === tab.id}
+            tabIndex={selected === tab.id ? 0 : -1}
+            onClick={() => p.onTab(tab.id)}
+            onKeyDown={(e) => {
+              let next: number;
+              if (e.key === "ArrowRight") next = (index + 1) % tabs.length;
+              else if (e.key === "ArrowLeft") next = (index + tabs.length - 1) % tabs.length;
+              else if (e.key === "Home") next = 0;
+              else if (e.key === "End") next = tabs.length - 1;
+              else return;
+              e.preventDefault();
+              p.onTab(tabs[next].id);
+              document.getElementById(`${id}-${tabs[next].id}`)?.focus();
+            }}
+          >
+            {tab.label}
+          </SummaryChip>
+        ))}
+      </div>
+      {tabs
+        .filter((tab) => tab.id !== selected)
+        .map((tab) => (
+          <div key={tab.id} role="tabpanel" id={`${id}-body-${tab.id}`} aria-labelledby={`${id}-${tab.id}`} hidden />
+        ))}
     </>
   );
   return (
     <div className="chat-panel-content p-3" data-testid="chat-panel-content">
-      {selected !== "Running" ? <ParentChatLink parent={p.execution?.parent} /> : null}
-      {p.workflow ? (
-        <RunPanel
-          sessionId={p.sessionId}
-          {...p.workflow}
-          section={selected}
-          navigation={navigation}
-          bodyId={`${id}-body-${selected}`}
-          labelledBy={`${id}-${selected}`}
-        >
-          <div className="pt-3">{body}</div>
-        </RunPanel>
-      ) : (
-        <>
-          {navigation}
-          <div role="tabpanel" id={`${id}-body-${selected}`} aria-labelledby={`${id}-${selected}`} className="pt-3">
-            {body}
+      {inChat ? <ParentChatLink parent={p.execution?.parent} /> : null}
+      <RunPanel
+        sessionId={p.sessionId}
+        {...p.workflow}
+        section={selected}
+        navigation={navigation}
+        bodyId={`${id}-body-${selected}`}
+        labelledBy={`${id}-${selected}`}
+      >
+        {inChat ? (
+          <div className="pt-3">
+            <ChatSections {...p} />
           </div>
-        </>
-      )}
+        ) : null}
+      </RunPanel>
     </div>
   );
 }
