@@ -67,6 +67,10 @@
   font: 400 14px/1.45 var(--sans);
   overflow-wrap: anywhere;
 }
+.tc-first-quiet {
+  color: var(--t2);
+  font-size: 13px;
+}
 .tc-first-log {
   display: flex;
   min-width: 0;

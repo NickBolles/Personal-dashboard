@@ -152,6 +152,9 @@ describe("a task with no chat yet", () => {
     const input = screen.getByTestId("task-first-input") as HTMLTextAreaElement;
     expect(input.value).toBe("# Handoff: Standing desk");
     expect(post).not.toHaveBeenCalled();
+    // Docked beside Overview, the pane does not repeat the summary and the log that are already on screen.
+    expect(screen.queryByText("Three frames shortlisted. Budget not set.")).toBeNull();
+    expect(screen.queryByText("Captured from Inbox")).toBeNull();
     await act(async () => {
       fireEvent.click(screen.getByTestId("task-first-send"));
     });

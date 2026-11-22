@@ -211,6 +211,7 @@ function FirstMessage({
       return false;
     }
   };
+  const docked = scroll === "element";
   const happened = [...d.events].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 4);
   // On a page that scrolls, the pane fills what is left of the screen, so the composer rests at the bottom.
   const root = useRef<HTMLDivElement>(null);
@@ -227,8 +228,13 @@ function FirstMessage({
     <div ref={root} className="tc-first chat-page" data-scroll={scroll} data-testid="task-no-chat">
       <div className="tc-first-body">
         {lead}
-        <p className="tc-first-what">{item.summary || item.nextAction || "No chat on this task yet."}</p>
-        {happened.length ? (
+        {/* Beside Overview (docked) the summary and the log are already on screen: a thing is drawn once. */}
+        {docked ? (
+          <p className="tc-first-what tc-first-quiet">No chat on this task yet.</p>
+        ) : (
+          <p className="tc-first-what">{item.summary || item.nextAction || "No chat on this task yet."}</p>
+        )}
+        {happened.length && !docked ? (
           <ol className="tc-first-log" aria-label="What has happened">
             {happened.map((e) => (
               <li key={e.id}>
