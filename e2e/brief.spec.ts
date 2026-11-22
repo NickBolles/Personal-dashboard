@@ -263,7 +263,8 @@ test("settings list what it knows, with export, import and a confirmed reset", a
   await page.getByLabel("Import brief notes").setInputFiles({
     name: "notes.json",
     mimeType: "application/json",
-    buffer: Buffer.from(JSON.stringify({ kind: "jarvis-brief-profile", version: 1, notes: [{ text: "Family dinner is not movable" }] })),
+    // The shape of a real export (it carries exportedAt), with a note that is not here yet.
+    buffer: Buffer.from(JSON.stringify({ ...exported, notes: [{ text: "Family dinner is not movable", origin: "you", kind: "pattern" }] })),
   });
   const incoming = page.getByRole("dialog", { name: "Import 1 note?" });
   await expect(incoming).toContainText("notes.json");

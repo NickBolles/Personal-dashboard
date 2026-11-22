@@ -23,7 +23,7 @@ import { saveAiSettings } from "@/server/ai/settings";
 import { addMilestone, deleteMilestone } from "@/server/home-tuning";
 import { drainRunner, runnerTick } from "@/server/ai/runner";
 import * as work from "@/server/work/store";
-import { BRIEF_DECK_GROUP_OF, BRIEF_LIMITS, assistIntent, type BriefNoteView, type BriefView } from "@/lib/brief";
+import { BRIEF_DECK_GROUP_OF, BRIEF_LIMITS, assistIntent, briefImportSchema, type BriefNoteView, type BriefView } from "@/lib/brief";
 import { briefAutoTick, briefJobStale, getBriefView, saveBuiltBrief, startBuild } from "@/server/brief";
 import { runAnyway } from "@/server/ai/jobs";
 import * as restoreRoute from "@/app/api/brief/profile/restore/route";
@@ -534,6 +534,23 @@ describe("what Jarvis knows about you", () => {
     });
     expect(imported.body).toEqual({ added: 1, skipped: 2, undo: expect.stringMatching(/^bru_/) });
     expect((await call(profileRoute.POST, owner, { method: "POST", body: { kind: "other", version: 1, notes: [] } })).status).toBe(400);
+
+    // The round trip with the file exactly as the export wrote it: forget everything, then import it back.
+    const file = (await call<Record<string, unknown>>(profileRoute.GET, owner)).body;
+    expect(file).toHaveProperty("exportedAt");
+    expect(briefImportSchema.safeParse(file).success).toBe(true);
+    const kept = listNotes(owner, ["active"])
+      .map((n) => `${n.origin}:${n.kind}:${n.text}`)
+      .sort();
+    await call(profileRoute.DELETE, owner, { method: "DELETE", body: {} });
+    const restored = await call<{ added: number; skipped: number }>(profileRoute.POST, owner, { method: "POST", body: file });
+    expect(restored.status, JSON.stringify(restored.body)).toBe(200);
+    expect(restored.body).toMatchObject({ added: 3, skipped: 0 });
+    expect(
+      listNotes(owner, ["active"])
+        .map((n) => `${n.origin}:${n.kind}:${n.text}`)
+        .sort(),
+    ).toEqual(kept);
 
     expect((await call(profileRoute.DELETE, owner, { method: "DELETE", body: {} })).status).toBe(200);
     expect(listNotes(owner, ["active", "proposed", "dismissed"])).toEqual([]);

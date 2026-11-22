@@ -525,6 +525,8 @@ export const briefImportSchema = z
   .object({
     kind: z.literal(BRIEF_EXPORT_KIND),
     version: z.literal(1),
+    /** written by the export; accepted so the downloaded file imports as it is, and otherwise unused */
+    exportedAt: z.string().max(40).optional(),
     notes: z
       .array(
         z
