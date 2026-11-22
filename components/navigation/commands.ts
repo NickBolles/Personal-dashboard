@@ -29,6 +29,13 @@ export const NEW_CHAT_EVENT = "jarvis:new-chat";
 export const NEW_WORK_EVENT = "jarvis:new-work";
 /** Open the global Chief of staff rail/sheet without sending anything. */
 export const OPEN_COORDINATOR_EVENT = "jarvis:chief-of-staff";
+/**
+ * A shell overlay the Chief of staff sheet stepped aside for (search, Manage quick actions) has closed. On /chief
+ * the sheet is the page, so it comes back.
+ */
+export const OVERLAY_CLOSED_EVENT = "jarvis:overlay-closed";
+/** Show the pinned Chief of staff thread in the panel (its /chat address was asked for), whatever thread it is on. */
+export const COORDINATOR_PINNED_THREAD = "jarvis:chief-of-staff-pinned";
 
 /** The Work item open in /work right now, if any. */
 function currentWorkItem() {
@@ -75,6 +82,13 @@ export function useCommands(): Command[] {
       chat && { id: "go.chat", label: work ? "Go to Conversations" : "Go to Hermes", group: "Go to", keywords: "chat conversations hermes", run: go("/chat") },
       { id: "go.alerts", label: "Go to Alerts", group: "Go to", keywords: "notifications alerts", run: go("/alerts") },
       work && { id: "work.today", label: "Go to Areas", group: "Go to", keywords: "areas work overview map portfolio continue", run: go("/areas") },
+      work && {
+        id: "go.chief",
+        label: "Go to Chief of staff",
+        group: "Go to",
+        keywords: "chief of staff coordinator conversation chat expand full",
+        run: go("/chief"),
+      },
       work && {
         id: "work.resume",
         label: "Go to In flight",

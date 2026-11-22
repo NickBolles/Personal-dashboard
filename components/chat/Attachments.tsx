@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { CHAT_FILE_ACCEPT, formatBytes, validateBatch, type ChatFileKind, type ChatFileView } from "@/lib/chat-files";
-import { Dialog, cx, useToast } from "@/components/ui";
+import { Button as KitButton, Dialog, cx, useToast } from "@/components/ui";
 import { Button } from "@/components/ui/legacy";
 
 export type DraftFile = {
@@ -231,16 +231,17 @@ export function AttachButton({ onFiles, disabled, buttonClassName, inputRef, tes
   const ref = useRef<HTMLInputElement | null>(null);
   return (
     <>
-      <Button
-        type="button"
+      <KitButton
         variant="ghost"
+        iconOnly
+        icon={<PaperclipIcon />}
         onClick={() => ref.current?.click()}
-        aria-label="Attach files or pictures"
         disabled={disabled}
-        className={cx("shrink-0 px-3", buttonClassName)}
+        className={cx("chat-add shrink-0", buttonClassName)}
+        data-density-skip
       >
-        <PaperclipIcon />
-      </Button>
+        Attach files or pictures
+      </KitButton>
       <input
         ref={(el) => {
           ref.current = el;
@@ -267,16 +268,17 @@ export function CameraButton({ onFiles, disabled, buttonClassName, inputRef, tes
   const ref = useRef<HTMLInputElement | null>(null);
   return (
     <>
-      <Button
-        type="button"
+      <KitButton
         variant="ghost"
+        iconOnly
+        icon={<CameraIcon />}
         onClick={() => ref.current?.click()}
-        aria-label="Take a photo"
         disabled={disabled}
-        className={cx("shrink-0 px-3 [@media(pointer:fine)]:hidden", buttonClassName)}
+        className={cx("chat-add shrink-0 [@media(pointer:fine)]:hidden", buttonClassName)}
+        data-density-skip
       >
-        <CameraIcon />
-      </Button>
+        Take a photo
+      </KitButton>
       <input
         ref={(el) => {
           ref.current = el;

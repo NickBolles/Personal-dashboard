@@ -53,6 +53,18 @@ export function coordinatorPin(areaId: string): string | null {
 }
 
 /**
+ * The owner's pinned thread, only while it is the one the area's coordinator shows: still live and still filed
+ * directly under the area. A pin left behind by a conversation that was archived or moved away answers null here
+ * (the stored pin stays, so moving it back restores it).
+ */
+export function pinnedCoordinatorSession(user: CurrentUser, areaId: string): string | null {
+  const pin = coordinatorPin(areaId);
+  if (!pin) return null;
+  const now = pickCoordinatorThread(listItems(user.id), areaId, pin);
+  return now.pinned ? (now.item?.sessionId ?? null) : null;
+}
+
+/**
  * The area's coordinator conversation: the pinned one while it is still live under the area, otherwise the newest
  * non-archived conversation filed directly under it that is not an ops/smoke chat (null when none). Reads only.
  */

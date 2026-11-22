@@ -3,27 +3,21 @@ import { refreshSessionLists } from "@/lib/client/session-lists";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, newIdempotencyKey } from "@/lib/client/api";
 import { kvDel, kvGet, kvSet, rememberSession } from "@/lib/client/idb";
 import { takeFirstRun } from "@/lib/client/first-run";
 import type { EntityLink } from "@/lib/contracts";
-import { isTerminal, maskedNotice, type ApprovalRequest, type RunPhase, type RunView, type SessionSummary, type TimelineItem } from "@/lib/hermes";
-import { formatTime } from "@/components/actions/format";
-import { ErrorNote, IconButton, cx, useOnline, useToast } from "@/components/ui";
+import { maskedNotice, type RunPhase, type RunView, type SessionSummary, type TimelineItem } from "@/lib/hermes";
+import { ErrorNote, IconButton, useOnline, useToast } from "@/components/ui";
 import { Badge, Button, OverflowMenu, Spinner, type Tone } from "@/components/ui/legacy";
-import { BrainIcon, ChevronIcon, ForkIcon, PanelIcon, PlusIcon, StopIcon } from "@/components/icons";
-import { ToolStep } from "./ToolStep";
-import { needsTimeDivider, unwrapBrokenLines } from "@/lib/chat-text";
+import { ChevronIcon, ForkIcon, PanelIcon } from "@/components/icons";
 import { useKeyboardInset } from "@/lib/client/keyboard";
-import { useModKey } from "@/lib/client/platform";
-import { composerKey, isSendShortcut, SEND_KEYSHORTCUTS, sendHint } from "@/lib/client/composer-keys";
 import { quickAdd, useAgentCapture, useWorkflowRun } from "@/components/workflows/RunPanel";
 import { useAccess } from "@/components/access";
-import { useRunStream, type Activity, type RunState } from "./useRunStream";
+import { useRunStream, type RunState } from "./useRunStream";
 import { SMART_CAPABILITY } from "@/lib/jarvis-ui/types";
-import { AssistantText } from "@/components/smart/AssistantText";
 import { SmartScope } from "@/components/smart/SmartScope";
 import { ForkDialog, RenameDialog, TrackDialog } from "./dialogs";
 import { ContextSheet, type ContextChip } from "./ContextSheet";
@@ -36,36 +30,22 @@ import { useChatThings } from "./things/useChatThings";
 import { useChatPanelLayout } from "./things/useChatPanelLayout";
 import type { ChatThings, ThingsTab } from "@/lib/chat/things";
 import "./things/things.css";
-import {
-  AttachButton,
-  AttachmentChips,
-  CameraButton,
-  DropOverlay,
-  MessageAttachments,
-  pastedFiles,
-  useChatAttachments,
-  useConversationFiles,
-  useFileDrop,
-  type ChatAttachments,
-} from "./Attachments";
-import { parseFileMarkers, type ChatFileView } from "@/lib/chat-files";
-import { TriggerPopover, useTriggerRows, type PickerRow } from "./ComposerPicker";
+import { DropOverlay, useChatAttachments, useConversationFiles, useFileDrop } from "./Attachments";
+import { Composer } from "./Composer";
+import { AssistantName, ChatFiles, NO_FILES, RateCtx, Timeline, liveRunVisible, type RateContext } from "./Timeline";
+import { useRunAnswers } from "./useRunAnswers";
+
+// The timeline moved to ./Timeline; this name is still imported from here.
+export { groupTimeline } from "./Timeline";
 import { useAskHermes } from "./useAskHermes";
-import { WorkSummary, formatStepSec } from "./WorkSummary";
 import { ModelSelectDialog } from "@/components/areas/ModelPicker";
 import { FileUnderDialog } from "@/components/work/conversations";
-import { displayRef, encodeMessage, splitReferences, triggerAt, type CommandId, type Reference, type Trigger } from "@/lib/references";
+import { type CommandId } from "@/lib/references";
 import type { AreaSettings, FilingSuggestion, ConversationPlacement, ItemsResponse } from "@/lib/work";
 import type { AgentResolution } from "@/lib/agents";
-import { AgentChip } from "@/components/agents/AgentChip";
-import { ApprovalCard } from "@/components/approvals/ApprovalCard";
-import { ClarifyCard } from "@/components/approvals/ClarifyCard";
-import { CompactionDivider, NoticeCard } from "./Notice";
-import { parseNotice } from "@/lib/chat-notices";
-import { RateMessage } from "@/components/feedback/RateMessage";
 import { actionsByReply } from "@/lib/chat/actions";
-import { answererName, parseUserMessage, sameLabel } from "@/lib/chat/display";
-import { ActionsTaken, OPEN_CHAT_RUNNING } from "./ActionsTaken";
+import { answererName } from "@/lib/chat/display";
+import { OPEN_CHAT_RUNNING } from "./ActionsTaken";
 
 /** GET /api/hermes/sessions/:id/area */
 type AreaContext =
@@ -79,11 +59,6 @@ type AreaContext =
       settings: AreaSettings | null;
       agent?: AgentResolution | null;
     };
-
-const CONTEXT_MARK = "\n\n---\nContext from Jarvis:";
-const NO_FILES: ChatFileView[] = [];
-/** Sent attachments of this conversation, for message bubbles. */
-const ChatFiles = createContext<{ sessionId: string; files: ChatFileView[] }>({ sessionId: "", files: NO_FILES });
 
 type Detail = {
   session: SessionSummary;
@@ -106,12 +81,6 @@ const PHASE_LABEL: Record<RunPhase, { label: string; tone: Tone }> = {
   reconnecting: { label: "Reconnecting…", tone: "warn" },
   disconnected: { label: "Disconnected", tone: "danger" },
 };
-
-/** "Hermes" or "Claude": who answers this conversation. */
-const AssistantName = createContext("Hermes");
-/** Feedback loop: what each assistant reply's 👍/👎 needs (null on read-only conversations). */
-type RateContext = { sessionId: string; model: string | null; toolsFor: (messageId: string) => string[]; askFix: (prompt: string) => Promise<boolean> };
-const RateCtx = createContext<RateContext | null>(null);
 
 /** Tool names used for each assistant reply (the tool steps since the previous user message). */
 export function toolsByReply(timeline: TimelineItem[]) {
@@ -412,31 +381,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
     }
   };
 
-  const answerApproval = async (choice: ApprovalRequest["choices"][number]) => {
-    if (!run.state.runId) return;
-    try {
-      await api.post(`/api/hermes/runs/${encodeURIComponent(run.state.runId)}/approval`, { choice, requestId: run.state.approval?.requestId });
-      announce(choice === "deny" ? "Denied" : "Approved");
-      qc.invalidateQueries({ queryKey: ["notifications"] });
-    } catch (err) {
-      // The approval card shows "Couldn't send your approval" + Retry, with this message folded under Details.
-      announce(choice === "deny" ? "Couldn't send your denial" : "Couldn't send your approval");
-      throw err;
-    }
-  };
-
-  const answerClarify = async (answer: string) => {
-    const runId = run.state.runId;
-    const requestId = run.state.clarify?.requestId;
-    if (!runId || !requestId) return;
-    try {
-      await api.post(`/api/hermes/runs/${encodeURIComponent(runId)}/clarify`, { answer, requestId });
-      announce("Answer sent");
-    } catch (err) {
-      announce("Couldn't send your answer");
-      throw err;
-    }
-  };
+  const { answerApproval, answerClarify } = useRunAnswers(run.state, announce);
 
   const patch = async (body: Record<string, unknown>, msg: string) => {
     try {
@@ -528,14 +473,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
   const liveActive = run.active;
   // A completed run's reply can land in the refetched transcript one render before the live copy is
   // cleared (onTerminal's refetch → clear); don't show the same reply twice in that window.
-  const liveText = (run.state.text || run.state.output || "").trim();
-  const lastAssistant = [...detail.timeline].reverse().find((t) => t.kind === "assistant");
-  const liveInTranscript =
-    run.state.phase === "completed" && Boolean(liveText) && Boolean(lastAssistant && "text" in lastAssistant && lastAssistant.text.trim() === liveText);
-  const showLive =
-    Boolean(run.state.runId) &&
-    !liveInTranscript &&
-    (liveActive || run.state.phase !== "completed" || Boolean(run.state.text) || run.state.activity.length > 0);
+  const showLive = liveRunVisible(run.state, liveActive, detail.timeline);
   const lastUser = [...detail.timeline].reverse().find((t) => t.kind === "user");
   const showPendingUser = pendingInput && !(lastUser && "text" in lastUser && lastUser.text.startsWith(pendingInput.slice(0, 40)));
 
@@ -551,7 +489,6 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
     </div>
   ) : null;
   // Time dividers: shown before the first message and after gaps over 5 minutes (per-message times are on tap).
-  const dividerIds = timeDividerIds(detail.timeline);
   const fork = { label: "Fork latest state", onSelect: () => (setForkFrom(undefined), setDialog("fork")), disabled: !online };
   const menu = readOnly
     ? [fork]
@@ -837,45 +774,17 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                           </ul>
                         </div>
                       ) : null}
-                      <ol className="chat-turns">
-                        {groupTimeline(detail.timeline).map((g) => {
-                          const row = (item: TimelineItem, stepSec?: number) => (
-                            <TimelineRow
-                              key={item.id}
-                              item={item}
-                              stepSec={stepSec}
-                              actions={item.kind === "assistant" ? <ActionsTaken actions={replyActions.get(item.id) ?? []} sessionId={sessionId} /> : undefined}
-                              onFork={() => {
-                                setForkFrom(item);
-                                setDialog("fork");
-                              }}
-                            />
-                          );
-                          if (!("tools" in g)) {
-                            if (g.kind !== "user" && g.kind !== "assistant") return row(g);
-                            return dividerIds.has(g.id) ? [<TimeDivider key={`t-${g.id}`} at={g.at!} />, row(g)] : row(g);
-                          }
-                          return (
-                            <li key={`work-${g.tools[0].id}`} data-row="work">
-                              <WorkSummary
-                                id={g.tools[0].id}
-                                steps={g.tools}
-                                seconds={g.seconds}
-                                alwaysShown={g.tools.flatMap((t, j) => (t.error ? [row(t, g.durations[j])] : []))}
-                              >
-                                {g.tools.map((t, j) => row(t, g.durations[j]))}
-                              </WorkSummary>
-                            </li>
-                          );
-                        })}
-                        {showPendingUser ? (
-                          <li className="flex flex-col items-end" data-turn="start">
-                            <SentMessage text={pendingInput} testId="msg-pending" />
-                          </li>
-                        ) : null}
-                      </ol>
-                      {showLive ? <LiveRun state={run.state} onApprove={answerApproval} onClarify={answerClarify} onRetry={run.retry} /> : null}
-                      <ActionsTaken actions={replyActions.get("live") ?? []} sessionId={sessionId} />
+                      <Timeline
+                        sessionId={sessionId}
+                        items={detail.timeline}
+                        replyActions={replyActions}
+                        pending={showPendingUser ? pendingInput : undefined}
+                        live={showLive ? { state: run.state, onApprove: answerApproval, onClarify: answerClarify, onRetry: run.retry } : null}
+                        onFork={(item) => {
+                          setForkFrom(item);
+                          setDialog("fork");
+                        }}
+                      />
                       <div ref={bottomRef} />
                     </div>
 
@@ -891,6 +800,8 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                       </div>
                     ) : (
                       <Composer
+                        surface="page"
+                        inputId="composer"
                         jump={jump}
                         answerer={answerer}
                         tray={
@@ -1048,916 +959,6 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
         </SmartScope>
       </RateCtx.Provider>
     </AssistantName.Provider>
-  );
-}
-
-type ToolItem = Extract<TimelineItem, { kind: "tool" }>;
-type TimelineGroup = TimelineItem | { tools: ToolItem[]; seconds?: number; durations: (number | undefined)[] };
-
-function span(from?: string, to?: string): number | undefined {
-  const a = from ? Date.parse(from) : NaN;
-  const b = to ? Date.parse(to) : NaN;
-  return Number.isFinite(a) && Number.isFinite(b) && b >= a ? (b - a) / 1000 : undefined;
-}
-
-/** Fold each run of consecutive tool rows into one summary group (UI only; data unchanged). */
-export function groupTimeline(items: TimelineItem[]): TimelineGroup[] {
-  const out: TimelineGroup[] = [];
-  for (let i = 0; i < items.length; i++) {
-    const it = items[i];
-    if (it.kind !== "tool") {
-      out.push(it);
-      continue;
-    }
-    const tools: ToolItem[] = [];
-    while (i < items.length && items[i].kind === "tool") tools.push(items[i++] as ToolItem);
-    const last = tools[tools.length - 1];
-    // The turn ends at the assistant reply; without one (stopped turn), at the last tool result — never at a later user message.
-    const endAt = items[i]?.kind === "assistant" ? items[i].at : last.at;
-    const seconds = span(tools[0].startedAt ?? tools[0].at, endAt);
-    // A step runs from its call to its result (`at` is the result time); rows without a call time get no duration.
-    const durations = tools.map((t) => span(t.startedAt, t.at));
-    out.push({ tools, seconds, durations });
-    i--;
-  }
-  return out;
-}
-
-function liveSeconds(activity: Activity[]): number | undefined {
-  const starts = activity.map((a) => Date.parse(a.startedAt)).filter(Number.isFinite);
-  if (!starts.length) return undefined;
-  const first = Math.min(...starts);
-  const last = activity.reduce((m, a) => {
-    const s = Date.parse(a.startedAt);
-    const d = a.kind === "tool" && a.durationSec !== undefined ? a.durationSec * 1000 : 0;
-    return Number.isFinite(s) ? Math.max(m, s + d) : m;
-  }, first);
-  return (last - first) / 1000;
-}
-
-/** Message ids that get a centred time divider (first timed message, then gaps over 5 minutes). */
-function timeDividerIds(items: TimelineItem[]): Set<string> {
-  const ids = new Set<string>();
-  let prev: string | undefined;
-  for (const t of items) {
-    if (t.kind !== "user" && t.kind !== "assistant") continue;
-    if (needsTimeDivider(prev, t.at)) ids.add(t.id);
-    if (t.at) prev = t.at;
-  }
-  return ids;
-}
-
-function TimeDivider({ at }: { at: string }) {
-  return (
-    <li className="chat-time-divider" data-dynamic>
-      <time dateTime={at}>{formatTime(at)}</time>
-    </li>
-  );
-}
-
-/** Tapping a message shows its time and actions; links, buttons, disclosures and text selection keep working. */
-function useMetaToggle() {
-  const [meta, setMeta] = useState(false);
-  const onClick = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest("a,button,summary,input,textarea,select,[role=button],[role=menuitem]")) return;
-    if (window.getSelection()?.toString()) return;
-    setMeta((m) => !m);
-  };
-  return { meta, setMeta, onClick };
-}
-
-function TimelineRow({ item, onFork, stepSec, actions }: { item: TimelineItem; onFork: () => void; stepSec?: number; actions?: ReactNode }) {
-  const who = useContext(AssistantName);
-  const { meta, setMeta, onClick } = useMetaToggle();
-  const time = item.at ? formatTime(item.at) : undefined;
-  // Hermes control frames (delegation results, process notices, steers, compaction handoffs) arrive as
-  // plain message text; render them as what they are, not as something the person typed.
-  const notice = item.kind === "tool" ? null : parseNotice(item.text);
-  if (notice?.kind === "compaction")
-    return (
-      <li>
-        <CompactionDivider summary={notice.summary} />
-      </li>
-    );
-  if (notice?.kind === "delegation" || notice?.kind === "process")
-    return (
-      <li>
-        <NoticeCard notice={notice} time={time} />
-      </li>
-    );
-  if (notice?.kind === "steer" && item.kind === "user") {
-    return (
-      <li className="chat-msg group flex flex-col items-end" data-meta={meta || undefined} data-turn="start">
-        <SentMessage text={notice.text} caption="Sent while it was working" srPrefix="You said mid-run: " onClick={onClick} />
-        <MessageMeta time={time} onFork={onFork} who="your message" text={notice.text} />
-      </li>
-    );
-  }
-  if (item.kind === "user") {
-    return (
-      <li className="chat-msg group flex flex-col items-end" data-meta={meta || undefined} data-turn="start">
-        <SentMessage text={item.text} onClick={onClick} onContextMenu={() => setMeta(true)} />
-        {/* Copy / fork keep working on the message exactly as it was sent. */}
-        <MessageMeta time={time} onFork={onFork} who="your message" text={item.text} />
-      </li>
-    );
-  }
-  if (item.kind === "assistant") {
-    return (
-      <li className="chat-msg flex flex-col" data-meta={meta || undefined} id={`msg-${item.id}`}>
-        <div className="min-w-0 max-w-full" data-testid="msg-bubble" data-who="assistant" onClick={onClick} onContextMenu={() => setMeta(true)}>
-          <span className="sr-only">{who} said: </span>
-          <AssistantText text={item.text} messageId={item.id} />
-        </div>
-        {actions}
-        <MessageMeta time={time} onFork={onFork} who={`${who}' message`} text={item.text} rateId={item.id} />
-      </li>
-    );
-  }
-  if (item.kind === "tool") {
-    return (
-      <ToolStep
-        id={item.id}
-        tool={item.tool}
-        input={item.input}
-        output={item.detail}
-        error={item.error}
-        duration={stepSec !== undefined ? formatStepSec(stepSec) : undefined}
-      />
-    );
-  }
-  return (
-    <li className="text-center text-xs text-muted">
-      <p className="[overflow-wrap:anywhere] whitespace-pre-wrap">{item.text}</p>
-    </li>
-  );
-}
-
-const USER_BUBBLE = "max-w-[85%] rounded-[10px] rounded-br-[2px] px-3 py-1.5 sm:py-2";
-
-/**
- * A message the person sent, shown as they meant it (lib/chat/display `parseUserMessage`; the stored text is untouched):
- * the "[Viewing: Today — /home]" page context becomes a quiet caption above the bubble, and a one-tap decision
- * answer becomes a compact receipt (answer first, the question behind a disclosure) instead of a typed paragraph.
- */
-function SentMessage({
-  text,
-  caption,
-  srPrefix = "You said: ",
-  testId = "msg-bubble",
-  onClick,
-  onContextMenu,
-}: {
-  text: string;
-  /** the just-sent copy shown until the transcript has the message is not a transcript bubble */
-  testId?: string;
-  /** e.g. "Sent while it was working" */
-  caption?: string;
-  srPrefix?: string;
-  onClick?: (e: React.MouseEvent) => void;
-  onContextMenu?: () => void;
-}) {
-  const at = text.indexOf(CONTEXT_MARK);
-  const parts = parseUserMessage(at >= 0 ? text.slice(0, at) : text);
-  const ctx = at >= 0 ? text.slice(at + CONTEXT_MARK.length).trim() : "";
-  const d = parts.decision;
-  return (
-    <>
-      {caption ? <span className="chat-msg-caption">{caption}</span> : null}
-      {parts.context ? (
-        <span className="chat-msg-caption" data-testid="msg-context" title={parts.context.path}>
-          <span className="sr-only">Sent while </span>
-          <span className="truncate">Viewing: {parts.context.label}</span>
-        </span>
-      ) : null}
-      <div
-        className={cx(USER_BUBBLE, d ? "chat-receipt" : "bg-s3")}
-        data-testid={testId}
-        data-who="user"
-        data-receipt={d ? "decision" : undefined}
-        onClick={onClick}
-        onContextMenu={onContextMenu}
-      >
-        {d ? (
-          <>
-            <p className="text-xs break-words text-muted">You decided · {d.title}</p>
-            <p className="font-medium break-words select-text">{d.answer}</p>
-            {sameLabel(d.title, d.question) ? null : (
-              <details className="text-xs text-muted">
-                <summary>Question</summary>
-                <p className="pb-1 break-words whitespace-pre-wrap select-text">{d.question}</p>
-              </details>
-            )}
-          </>
-        ) : (
-          <>
-            <span className="sr-only">{srPrefix}</span>
-            <UserText body={parts.text} ctx={ctx} />
-          </>
-        )}
-      </div>
-    </>
-  );
-}
-
-/**
- * The typed part of a sent message: reference tokens render as chips; the context Jarvis
- * attached (snapshots of references and sources) folds into a disclosure.
- */
-function UserText({ body, ctx }: { body: string; ctx: string }) {
-  const fileIds = parseFileMarkers(ctx);
-  const chatFiles = useContext(ChatFiles);
-  return (
-    <>
-      <p className="[overflow-wrap:anywhere] whitespace-pre-wrap select-text">
-        {splitReferences(unwrapBrokenLines(body)).map((p, i) =>
-          "ref" in p ? (
-            <span key={i} className="chip mx-0.5" data-tone="accent" data-ref={`${p.ref.type}:${p.ref.id}`}>
-              {displayRef(p.ref)}
-            </span>
-          ) : (
-            <span key={i}>{p.text}</span>
-          ),
-        )}
-      </p>
-      {ctx ? (
-        <details className="mt-1 text-xs text-muted">
-          <summary className="cursor-pointer">Context Jarvis attached</summary>
-          <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words">{ctx}</pre>
-        </details>
-      ) : null}
-      {fileIds.length ? <MessageAttachments sessionId={chatFiles.sessionId} ids={fileIds} files={chatFiles.files} /> : null}
-    </>
-  );
-}
-
-function MessageMeta({ time, onFork, who, text, rateId }: { time?: string; onFork: () => void; who: string; text: string; rateId?: string }) {
-  const isHermes = useContext(AssistantName) === "Hermes";
-  const rate = useContext(RateCtx);
-  const { toast } = useToast();
-  const at = text.indexOf(CONTEXT_MARK);
-  const body = at >= 0 ? text.slice(0, at).trim() : text;
-  return (
-    <div className="msg-meta flex flex-wrap items-center gap-0.5 text-xs text-muted" data-testid="msg-meta">
-      {time ? (
-        <span className="px-1" data-dynamic>
-          {time}
-        </span>
-      ) : null}
-      <button
-        type="button"
-        onClick={() => navigator.clipboard?.writeText(body).then(() => toast("Copied", "ok"))}
-        className="inline-flex min-h-11 items-center gap-1 rounded-[6px] px-2 hover:bg-surface-2 sm:min-h-8 dense:min-h-7"
-        aria-label={`Copy ${who}`}
-      >
-        Copy
-      </button>
-      {rateId && rate ? (
-        <RateMessage
-          sessionId={rate.sessionId}
-          messageId={rateId}
-          surface="chat"
-          text={body}
-          who={who}
-          model={rate.model}
-          tools={rate.toolsFor(rateId)}
-          onAskFix={rate.askFix}
-        />
-      ) : null}
-      <button
-        type="button"
-        onClick={onFork}
-        className="inline-flex min-h-11 items-center gap-1 rounded-[6px] px-2 hover:bg-surface-2 sm:min-h-8 dense:min-h-7"
-        aria-label={`${isHermes ? "Restart with text through" : "Fork from"} ${who}${time ? ` at ${time}` : ""}`}
-      >
-        <ForkIcon className="h-3.5 w-3.5" /> {isHermes ? "Restart with text" : "Fork from here"}
-      </button>
-    </div>
-  );
-}
-
-function ActivityRow({ a }: { a: Activity }) {
-  const [open, setOpen] = useState(false);
-  if (a.kind === "commentary") return <li className="text-sm italic text-muted">{a.text}</li>;
-  if (a.kind === "tool") return <ToolStep id={a.callId ?? a.id} tool={a.tool} input={a.preview} output={a.result} done={a.done} error={a.error} />;
-  const label = `Subagent${a.goal ? `: ${a.goal}` : ""}${a.summary ? ` — ${a.summary}` : ""}`;
-  const status = !a.done ? "running" : (a.status ?? "returned");
-  return (
-    <li>
-      <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} className="chat-tool">
-        <BrainIcon className="h-4 w-4 shrink-0" />
-        <span className={cx("min-w-0 flex-1 break-words", status === "running" && "chat-work-shimmer")}>{label}</span>
-        <span className={cx("shrink-0 text-xs", status === "failed" && "text-danger")}>{status}</span>
-      </button>
-      {open && a.summary ? <p className="ml-5 text-xs">{a.summary}</p> : null}
-    </li>
-  );
-}
-
-function LiveRun({
-  state,
-  onApprove,
-  onClarify,
-  onRetry,
-}: {
-  state: RunState;
-  onApprove: (c: ApprovalRequest["choices"][number]) => Promise<void> | void;
-  onClarify: (answer: string) => Promise<void> | void;
-  onRetry: () => void;
-}) {
-  const who = useContext(AssistantName);
-  const text = state.text || (isTerminal(state.phase) ? (state.output ?? "") : "");
-  return (
-    <section aria-label="Current run" className="space-y-2">
-      {state.activity.length ? (
-        <WorkSummary
-          id={`live-${state.runId ?? "run"}`}
-          steps={state.activity}
-          live={!isTerminal(state.phase)}
-          waiting={state.phase === "waiting_for_approval" ? "approval" : state.clarify ? "answer" : undefined}
-          seconds={liveSeconds(state.activity)}
-          defaultOpen={!text && !isTerminal(state.phase)}
-          alwaysShown={state.activity
-            .filter((a) => a.kind === "tool" && a.error)
-            .map((a) => (
-              <ActivityRow key={a.id} a={a} />
-            ))}
-        >
-          {state.activity.map((a) => (
-            <ActivityRow key={a.id} a={a} />
-          ))}
-        </WorkSummary>
-      ) : null}
-
-      {state.approval ? <ApprovalCard approval={state.approval} agent={who} onAnswer={onApprove} /> : null}
-      {state.clarify && !isTerminal(state.phase) ? (
-        <ClarifyCard key={state.clarify.requestId} clarify={state.clarify} agent={who} onAnswer={onClarify} />
-      ) : null}
-
-      {state.phase === "queued" ? (
-        <p role="status" className="text-sm text-muted">
-          {state.queueReason === "connections"
-            ? "Queued — your message was sent. Jarvis is waiting for a free Hermes connection and shows the reply as soon as one opens."
-            : "Queued — waiting for an available agent slot. You can leave this chat; the server will start it automatically."}
-        </p>
-      ) : null}
-      {text || (!isTerminal(state.phase) && state.phase !== "waiting_for_approval" && state.phase !== "queued") ? (
-        <div className="min-w-0 max-w-full" data-streaming={!isTerminal(state.phase) || undefined}>
-          <span className="sr-only">{who} is saying: </span>
-          {/* Keep controls inactive until the persisted message has its stable ID; terminal stream IDs differ from history IDs. */}
-          {text ? <AssistantText text={text} live /> : null}
-          {!isTerminal(state.phase) && state.phase !== "waiting_for_approval" && state.phase !== "queued" ? (
-            <span className="chat-caret" aria-hidden="true" />
-          ) : null}
-        </div>
-      ) : null}
-
-      {state.steerQueued > 0 && !isTerminal(state.phase) ? (
-        <p className="text-xs text-muted">Guidance queued ({state.steerQueued}) — Hermes will pick it up at the next step.</p>
-      ) : null}
-      {state.pendingSteer ? <p className="text-xs text-warn">Not consumed before the run ended: “{state.pendingSteer}”</p> : null}
-      {state.phase === "failed" || state.phase === "interrupted" ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.phase === "failed" ? "The run failed" : "The run was interrupted"}
-          {state.error ? `: ${state.error}` : "."}
-        </p>
-      ) : null}
-      {state.phase === "cancelled" ? <p className="text-sm text-muted">Stopped at your request.</p> : null}
-      {state.phase === "reconnecting" ? (
-        <p role="status" className="text-sm text-warn">
-          Connection dropped — reconnecting and checking {who} for the real status…
-        </p>
-      ) : null}
-      {state.phase === "disconnected" ? (
-        <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-danger">
-          <span>{state.error ?? `Disconnected from ${who}.`} The run may still be going.</span>
-          <Button size="sm" onClick={onRetry}>
-            Reconnect
-          </Button>
-        </div>
-      ) : null}
-    </section>
-  );
-}
-
-/** The profile was asked for but another one answers (routing off, no route, missing key…): worth saying next to the composer. */
-const agentNeedsNote = (agent: AgentResolution | null | undefined): agent is AgentResolution => !!agent && !agent.routed && !!agent.requested;
-
-function Composer({
-  tray,
-  jump,
-  answerer,
-  sessionId,
-  phase,
-  online,
-  context,
-  onRemoveContext,
-  onAttach,
-  attachments,
-  onSend,
-  onSteer,
-  onStop,
-  onCommand,
-  repo: areaRepo,
-  modelLabel,
-  onModel,
-  onFocus,
-  agent,
-  restore,
-  clarifying,
-}: {
-  tray: ReactNode;
-  /** "Jump to latest", anchored to the dock so it always clears the composer */
-  jump?: ReactNode;
-  /** who answers: "@profile", "Claude" or the assistant name */
-  answerer: string;
-  sessionId: string;
-  restore?: { text: string; key: string; at: number };
-  phase?: RunPhase;
-  /** #185: a clarify question is waiting — keep the composer one compact row like an approval */
-  clarifying?: boolean;
-  online: boolean;
-  context: { label: string; ref: string }[];
-  onRemoveContext: (ref: string) => void;
-  onAttach: () => void;
-  attachments: ChatAttachments;
-  onSend: (text: string, key: string) => Promise<boolean>;
-  onSteer: (text: string) => Promise<boolean>;
-  onStop: () => void;
-  onCommand: (id: CommandId) => void;
-  /** the area's default repo (the # picker's scope) */
-  repo: string | null;
-  modelLabel: string;
-  onModel: () => void;
-  /** composer focused: scroll the conversation to the latest message */
-  onFocus?: () => void;
-  /** who answers (Settings → Agents); shown when an agent is involved */
-  agent?: AgentResolution | null;
-}) {
-  const { toast } = useToast();
-  const [text, setText] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [loaded, setLoaded] = useState(false);
-  const pendingKey = useRef<string | undefined>(undefined);
-  const ta = useRef<HTMLTextAreaElement>(null);
-  const fileInput = useRef<HTMLInputElement | null>(null);
-  const cameraInput = useRef<HTMLInputElement | null>(null);
-  const running = phase !== undefined && !isTerminal(phase);
-  const canSteer = phase === "running";
-  // @ / # / picker state: the trigger at the caret, the highlighted row, picked references.
-  const [trigger, setTrigger] = useState<Trigger | null>(null);
-  const [active, setActive] = useState(0);
-  const [picked, setPicked] = useState<Reference[]>([]);
-  const [repo, setRepo] = useState<string | null>(areaRepo);
-  const [seenRepo, setSeenRepo] = useState(areaRepo);
-  if (areaRepo !== seenRepo) {
-    setSeenRepo(areaRepo);
-    setRepo(areaRepo);
-  }
-  const [seenRestore, setSeenRestore] = useState(restore);
-  if (restore !== seenRestore) {
-    setSeenRestore(restore);
-    if (restore) setText(restore.text);
-  }
-  // Retry with the same key: if the first send did reach Hermes, it isn't run twice.
-  useEffect(() => {
-    if (restore) pendingKey.current = restore.key;
-  }, [restore]);
-  const listId = useId();
-  const { rows, loading, partial, searched } = useTriggerRows(trigger, repo);
-  const activeIdx = Math.min(active, Math.max(0, rows.length - 1));
-
-  // Drafts persist per session across refresh/navigation.
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- load the session-specific IndexedDB draft
-    setLoaded(false);
-    Promise.all([kvGet<string>(`draft:${sessionId}`), kvGet<{ input: string; key: string }>(`pending:${sessionId}`)]).then(([d, pending]) => {
-      if (pending) {
-        setText(pending.input);
-        pendingKey.current = pending.key; // retry with the same idempotency key
-      } else setText(d ?? "");
-      setLoaded(true);
-    });
-  }, [sessionId]);
-  useEffect(() => {
-    if (!loaded) return;
-    const t = setTimeout(() => (text ? kvSet(`draft:${sessionId}`, text) : kvDel(`draft:${sessionId}`)), 200);
-    return () => clearTimeout(t);
-  }, [text, sessionId, loaded]);
-  useEffect(() => {
-    const el = ta.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
-  }, [text]);
-  const mod = useModKey();
-
-  const syncTrigger = (value: string, caret: number) => {
-    const t = triggerAt(value, caret);
-    setTrigger(t);
-    if (!t || t.sigil !== trigger?.sigil || t.query !== trigger?.query) setActive(0);
-  };
-
-  const replaceTrigger = (insert: string) => {
-    if (!trigger) return;
-    const next = text.slice(0, trigger.start) + insert + text.slice(trigger.end);
-    setText(next);
-    setTrigger(null);
-    const caret = trigger.start + insert.length;
-    requestAnimationFrame(() => {
-      ta.current?.focus();
-      ta.current?.setSelectionRange(caret, caret);
-    });
-  };
-
-  const pick = (row: PickerRow) => {
-    if (!trigger) return;
-    if (row.kind === "command") {
-      replaceTrigger("");
-      onCommand(row.id);
-      return;
-    }
-    if (row.kind === "ref") {
-      const r: Reference = { type: row.option.type, id: row.option.id, label: row.option.label };
-      setPicked((p) => (p.some((x) => x.type === r.type && x.id === r.id) ? p : [...p, r]));
-      replaceTrigger(`${displayRef(r)} `);
-    }
-  };
-
-  const filterTo = (type: string) => {
-    if (!trigger) return;
-    const q = trigger.query.replace(/^[a-z]+:/i, "");
-    const insert = `@${type}:${q}`;
-    const next = text.slice(0, trigger.start) + insert + text.slice(trigger.end);
-    setText(next);
-    const caret = trigger.start + insert.length;
-    setTrigger({ sigil: "@", query: `${type}:${q}`, start: trigger.start, end: caret });
-    setActive(0);
-    requestAnimationFrame(() => {
-      ta.current?.focus();
-      ta.current?.setSelectionRange(caret, caret);
-    });
-  };
-
-  const submit = async () => {
-    const typed = text.trim();
-    const hasFiles = attachments.drafts.length > 0;
-    if ((!typed && !hasFiles) || busy || !online) return;
-    if (attachments.uploading) {
-      toast("Wait for the attachments to finish uploading", "danger");
-      return;
-    }
-    if (hasFiles && running) {
-      toast("Attachments go with a new message — wait for this reply to finish", "danger");
-      return;
-    }
-    const input = typed || (attachments.drafts.some((d) => d.kind === "image") ? "What do you see in this?" : "Here's the attached file.");
-    // A bare command typed in full ("/fork") runs instead of sending.
-    const cmd = input.match(/^\/([a-z]+)$/i)?.[1]?.toLowerCase();
-    if (cmd && rows.some((r) => r.row.kind === "command" && r.row.id === cmd)) {
-      setText("");
-      setTrigger(null);
-      onCommand(cmd as CommandId);
-      return;
-    }
-    setBusy(true);
-    let ok: boolean;
-    const encoded = encodeMessage(input, picked).text;
-    if (running) {
-      ok = canSteer ? await onSteer(encoded) : false;
-    } else {
-      const key = pendingKey.current ?? newIdempotencyKey("run");
-      pendingKey.current = key;
-      ok = await onSend(encoded, key);
-      if (ok) pendingKey.current = undefined;
-    }
-    if (ok) {
-      setText("");
-      setPicked([]);
-      setTrigger(null);
-      await kvDel(`draft:${sessionId}`);
-    }
-    setBusy(false);
-  };
-
-  const awaitingApproval = phase === "waiting_for_approval";
-  // #185: an approval or clarify card needs the screen; at 320 px / 200 % text a stacked composer covers its buttons.
-  const compact = awaitingApproval || !!clarifying;
-  const placeholder = !online
-    ? "Offline — drafts are saved, not sent"
-    : phase === "waiting_for_approval"
-      ? "Approve or deny first"
-      : running
-        ? "Add guidance…"
-        : `Message ${answerer}…`;
-  const open = !!trigger && (rows.length > 0 || loading || trigger.sigil !== "@" || trigger.query.length > 0);
-
-  return (
-    <div className="chat-dock safe-bottom sticky z-20 border-t border-line bg-bg px-2 py-1.5 sm:bg-bg/95 sm:px-6 sm:py-2 sm:backdrop-blur">
-      {jump}
-      <div className="chat-composer-card mx-auto max-w-[760px] rounded-xl border border-line bg-surface">
-        {tray}
-        <div className="chat-composer-context flex flex-wrap items-center gap-1 px-2" data-compact={compact || undefined}>
-          {/* The header and the placeholder already name a routed agent; the chip appears only when it has news. */}
-          {agentNeedsNote(agent) ? <AgentChip agent={agent} /> : null}
-          {context.map((c) => (
-            <button key={c.ref} type="button" onClick={() => onRemoveContext(c.ref)} className="chip cursor-pointer" aria-label={`Remove context ${c.label}`}>
-              {c.label} ✕
-            </button>
-          ))}
-        </div>
-        <div className="mx-auto max-w-[760px]">
-          <AttachmentChips drafts={attachments.drafts} onRemove={attachments.remove} onRetry={attachments.retry} />
-        </div>
-        <form
-          className="chat-comp relative flex flex-wrap items-end gap-1"
-          onMouseDown={(e) => {
-            // While typing, tapping a composer button (send, +, menu items) keeps the focus in the text field: the
-            // keyboard stays up and the layout doesn't jump under the finger (which can swallow the tap).
-            if (document.activeElement === ta.current && (e.target as HTMLElement).closest("button")) e.preventDefault();
-          }}
-          onSubmit={(e) => {
-            e.preventDefault();
-            submit();
-          }}
-        >
-          {open ? (
-            <TriggerPopover
-              trigger={trigger!}
-              rows={rows}
-              active={activeIdx}
-              loading={loading}
-              partial={partial}
-              repo={repo}
-              searched={searched}
-              onRepo={setRepo}
-              onPick={pick}
-              onHover={setActive}
-              onFilter={filterTo}
-              listId={listId}
-            />
-          ) : null}
-          {/* Phones: one "+" sheet (context, files, camera, photos, model) so the text field gets the width. */}
-          <ComposerAddMenu
-            online={online}
-            files={!compact}
-            modelLabel={modelLabel}
-            onContext={onAttach}
-            onModel={onModel}
-            onFile={() => fileInput.current?.click()}
-            onCamera={() => cameraInput.current?.click()}
-            onLibrary={attachments.add}
-          />
-          <Button type="button" variant="ghost" onClick={onAttach} aria-label="Attach context" className="chat-add shrink-0 max-sm:hidden">
-            <PlusIcon className="h-5 w-5" />
-          </Button>
-          {/* While an approval waits nothing can be sent: keep the composer one compact row (pre-attachments layout),
-            so on small phones at large text sizes it doesn't cover the approval card's buttons. */}
-          {!compact ? <AttachButton onFiles={attachments.add} disabled={!online} buttonClassName="max-sm:hidden" inputRef={fileInput} /> : null}
-          {!compact ? <CameraButton onFiles={attachments.add} disabled={!online} buttonClassName="max-sm:hidden" inputRef={cameraInput} /> : null}
-          <label htmlFor="composer" className="sr-only">
-            {running ? "Guidance for the current run" : `Message ${answerer}`}
-          </label>
-          <textarea
-            id="composer"
-            ref={ta}
-            rows={1}
-            value={text}
-            placeholder={placeholder}
-            aria-controls={open ? listId : undefined}
-            aria-autocomplete="list"
-            aria-activedescendant={open && rows.length ? `${listId}-${activeIdx}` : undefined}
-            onChange={(e) => {
-              setText(e.target.value);
-              syncTrigger(e.target.value, e.target.selectionStart ?? e.target.value.length);
-            }}
-            onSelect={(e) => {
-              const el = e.currentTarget;
-              if (trigger) syncTrigger(el.value, el.selectionStart ?? el.value.length);
-            }}
-            onBlur={() => setTimeout(() => setTrigger(null), 150)}
-            onFocus={onFocus}
-            onPaste={(e) => {
-              const files = pastedFiles(e);
-              if (!files.length) return;
-              e.preventDefault();
-              attachments.add(files);
-            }}
-            onKeyDown={(e) => {
-              if (open && rows.length) {
-                if (e.key === "ArrowDown") {
-                  e.preventDefault();
-                  setActive((a) => (a + 1) % rows.length);
-                  return;
-                }
-                if (e.key === "ArrowUp") {
-                  e.preventDefault();
-                  setActive((a) => (a - 1 + rows.length) % rows.length);
-                  return;
-                }
-                if ((e.key === "Enter" && !e.shiftKey) || e.key === "Tab") {
-                  e.preventDefault();
-                  pick(rows[activeIdx]!.row);
-                  return;
-                }
-              }
-              if (open && e.key === "Escape") {
-                e.preventDefault();
-                setTrigger(null);
-                return;
-              }
-              // Enter is a newline (phone and desktop); Ctrl/⌘ + Enter or the Send button sends.
-              if (isSendShortcut(composerKey(e))) {
-                e.preventDefault();
-                submit();
-              } else if (e.key === "Escape" && running) {
-                e.preventDefault();
-                onStop();
-              }
-            }}
-            className={`block max-h-[200px] min-h-11 w-full min-w-0 flex-1 resize-none ${running && !compact ? "max-[400px]:order-first max-[400px]:basis-full" : ""} rounded-[6px] border-0 bg-transparent px-2 py-2.5 text-base placeholder:overflow-hidden placeholder:text-ellipsis placeholder:whitespace-nowrap focus:outline-none sm:min-h-10 sm:py-2 sm:text-[0.875rem] dense:min-h-8 dense:py-1.5`}
-          />
-          <button
-            type="button"
-            className="chip chat-model shrink-0 cursor-pointer self-end max-sm:hidden"
-            onClick={onModel}
-            aria-label={`Model: ${modelLabel}. Change`}
-            data-testid="model-chip"
-          >
-            <span className="text-muted">Model</span> {modelLabel} <span aria-hidden="true">▾</span>
-          </button>
-          {running ? (
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={onStop}
-              aria-label="Stop the run (Escape)"
-              disabled={phase === "stopping"}
-              className="chat-stop shrink-0 max-[400px]:ml-auto"
-            >
-              <StopIcon className="h-5 w-5" />
-            </Button>
-          ) : null}
-          <Button
-            type="submit"
-            variant="primary"
-            busy={busy}
-            disabled={
-              (!text.trim() && !attachments.readyIds.length) || !online || phase === "waiting_for_approval" || phase === "stopping" || (running && !canSteer)
-            }
-            aria-label={running ? "Send guidance" : "Send"}
-            title={`${running ? "Send guidance" : "Send"} (${sendHint(mod)})`}
-            aria-keyshortcuts={SEND_KEYSHORTCUTS}
-            className={running ? "chat-send shrink-0" : "chat-send shrink-0 max-[400px]:ml-auto"}
-          >
-            {/* Same send control as the Chief of staff sheet: a small accent circle with an up arrow. */}
-            {!busy ? <span aria-hidden="true">↑</span> : null}
-          </Button>
-        </form>
-        {!compact ? (
-          <p className="chat-composer-hint px-3 pb-2 text-xs text-muted" data-dynamic>
-            @ context · # PR · / command · {mod === "⌘" ? "⌘" : "Ctrl"}+Enter send
-          </p>
-        ) : null}
-      </div>
-      {!online && text ? <p className="mt-1 text-xs text-warn">Draft saved on this device. It has not been sent.</p> : null}
-    </div>
-  );
-}
-
-/**
- * Phone-only "+" menu of the composer: context, files, camera, photo library and the model.
- * Files and camera reuse the composer's own hidden inputs; the photo library has its own picker.
- */
-function ComposerAddMenu({
-  online,
-  files,
-  modelLabel,
-  onContext,
-  onModel,
-  onFile,
-  onCamera,
-  onLibrary,
-}: {
-  online: boolean;
-  files: boolean;
-  modelLabel: string;
-  onContext: () => void;
-  onModel: () => void;
-  onFile: () => void;
-  onCamera: () => void;
-  onLibrary: (f: File[]) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const btn = useRef<HTMLButtonElement>(null);
-  const list = useRef<HTMLUListElement>(null);
-  const library = useRef<HTMLInputElement>(null);
-  const id = useId();
-  // Opened from the keyboard: focus the first item (WAI-ARIA menu). Opened by a tap: leave focus where it was,
-  // so the on-screen keyboard stays up and nothing shifts under the finger.
-  const [byKeyboard, setByKeyboard] = useState(false);
-  useEffect(() => {
-    if (!open) return;
-    if (byKeyboard) list.current?.querySelector<HTMLButtonElement>("button:not([disabled])")?.focus();
-    const onDoc = (e: PointerEvent) => {
-      if (!list.current?.contains(e.target as Node) && !btn.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onEsc = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      e.stopPropagation();
-      setOpen(false);
-      if (list.current?.contains(document.activeElement)) btn.current?.focus();
-    };
-    document.addEventListener("pointerdown", onDoc);
-    document.addEventListener("keydown", onEsc, true);
-    return () => {
-      document.removeEventListener("pointerdown", onDoc);
-      document.removeEventListener("keydown", onEsc, true);
-    };
-  }, [open, byKeyboard]);
-  const items: { label: string; hint?: string; onSelect: () => void; disabled?: boolean; library?: boolean }[] = [
-    { label: "Context", hint: "areas, items, people", onSelect: onContext },
-    ...(files
-      ? [
-          { label: "Attach file", onSelect: onFile, disabled: !online },
-          { label: "Camera", onSelect: onCamera, disabled: !online },
-          { label: "Photo library", onSelect: () => undefined, disabled: !online, library: true },
-        ]
-      : []),
-    { label: "Model", hint: modelLabel, onSelect: onModel },
-  ];
-  const onKey = (e: React.KeyboardEvent) => {
-    const buttons = Array.from(list.current?.querySelectorAll<HTMLButtonElement>("button:not([disabled])") ?? []);
-    const idx = buttons.indexOf(document.activeElement as HTMLButtonElement);
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-      e.preventDefault();
-      buttons[(idx + (e.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length]?.focus();
-    } else if (e.key === "Tab") {
-      setOpen(false);
-    }
-  };
-  return (
-    <div className="relative shrink-0 sm:hidden">
-      <button
-        ref={btn}
-        type="button"
-        aria-label="Add to message"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={open ? id : undefined}
-        onClick={(e) => {
-          setByKeyboard(e.detail === 0);
-          setOpen((o) => !o);
-        }}
-        className="chat-add inline-flex items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-text"
-        data-testid="composer-add"
-      >
-        <PlusIcon className="h-5 w-5" />
-      </button>
-      {open ? (
-        <ul
-          ref={list}
-          id={id}
-          role="menu"
-          aria-label="Add to message"
-          onKeyDown={onKey}
-          className="absolute bottom-full left-0 z-40 mb-2 w-60 max-w-[calc(100vw-2rem)] overflow-hidden rounded-[12px] border border-line bg-surface p-1 shadow-[var(--shadow-pop)]"
-        >
-          {items.map((it) => (
-            <li key={it.label} role="none">
-              <button
-                role="menuitem"
-                type="button"
-                disabled={it.disabled}
-                onClick={() => {
-                  setOpen(false);
-                  if (it.library) library.current?.click();
-                  else it.onSelect();
-                }}
-                className="flex min-h-11 w-full items-center justify-between gap-3 rounded-[6px] px-3 text-left text-sm hover:bg-surface-2 disabled:opacity-50"
-              >
-                <span>{it.label}</span>
-                {it.hint ? <span className="min-w-0 truncate text-xs text-muted">{it.hint}</span> : null}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      <input
-        ref={library}
-        type="file"
-        multiple
-        accept="image/*"
-        aria-label="Choose pictures from the photo library"
-        data-testid="chat-library-input"
-        className="sr-only"
-        tabIndex={-1}
-        onChange={(e) => {
-          onLibrary([...(e.target.files ?? [])]);
-          e.target.value = "";
-        }}
-      />
-    </div>
   );
 }
 

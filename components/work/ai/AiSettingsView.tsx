@@ -85,7 +85,7 @@ export function AiSettingsView() {
           New jobs stop at the daily budget; each job offers Run anyway.
         </p>
         <form
-          className="grid grid-cols-1 gap-2 sm:grid-cols-4"
+          className="grid grid-cols-2 gap-2 sm:grid-cols-4"
           onSubmit={(e) => {
             e.preventDefault();
             const f = new FormData(e.currentTarget);
@@ -111,7 +111,7 @@ export function AiSettingsView() {
           <Field id="ai-capD" label="Cap: deep ($)">
             <Input id="ai-capD" name="capD" className="w-full min-w-0" inputMode="decimal" defaultValue={s.jobCapsUsd.deep} />
           </Field>
-          <div className="sm:col-span-4">
+          <div className="col-span-2 sm:col-span-4">
             <Button type="submit" loading={busy} className="max-w-full whitespace-normal">
               Save budget
             </Button>

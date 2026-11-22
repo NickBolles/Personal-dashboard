@@ -1,6 +1,42 @@
 @layer components {
   .answer-batch {
     overflow-wrap: anywhere;
+    display: grid;
+    gap: 0.875rem;
+    padding-block: 0.5rem;
+  }
+  .answer-question {
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+  .answer-group {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+  .answer-context {
+    margin-block: 0.25rem;
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+  .answer-optional,
+  .answer-recommended {
+    font-size: 0.6875rem;
+    color: var(--muted);
+    font-weight: 400;
+  }
+  .answer-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.125rem 0.5rem;
+    min-width: 0;
+    padding-block: 0.625rem;
+  }
+  .answer-options .k-btn {
+    border-color: var(--line);
   }
   .answer-batch .k-btn[aria-pressed="true"] {
     border-color: var(--accent);
@@ -14,5 +50,16 @@
   .answer-batch pre {
     font-family: inherit;
     overflow-wrap: anywhere;
+  }
+  .gc-quiet-work {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--muted);
+  }
+  .gc-quiet-work > div {
+    flex-basis: 100%;
+    min-width: 0;
   }
 }

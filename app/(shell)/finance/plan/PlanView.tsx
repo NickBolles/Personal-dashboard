@@ -496,7 +496,7 @@ export function PlanView() {
   if (!q.data.revision) {
     const y = q.data.year;
     return (
-      <div className="mx-auto max-w-3xl space-y-4 px-4 py-5 sm:px-6">
+      <div className="mx-auto max-w-3xl space-y-4 px-3 pt-3 pb-6 sm:px-5 sm:pt-4 dense:px-7 dense:pt-5">
         <PageHeader title="Long-term plan" subtitle="Irregular income and big obligations, mapped onto purpose funds." />
         <EmptyState
           title={`No plan for ${y} yet`}
@@ -532,7 +532,7 @@ export function PlanView() {
   const editable = canEdit && p.revision.editable;
   const event = (id: string) => p.events.find((e) => e.id === id)!;
   return (
-    <div className="mx-auto max-w-6xl space-y-4 px-4 py-5 sm:px-6">
+    <div className="mx-auto max-w-6xl space-y-4 px-3 pt-3 pb-6 sm:px-5 sm:pt-4 dense:px-7 dense:pt-5">
       <PageHeader
         title={`${p.year} plan`}
         subtitle={

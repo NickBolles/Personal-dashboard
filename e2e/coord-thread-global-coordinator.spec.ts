@@ -122,7 +122,7 @@ test("questionnaire form in a coordinator reply: Submit sends the answers as the
   expect(state.runs).toHaveLength(0);
   const sent = page.waitForRequest((r: Request) => r.method() === "POST" && /\/api\/hermes\/sessions\/cw-pin\/runs$/.test(new URL(r.url()).pathname));
   await card.getByRole("button", { name: "Submit choices" }).click();
-  await card.getByRole("button", { name: "Confirm send reply" }).click();
+
   const body = (await sent).postDataJSON() as { input: string };
   expect(body.input).toContain("Bramble check-in");
   expect(body.input).toContain("Pruned the bramble hedge");
@@ -201,7 +201,7 @@ test("a D-n decision card replies conversationally without answering the owner d
   await expect(batch).toBeVisible();
   await batch.getByRole("button", { name: /Ship it/ }).click();
   await batch.getByRole("button", { name: "Submit choices" }).click();
-  await batch.getByRole("button", { name: "Confirm send reply" }).click();
+
   await expect(batch.getByRole("status")).toHaveText("Sent as one reply to this conversation.");
   const res = await page.request.get("/api/coordinator/decisions?state=all");
   expect(((await res.json()) as { decisions: { ref: string; state: string }[] }).decisions.find((d) => d.ref === ref)?.state).toBe("open");

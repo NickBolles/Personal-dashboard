@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { currentSubscription, disablePush, enablePush, pushSupport, type PushSupport } from "@/lib/client/push";
 import { isAndroidWrapper } from "@/lib/client/wrapper";
-import { ErrorNote, useToast, LoadingState } from "@/components/ui";
+import { Checkbox, ErrorNote, Field, Input, useToast, LoadingState } from "@/components/ui";
 import { Badge, Button } from "@/components/ui/legacy";
 
 export type PushCapabilities = {
@@ -163,31 +163,20 @@ export function QuietHours() {
   const qh = prefs.data?.quietHours;
   if (!qh) return null;
   return (
-    <fieldset className="space-y-3">
+    <fieldset className="space-y-2">
       <legend className="font-medium">Quiet hours</legend>
-      <label className="flex min-h-11 items-center gap-2 text-sm">
-        <input type="checkbox" className="h-5 w-5" checked={qh.enabled} onChange={(e) => m.mutate({ enabled: e.target.checked })} />
-        Hold non-critical pushes during quiet hours (they stay in your inbox)
-      </label>
-      <div className="flex flex-wrap gap-3">
-        <label className="text-sm">
-          <span className="block font-medium">From</span>
-          <input
-            type="time"
-            className="min-h-12 rounded-[10px] border border-line-strong bg-surface px-3"
-            value={qh.start}
-            onChange={(e) => m.mutate({ start: e.target.value })}
-          />
-        </label>
-        <label className="text-sm">
-          <span className="block font-medium">Until</span>
-          <input
-            type="time"
-            className="min-h-12 rounded-[10px] border border-line-strong bg-surface px-3"
-            value={qh.end}
-            onChange={(e) => m.mutate({ end: e.target.value })}
-          />
-        </label>
+      <Checkbox
+        checked={qh.enabled}
+        onChange={(enabled) => m.mutate({ enabled })}
+        label="Hold non-critical pushes during quiet hours (they stay in your inbox)"
+      />
+      <div className="flex flex-wrap gap-2">
+        <Field id="quiet-from" label="From">
+          <Input id="quiet-from" type="time" value={qh.start} onChange={(e) => m.mutate({ start: e.target.value })} />
+        </Field>
+        <Field id="quiet-until" label="Until">
+          <Input id="quiet-until" type="time" value={qh.end} onChange={(e) => m.mutate({ end: e.target.value })} />
+        </Field>
       </div>
     </fieldset>
   );

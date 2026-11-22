@@ -51,9 +51,13 @@ export const PRIMARY: Dest[] = [
   { key: "alerts", href: "/alerts", label: "Alerts", icon: BellIcon, match: (p) => p.startsWith("/alerts") },
 ];
 
+/** The Chief of staff conversation at full size (the shell's panel, expanded). */
+const CHIEF: Dest = { key: "chief", href: "/chief", label: "Chief of staff", icon: ChatIcon, match: (p) => p === "/chief", caps: ["work.use"] };
+
 export const DESTINATIONS: Dest[] = [
   { key: "brief", href: "/brief", label: "Brief", icon: SunIcon, match: (p) => p === "/brief", caps: ["brief.use"] },
   RESUME,
+  CHIEF,
   {
     key: "workouts",
     href: "/workouts",

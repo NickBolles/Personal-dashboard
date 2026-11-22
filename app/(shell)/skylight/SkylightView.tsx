@@ -40,7 +40,7 @@ export function SkylightView() {
   // Skylight's order: today by time of day, then later days, Overdue (past days) at the bottom.
   const choreGroups = groupSkylightChores(optimistic, { now, timezone });
   return (
-    <div className="mx-auto max-w-3xl px-4 py-5 sm:px-6">
+    <div className="mx-auto max-w-3xl px-3 pt-3 pb-6 sm:px-5 sm:pt-4 dense:px-7 dense:pt-5">
       <PageHeader
         title="Skylight"
         subtitle={writable ? "Tap to complete or skip. Every change can be undone." : "Read-only. Edit events and chores in Skylight."}

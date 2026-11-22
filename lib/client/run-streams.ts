@@ -216,7 +216,8 @@ export class RunStream {
   }
 
   private connect() {
-    if (this.disposed) return;
+    // Where there is no EventSource (a server render, a unit test without one) the run keeps the phase it was given.
+    if (this.disposed || typeof EventSource === "undefined") return;
     this.closeSource();
     // The server answers in AG-UI only while Settings → Agents enables it; both formats are read here.
     const q = this.lastSeq !== undefined ? `?format=agui&lastSeq=${this.lastSeq}` : "?format=agui";

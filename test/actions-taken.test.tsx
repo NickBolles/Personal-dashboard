@@ -335,6 +335,10 @@ describe("coordinator parity controls", () => {
       record({ key: "other", id: "sa_2", title: "Draft the email", state: "failed", error: "(no summary — status=failed: vendor portal timed out)" }),
     ];
     render(<CoordinatorThread info={info} />, { wrapper });
+    await screen.findByRole("button", { name: "1 stalled run" });
+    expect(cards()).toHaveLength(1);
+    expect(screen.getByRole("article", { name: "Draft the email" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "1 stalled run" }));
     await waitFor(() => expect(cards()).toHaveLength(2));
     expect(screen.queryByText("No report yet")).toBeNull();
     const failed = screen.getByRole("article", { name: "Draft the email" });

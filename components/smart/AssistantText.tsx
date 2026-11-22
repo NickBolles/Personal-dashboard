@@ -8,6 +8,7 @@ import { hasBlock, splitBlocks } from "@/lib/jarvis-ui/parser";
 import { validateBlock } from "@/lib/jarvis-ui/validator";
 import type { SmartSettings } from "@/lib/jarvis-ui/types";
 import { answerQuestions } from "@/lib/jarvis-ui/answers";
+import type { JarvisSpec, PropsOf } from "@/lib/jarvis-ui/catalog";
 import { SmartSurface } from "./SmartSurface";
 import { AnswerBatch, BatchedAnswers } from "./AnswerBatch";
 import { hideCaptureBlocks } from "@/lib/workflows/runs";
@@ -55,15 +56,18 @@ export function AssistantText({ text: raw, live = false, messageId }: { text: st
         // Pure answer blocks do not need a smart-surface server record or a repeated change tray/header.
         const answerOnly =
           qs.length &&
-          Object.values(v.spec.elements).every((e) => ["Stack", "Section", "DecisionCard", "Form"].includes(e.type)) &&
+          Object.values(v.spec.elements).every((e) => ["Stack", "Section", "DecisionCard", "Form", "Text", "Callout", "Divider"].includes(e.type)) &&
           Object.values(v.spec.elements).filter((e) => e.type === "DecisionCard" || e.type === "Form").length ===
             new Set(qs.map((q) => q.id.split(":").slice(0, 2).join(":"))).size;
         return answerOnly ? (
-          v.dropped ? (
-            <p key={i} className="my-2 text-xs text-muted" data-testid="smart-fallback">
-              Some questions are unsupported and unavailable. Only the listed answers will be sent.
-            </p>
-          ) : null
+          <div key={i} className="answer-notes">
+            <AnswerNotes spec={v.spec} elementId={v.spec.root} />
+            {v.dropped ? (
+              <p key={i} className="my-2 text-xs text-muted" data-testid="smart-fallback">
+                Some questions are unsupported and unavailable. Only the listed answers will be sent.
+              </p>
+            ) : null}
+          </div>
         ) : (
           <SmartSurface key={i} spec={v.spec} sessionId={sessionId} blockIndex={s.index} dropped={v.dropped} />
         );
@@ -72,5 +76,47 @@ export function AssistantText({ text: raw, live = false, messageId }: { text: st
         <AnswerBatch key={`${sessionId}:${text}`} questions={questions} session={sessionId} source={`${messageId ?? "reply"}\n${text}`} />
       ) : null}
     </BatchedAnswers.Provider>
+  );
+}
+
+/** Informational siblings keep their content without a second surface, form header or Apply tray. */
+function AnswerNotes({ spec, elementId }: { spec: JarvisSpec; elementId: string }) {
+  const element = spec.elements[elementId];
+  if (!element) return null;
+  if (element.type === "Text") return <Markdown text={(element.props as PropsOf<"Text">).text} />;
+  if (element.type === "Callout") {
+    const p = element.props as PropsOf<"Callout">;
+    return (
+      <div className="answer-context" role={p.tone === "warn" ? "note" : undefined}>
+        <strong>{p.title}</strong>
+        {p.text ? <Markdown text={p.text} /> : null}
+      </div>
+    );
+  }
+  if (element.type === "Section") {
+    const answerKeys = new Set(answerQuestions(spec, 0).map((q) => q.id.split(":")[1]));
+    const containsAnswer = (id: string): boolean => answerKeys.has(id) || !!spec.elements[id]?.children?.some(containsAnswer);
+    const p = element.props as PropsOf<"Section">;
+    // Sections around questions already travel with the question context. Informational-only sections do not.
+    return (
+      <>
+        {!containsAnswer(elementId) ? (
+          <div className="answer-context">
+            <h4 className="font-medium">{p.title}</h4>
+            {p.subtitle ? <Markdown text={p.subtitle} /> : null}
+          </div>
+        ) : null}
+        {element.children?.map((child) => (
+          <AnswerNotes key={child} spec={spec} elementId={child} />
+        ))}
+      </>
+    );
+  }
+  return (
+    <>
+      {element.children?.map((child) => (
+        <AnswerNotes key={child} spec={spec} elementId={child} />
+      ))}
+    </>
   );
 }
