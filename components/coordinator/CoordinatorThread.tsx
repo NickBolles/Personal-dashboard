@@ -314,6 +314,10 @@ export function CoordinatorThread({
     : run.state.clarify && run.active
       ? run.state.clarify.question
       : undefined;
+  // The bar says what is happening now. Work that has ended is not news here: the thread draws it under the reply
+  // that started it, Activity keeps the rest, and the sheet still lists everything.
+  const known = execution.data && Array.isArray(execution.data.records) && Array.isArray(execution.data.sources) ? execution.data : undefined;
+  const happening = useMemo(() => (known ? { ...known, records: known.records.filter(isActiveExec) } : execution.data), [known, execution.data]);
   const chat = useChatThings(
     sid ?? "",
     {
@@ -325,7 +329,7 @@ export function CoordinatorThread({
       filesCount: null,
       contextPercent: null,
     },
-    { data: execution.data, isError: execution.isError, isPending: execution.isPending, refetch: () => execution.refetch() },
+    { data: happening, isError: execution.isError, isPending: execution.isPending, refetch: () => execution.refetch() },
   );
   const [things, setThings] = useState<ThingsTab | null>(null);
   const openThings = (tab: ThingsTab) => {
@@ -1102,7 +1106,7 @@ export function CoordinatorThread({
           readOnly={false}
           onPatch={panel.patch}
           onRemoveContext={(ref) => setChips((all) => all.filter((x) => x.ref !== ref))}
-          execution={chat.execution}
+          execution={known}
           executionError={chat.error}
           executionLoading={chat.loading}
           retry={chat.retry}
