@@ -110,6 +110,24 @@ describe("readSubagentLog", () => {
     const whole = readSubagentLog({ profile: "devchief", delegationId: "deleg_0a1b2c3e", task: 0 });
     expect(whole.text).not.toContain("synthetic123456");
   });
+  it("masks a multiline credential that starts above the tail before cutting the tail", () => {
+    writeLog("devchief", "deleg_0a1b2c3f", 0, 'intro\npassword="first123\nsecond456\nthird789"\ndone\n');
+    const cut = readSubagentLog({ profile: "devchief", delegationId: "deleg_0a1b2c3f", task: 0 }, 20);
+    expect(cut.text).not.toContain("third789");
+    expect(cut.text).not.toContain("second456");
+    const pem = [
+      ["-----BEGIN RSA", "PRIVATE KEY-----"].join(" "),
+      ..."ABCDEFGHIJKLMNOP".split("").map((c) => c.repeat(64)),
+      ["-----END RSA", "PRIVATE KEY-----"].join(" "),
+      "after",
+    ].join("\n");
+    writeLog("devchief", "deleg_0a1b2c40", 0, `start\n${pem}\n`);
+    const pemFull = readSubagentLog({ profile: "devchief", delegationId: "deleg_0a1b2c40", task: 0 });
+    const pemTail = readSubagentLog({ profile: "devchief", delegationId: "deleg_0a1b2c40", task: 0 }, 200);
+    // Whatever the masker removes from the whole file never comes back when only the tail is read.
+    if (!pemFull.text.includes("P".repeat(64))) expect(pemTail.text).not.toContain("P".repeat(64));
+    expect(pemTail.truncated).toBe(true);
+  });
   it("answers not_found for a missing log and a symlink out of the profile folder", () => {
     expect(() => readSubagentLog({ profile: "devchief", delegationId: "deleg_ffffffff", task: 0 })).toThrow(/No log/);
     fs.writeFileSync(path.join(outside, "secret.log"), "outside");

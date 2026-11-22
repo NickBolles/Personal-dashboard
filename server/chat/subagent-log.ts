@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { PROFILE_NAME_RE } from "@/lib/agents";
 import { redactToolText } from "@/lib/tool-presentation";
-import { maskSecrets } from "@/server/ai/rules";
+import { SECRET_MASK, maskSecrets } from "@/server/ai/rules";
 import { HttpError } from "@/server/http/errors";
 
 /**
@@ -21,6 +21,8 @@ export const DELEGATION_ID_RE = /^deleg_[0-9a-f]{6,32}$/;
 export const TASK_INDEX_MAX = 63;
 export const LOG_TAIL_DEFAULT = 64 * 1024;
 export const LOG_TAIL_MAX = 256 * 1024;
+/** Bytes read before the tail only to give the credential masker context (multiline values, PEM bodies). */
+export const MASK_CONTEXT = 64 * 1024;
 export const DEFAULT_PROFILE = "default";
 
 export const delegationLogRoot = () => process.env.JARVIS_DELEGATION_LOG_ROOT || "/hermes-delegation";
@@ -84,6 +86,11 @@ export function redactLog(text: string): { text: string; masked: number } {
   return { text: out, masked: m.masked.length + Math.max(0, count(out) - count(m.text)) };
 }
 
+const afterFirstLine = (s: string) => {
+  const nl = s.indexOf("\n");
+  return nl >= 0 ? s.slice(nl + 1) : "";
+};
+
 const inside = (root: string, p: string) => p === root || p.startsWith(root + path.sep);
 
 export function readSubagentLog(input: { profile: unknown; delegationId: unknown; task: unknown }, tailBytes: unknown = LOG_TAIL_DEFAULT): SubagentLog {
@@ -113,29 +120,34 @@ export function readSubagentLog(input: { profile: unknown; delegationId: unknown
     if (!st.isFile()) throw new HttpError(404, "not_found", "No log for that sub-agent");
     const size = st.size;
     const start = Math.max(0, size - tail);
-    const buf = Buffer.alloc(size - start);
+    // Read extra context before the tail so a credential that starts above it (a multiline quoted value, a PEM body)
+    // is recognised and masked as a whole before the tail is cut out of the masked text.
+    const winStart = start > 0 ? Math.max(0, start - MASK_CONTEXT) : 0;
+    const buf = Buffer.alloc(size - winStart);
     let read = 0;
     while (read < buf.length) {
-      const n = fs.readSync(fd, buf, read, buf.length - read, start + read);
+      const n = fs.readSync(fd, buf, read, buf.length - read, winStart + read);
       if (n <= 0) break;
       read += n;
     }
     let text = buf.subarray(0, read).toString("utf8");
+    // A window that starts mid-file starts mid-line: drop that partial line (it lacks its own context).
+    if (winStart > 0) text = afterFirstLine(text);
+    let out = redactLog(text).text;
     if (start > 0) {
-      // Drop the partial first line (and any split UTF-8 sequence with it). With no newline at all the whole tail is a
-      // fragment without its context (e.g. the end of `password=…`), so the masking can't be trusted: return nothing.
-      const nl = text.indexOf("\n");
-      text = nl >= 0 ? text.slice(nl + 1) : "";
+      const masked = Buffer.from(out, "utf8");
+      // Cut the tail out of the MASKED text, then drop its partial first line. With no newline at all the tail is a
+      // fragment of one line: return nothing rather than a piece without context.
+      if (masked.length > tail) out = afterFirstLine(masked.subarray(masked.length - tail).toString("utf8"));
     }
-    const red = redactLog(text);
     return {
       ...ref,
       size,
-      bytes: Buffer.byteLength(red.text),
+      bytes: Buffer.byteLength(out),
       truncated: start > 0,
       modifiedAt: st.mtime.toISOString(),
-      masked: red.masked,
-      text: red.text,
+      masked: out.split(SECRET_MASK).length - 1 + (out.split("[redacted]").length - 1),
+      text: out,
     };
   } finally {
     fs.closeSync(fd);
