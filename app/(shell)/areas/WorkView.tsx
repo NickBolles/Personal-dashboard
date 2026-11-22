@@ -1301,7 +1301,9 @@ function ItemDetail({
   const overview = leaf ? (
     <div className="wk-with-rail min-w-0" data-rail={wide && !chatTab ? "on" : undefined}>
       <div className="min-w-0">
-        <div className="bg-surface px-3 pb-3 sm:px-5 lg:px-6">{headFields}</div>
+        <div className="bg-surface px-3 pb-3 sm:px-5 lg:px-6" data-testid="item-fields">
+          {headFields}
+        </div>
         <div className="wk-panel ip-body px-3 py-3 sm:px-5 lg:px-6 lg:py-4">
           <ItemTimeline
             section
