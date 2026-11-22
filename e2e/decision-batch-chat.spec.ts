@@ -60,70 +60,34 @@ test("Chief full chat: generated three-choice Form and prose use compact shared 
   await expectNoHorizontalOverflow(page);
 });
 
-test("Chief stalled inventory is one quiet disclosure, with a way to Tasks", async ({ page }, info) => {
+test("Chief mixed run state stays out of Chat after reload; status still leads to Tasks", async ({ page }, info) => {
   const now = Date.parse("2026-11-17T18:00:00Z");
   const iso = (minutes: number) => new Date(now - minutes * 60_000).toISOString();
   await page.clock.setFixedTime(now);
-  await stubCoordinator(page, { "cw-pin": [{ kind: "assistant", id: "quiet-history", text: "The report is ready.", at: iso(5) }] }, { current: "cw-pin", now });
-  const runs = [1, 2, 3].map((n) => ({
-    id: `quiet-${n}`,
-    ref: `R-${n}`,
-    seq: n,
-    itemId: `item-${n}`,
-    itemTitle: "Release",
-    profile: "devchief",
-    title: `Quiet run ${n}`,
-    state: "running",
-    stalled: true,
-    summary: null,
-    prUrl: null,
-    parentRunId: null,
-    parentRef: null,
-    pipeline: [],
-    lock: null,
-    interruptedAt: null,
-    startedAt: iso(100),
-    updatedAt: iso(90),
-    finishedAt: null,
-    noticeCount: 0,
-  }));
-  await page.route("**/api/coordinator/runs", (r) =>
-    r.fulfill({ json: { runs, events: [], lastLooked: { chat: iso(1), needs: null, running: null, changes: null, context: null } } }),
-  );
-  await page.route("**/api/hermes/sessions/cw-pin/execution", (r) =>
-    r.fulfill({
-      json: {
-        sessionId: "cw-pin",
-        parent: null,
-        sources: [{ source: "registered_runs", state: "ok" }],
-        fetchedAt: iso(0),
-        records: runs.map((run) => ({
-          key: `registered_run:${run.id}`,
-          source: "registered_run",
-          id: run.id,
-          title: run.title,
-          state: run.state,
-          startedAt: run.startedAt,
-          updatedAt: run.updatedAt,
-        })),
-      },
-    }),
-  );
+  await stubCoordinator(page, { "cw-pin": [{ kind: "assistant", id: "mixed-history", text: "The report is ready.", at: iso(5) }] }, { current: "cw-pin", now });
+  const base = { itemTitle: "Release", profile: "devchief", summary: null, prUrl: null, parentRunId: null, parentRef: null, pipeline: [], lock: null, interruptedAt: null, startedAt: iso(100), noticeCount: 0 };
+  const runs = [
+    { ...base, id: "active", ref: "R-1", seq: 1, itemId: "active", title: "Active run", state: "running", stalled: false, updatedAt: iso(1), finishedAt: null },
+    { ...base, id: "stalled", ref: "R-2", seq: 2, itemId: "stalled", title: "Stalled run", state: "running", stalled: true, updatedAt: iso(90), finishedAt: null },
+    { ...base, id: "waiting", ref: "R-3", seq: 3, itemId: "waiting", title: "Waiting run", state: "waiting", stalled: false, updatedAt: iso(10), finishedAt: null },
+    { ...base, id: "done", ref: "R-4", seq: 4, itemId: "done", title: "Done run", state: "done", stalled: false, updatedAt: iso(5), finishedAt: iso(5) },
+  ];
+  await page.route("**/api/coordinator/runs", (r) => r.fulfill({ json: { runs, events: [], lastLooked: { chat: iso(1), needs: null, running: null, changes: null, context: null } } }));
+  await page.route("**/api/hermes/sessions/cw-pin/execution", (r) => r.fulfill({ json: { sessionId: "cw-pin", parent: null, sources: [{ source: "registered_runs", state: "ok" }], fetchedAt: iso(0), records: runs.map((run) => ({ key: `registered_run:${run.id}`, source: "registered_run", id: run.id, title: run.title, state: run.state, startedAt: run.startedAt, updatedAt: run.updatedAt })) } }));
   for (const width of [320, 412, 1280]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/chief");
-    const quiet = page.getByTestId("quiet-chat-work");
-    await expect(quiet).toHaveCount(1);
-    await expect(quiet.getByRole("button", { name: "3 stalled runs" })).toHaveAttribute("aria-expanded", "false");
-    await expect(quiet.getByText("Quiet run 1", { exact: true })).toHaveCount(0);
-    if (process.env.JARVIS_BATCH_SHOTS) await page.screenshot({ path: `${process.env.JARVIS_BATCH_SHOTS}/quiet-${width}-${info.project.name}.png` });
-    await quiet.getByRole("button", { name: "3 stalled runs" }).click();
-    await expect(quiet.getByText("Quiet run 1", { exact: true })).toBeVisible();
-    await quiet.getByRole("button", { name: "Tasks", exact: true }).click();
-    await expect(page.getByRole("tab", { name: /^Tasks/ })).toHaveAttribute("aria-selected", "true");
-    // Tasks lists tasks: the stalled runs are not rows of their own there.
-    await expect(page.getByRole("tabpanel", { name: /^Tasks/ }).getByTestId("task-list")).toBeVisible();
-    await expect(page.getByRole("tabpanel", { name: /^Tasks/ }).locator("[data-run-ref]")).toHaveCount(0);
+    await page.reload();
+    await expect(page.getByRole("tab", { name: /^Chat/ })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByTestId("coordinator-run-card")).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "Work in progress" })).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "Work started by this reply" })).toHaveCount(0);
+    await expect(page.getByText("The report is ready.", { exact: true })).toBeVisible();
+    if (process.env.JARVIS_BATCH_SHOTS) await page.screenshot({ path: `${process.env.JARVIS_BATCH_SHOTS}/mixed-runs-${width}-${info.project.name}.png` });
+    await page.getByRole("tab", { name: /^Tasks/ }).click();
+    const tasks = page.getByRole("tabpanel", { name: /^Tasks/ });
+    await expect(tasks).toBeVisible();
+    await expect(tasks.getByTestId("task-list")).toBeVisible();
     await expectNoHorizontalOverflow(page);
   }
 });
