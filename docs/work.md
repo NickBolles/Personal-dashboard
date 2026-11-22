@@ -215,17 +215,21 @@ Owner decisions (binding): **one tree** for everything (Momentum Bets, Home, Gen
 
 **One state per task**, worked out by one rule (`lib/task-state.ts taskState`, pure and unit tested) from its status, the runs registered on it, its open questions and its chat. Every list and page asks this rule, so two screens cannot disagree. In list order:
 
-| State            | When                                                                                         | Reason shown                                                     |
-| ---------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| Needs you        | an open question, a run paused on the owner, or a chat run waiting on an approval            | the question (or "Waiting for your approval")                    |
-| Failed           | the newest top-level run on it failed (a failure that was retried is history)                | the error in one line                                            |
-| Stalled          | a run is interrupted, or running with no report for 30 minutes                               | what would move it, else "no word since" with the time or date   |
-| Working          | a run is reporting, or a turn is in flight in the task's chat                                | none: age and who has it                                         |
-| Ready for review | its newest run finished, or its status is In review, Awaiting validation or Ready to settle  | the result in one line                                           |
-| Not started      | nothing has worked on it                                                                     | where it stands ("captured 3d ago", "on hold") and its next step |
-| Done             | the owner closed it (settled, superseded, abandoned). A finished run never makes a task Done | none                                                             |
+| State            | When                                                                                                          | Reason shown                                                     |
+| ---------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Needs you        | an open question, a run paused on the owner, or a chat run waiting on an approval                             | the question (or "Waiting for your approval")                    |
+| Failed           | the newest top-level run on it failed (a failure that was retried is history)                                 | the error in one line                                            |
+| Stalled          | a run was stopped, or is running with no report and no activity in its chat for 30 minutes                    | what would move it, else "no word since" with the time or date   |
+| Working          | a run reported, or its chat was active, inside 30 minutes, or a turn is in flight there                       | none: age and who has it                                         |
+| Ready for review | its newest run finished or its chat ended, or its status is In review, Awaiting validation or Ready to settle | the result in one line                                           |
+| Not started      | nothing has worked on it                                                                                      | where it stands ("captured 3d ago", "on hold") and its next step |
+| Done             | the owner closed it (settled, superseded, abandoned). A finished run never makes a task Done                  | none                                                             |
 
 A task marked In progress that no agent has touched reads "Not started · in progress, no agent on it": the state is about work Jarvis can see. It is listed under All, never under In flight.
+
+**Honest state (step 4).** "Working" is checked against the chat: the ended-chat check (`server/work/session-end.ts`, every 5 minutes, 10 chats a pass) records when each open run's chat was last active (`agent_runs.chat_active_at`), and a run that reports little stays Working while its chat is active. A run whose chat ended is interrupted with "Session ended (…)" and makes its task **Ready for review**, never Working, Stalled or Done. **Check in** on a stalled task with a chat (`POST /api/work/items/:id/check-in`, the owner's tap only) asks its agent for a status in the task's chat: guidance for the turn in flight, else the next message.
+
+**Key moments.** Each timeline line has a kind: Started, Found, Made, Asked you, Decided, Blocked, Handed off, Resumed, Stopped, Chat ended, Failed, Done (plus CI, release and lock lines). Agents name the four they know (`jarvis_run_event` with `type: "progress"`, `moment: found | made | blocked | handed_off`, one line of at most 140 characters); Jarvis writes the rest from what happens. The brief `jarvis_start_task` writes asks for them. A task's Overview reads the same timeline its row opens in place (`GET /api/work/items/:id/timeline`).
 
 **One read** (`GET /api/work/tasks?scope=all|<areaId>|<projectId>&view=flight|all|review`, `server/work/tasks.ts`, shape and builder in `lib/task-list.ts`) and **one component** (`components/tasks/TaskList.tsx`) serve In flight, a project's Tasks section and the review queue. It reads Jarvis's own records only (items, registered runs and their events, open decisions, pull request links), so lists poll every 15 seconds and never open a connection to the assistant.
 
