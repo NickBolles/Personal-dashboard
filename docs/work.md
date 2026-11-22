@@ -211,6 +211,32 @@ A task (a work item that is not an area or a conversation; a note has no childre
 
 Owner decisions (binding): **one tree** for everything (Momentum Bets, Home, General Dev, Finance…) holding work items _and_ conversations; **misc chats stay effortless** (zero filing); **`@` for every reference**, `#` for GitHub PRs/issues, `/` for commands, no `!`.
 
+### Task state and the task list (task threads, step 3)
+
+**One state per task**, worked out by one rule (`lib/task-state.ts taskState`, pure and unit tested) from its status, the runs registered on it, its open questions and its chat. Every list and page asks this rule, so two screens cannot disagree. In list order:
+
+| State            | When                                                                                         | Reason shown                                                     |
+| ---------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Needs you        | an open question, a run paused on the owner, or a chat run waiting on an approval            | the question (or "Waiting for your approval")                    |
+| Failed           | the newest top-level run on it failed (a failure that was retried is history)                | the error in one line                                            |
+| Stalled          | a run is interrupted, or running with no report for 30 minutes                               | what would move it, else "no word since" with the time or date   |
+| Working          | a run is reporting, or a turn is in flight in the task's chat                                | none: age and who has it                                         |
+| Ready for review | its newest run finished, or its status is In review, Awaiting validation or Ready to settle  | the result in one line                                           |
+| Not started      | nothing has worked on it                                                                     | where it stands ("captured 3d ago", "on hold") and its next step |
+| Done             | the owner closed it (settled, superseded, abandoned). A finished run never makes a task Done | none                                                             |
+
+A task marked In progress that no agent has touched reads "Not started · in progress, no agent on it": the state is about work Jarvis can see. It is listed under All, never under In flight.
+
+**One read** (`GET /api/work/tasks?scope=all|<areaId>|<projectId>&view=flight|all|review`, `server/work/tasks.ts`, shape and builder in `lib/task-list.ts`) and **one component** (`components/tasks/TaskList.tsx`) serve In flight, a project's Tasks section and the review queue. It reads Jarvis's own records only (items, registered runs and their events, open decisions, pull request links), so lists poll every 15 seconds and never open a connection to the assistant.
+
+- **One row per task.** Runs, questions and chats are never rows: a run is how the task got its state, a question is why it needs you, a chat is where it opens. Run numbers (R-n) are not shown; a question keeps its D-n as a chip.
+- **A row** is three lines: the state with its reason and who has it; the title (opens the task on Overview); the latest activity fading into the one before (opens the timeline in place: `GET /api/work/items/:id/timeline`, newest first, each line with its type and time). Icon actions in a fixed order: Steer, then Stop or Retry. Steer, Retry and Resume open the task's chat with the composer ready (`?tab=chat&compose=1`, `&draft=retry|resume`); nothing is sent from a list. Stop asks in place, then `POST /api/work/items/:id/stop` marks the task's open runs "stopped by you" and asks the assistant to stop the turn in its chat. A question with one or two short, safe choices is answered from the row (the shared answer flow, with its 10-second Undo); anything else is "Answer", which opens the task at the question. Only "Working" moves.
+- **In flight** (`/resume`, `view=flight`): tasks that need you, failed, are stalled or working, flat, by channel (area). Channels with something needing you come first; inside one: Needs you, Failed, Stalled, Working, then most recent first. Finished and unreviewed work is one row with a count and the oldest age; what closed since the last visit is one row. **All** (`?view=all`): every open task by channel, then project; a project row rolls up what is inside ("3 of 10 done · 2 need you") and opens two levels in place. At 600px and wider, picking a row shows its chat beside the list (`?task=<id>`).
+- **Add a task** creates the task in the chosen channel and starts its chat with what was typed (the channel's bot gets it as the first message). Without chat access the task is created and opened, nothing is sent.
+- **The navigation badge** on In flight is the number of tasks that need you, nothing else (the same number as its Needs you rows).
+- **Review queue** (`/resume/review`, `view=review`): finished and unreviewed tasks grouped by project, each with its result line and pull request state. Several can be marked reviewed behind one confirm (`POST /api/work/tasks/review {ids}`); each close is its own undoable edit and Undo reopens them all. A task that cannot be closed yet (a validation to record) is left open and named. "Send back" opens the task's chat with the composer ready. Nothing is closed without the owner's tap.
+- **A project** (a task with tasks inside) uses the task page: Overview and Chat, the chat being with the bot that answers for it. Its Overview adds the roll-up, the tasks that need you (answered there), Tasks in three views switched in place (List, Board, Graph; each opens full screen), the agents working anywhere inside it and a timeline across its tasks. Board, Activity and Graph are views, not swipe tabs: the bar names one only while it is open.
+
 ### Navigation
 
 - The app rail and phone bar show **Areas** (`/areas`) instead of Work + Hermes for people with `work.use`; people who only chat keep **Hermes** (`/chat`). `/home-control` is labelled **House** (no second "Home"); Workouts has its own dumbbell icon.
