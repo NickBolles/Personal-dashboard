@@ -64,6 +64,8 @@ export const BRIEF_LIMITS = {
   deckRows: 3,
   /** the Urgent card holds the big rocks and the rest of today, so it shows a few more */
   urgentRows: 5,
+  /** rows a card with no page behind it can unfold beyond the first few */
+  deckExtra: 20,
   /** an "Improve" request, and how many open requests (of both kinds) the brief lists */
   improve: 2000,
   improveOpen: 4,
@@ -295,6 +297,8 @@ export type BriefDeckCard = {
   rows: BriefDeckRow[];
   /** where the rest live */
   more?: string;
+  /** the rest, for a card with no page behind it (Coming up, Habits): it unfolds in place */
+  extra?: BriefDeckRow[];
 };
 
 export const BRIEF_VERDICTS = ["up", "down"] as const;

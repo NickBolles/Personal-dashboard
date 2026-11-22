@@ -80,6 +80,11 @@ export type BriefContext = {
   byRef: Map<string, NextAction>;
   /** whether one action may go to the AI layer at all: never Finance, never AI-excluded work, never a source switched off */
   sendable: (a: NextAction) => boolean;
+  /**
+   * whether a reference a stored brief holds may still be shown to this person: the action is in their own
+   * (scoped) selection, or it is gone and they may still see the source it came from
+   */
+  mayShow: (p: { actionId: string } & BriefOrigin) => boolean;
   totals: { now: number; today: number; overdue: number; upcoming: number; backlog: number; open: number };
   focus: string[];
   compass?: { completed: boolean; inWindow: boolean; windowLabel: string };
@@ -236,12 +241,12 @@ export async function briefContext(user: CurrentUser, now = new Date()): Promise
   // came from (kept with the reference) does, starting with whether they may still see that source at all;
   // with neither, no.
   const known = new Map([...attention.completed, ...attention.overdue, ...open].map((a) => [a.id, a]));
+  const mayShow = (p: { actionId: string } & BriefOrigin) =>
+    known.has(p.actionId) || Boolean(p.source && p.sourceId && actionVisible(user, p.source, p.sourceId));
   const mayQuote = (p: { actionId: string } & BriefOrigin) => {
     const a = known.get(p.actionId);
     if (a) return allowed(a);
-    if (!p.source || !p.sourceId) return false;
-    if (!actionVisible(user, p.source, p.sourceId)) return false;
-    return allowed({ source: p.source, sourceId: p.sourceId });
+    return mayShow(p) && allowed({ source: p.source!, sourceId: p.sourceId! });
   };
   // A written card: every task it pointed at, and every input it rested on, must still be shared.
   const cardOk = (b: BriefBlockDoc) =>
@@ -313,6 +318,7 @@ export async function briefContext(user: CurrentUser, now = new Date()): Promise
     candidates,
     byRef,
     sendable: allowed,
+    mayShow,
     totals: {
       now: attention.totals.now,
       today: attention.totals.today,

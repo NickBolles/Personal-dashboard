@@ -34,8 +34,12 @@ const actionRow = (a: NextAction): BriefDeckRow => ({
   ...(a.external ? { external: true } : {}),
 });
 
-const card = (kind: BriefDeckCard["kind"], rows: BriefDeckRow[], more?: string, show: number = ROWS): BriefDeckCard[] =>
-  rows.length ? [{ kind, total: rows.length, rows: rows.slice(0, show), ...(more ? { more } : {}) }] : [];
+/** One card: the first few rows, then either a page that has the rest (`more`) or the rest itself, to unfold in place. */
+const card = (kind: BriefDeckCard["kind"], rows: BriefDeckRow[], more?: string, show: number = ROWS): BriefDeckCard[] => {
+  if (!rows.length) return [];
+  const extra = more ? [] : rows.slice(show, show + BRIEF_LIMITS.deckExtra);
+  return [{ kind, total: rows.length, rows: rows.slice(0, show), ...(more ? { more } : {}), ...(extra.length ? { extra } : {}) }];
+};
 
 /** Work that is under way, most active first. */
 const ACTIVE: WorkStatus[] = ["in_progress", "in_review", "awaiting_validation", "ready_to_settle", "reopened", "ready", "exploring"];

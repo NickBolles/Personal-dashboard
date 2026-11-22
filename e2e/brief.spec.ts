@@ -62,6 +62,26 @@ test("with AI off the brief is built from Home priorities, and Home shows no bri
   await expectNoHorizontalOverflow(page);
   expect(await serious(page)).toEqual([]);
 
+  // Coming up has no page behind it, so what does not fit unfolds in place (saved dates included).
+  const day = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+  const dates: string[] = [];
+  try {
+    for (const n of [9, 10, 11, 12])
+      dates.push((await api<{ id: string }>(page, "post", "/api/home/milestones", { title: `Saved date ${n}`, date: day(n), yearly: false, leadDays: 7 })).id);
+    await page.reload();
+    const ahead = page.getByTestId("brief-row-coming").getByRole("article").filter({ hasText: "On the calendar" });
+    await expect(ahead.getByText("Saved date 12", { exact: true })).toHaveCount(0);
+    const more = ahead.getByRole("button", { name: /^\d+ more/ });
+    await expect(more).toHaveAttribute("aria-expanded", "false");
+    await more.click();
+    await expect(ahead.getByText("Saved date 12", { exact: true })).toBeVisible();
+    await expect(ahead.getByRole("button", { name: /^Show fewer/ })).toHaveAttribute("aria-expanded", "true");
+    await expectNoHorizontalOverflow(page);
+    expect(await serious(page)).toEqual([]);
+  } finally {
+    for (const id of dates) await api(page, "delete", `/api/home/milestones/${encodeURIComponent(id)}`);
+  }
+
   await page.goto("/home");
   await expect(page.getByRole("heading", { name: "Now" })).toBeVisible();
   await expect(page.getByTestId("home-brief")).toHaveCount(0);

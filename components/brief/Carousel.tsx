@@ -45,6 +45,7 @@ export function Carousel({
   const at = useRef(0);
   const stopsRef = useRef<number[]>([0]);
   const count = slides.length;
+  const has = count > 0;
 
   /** Where the track can rest: each card's start that can be reached, and the very end. */
   const measure = useCallback(() => {
@@ -100,8 +101,13 @@ export function Carousel({
     if (!el || typeof IntersectionObserver === "undefined") return;
     const io = new IntersectionObserver(([e]) => (onScreen.current = Boolean(e?.isIntersecting)), { threshold: 0.6 });
     io.observe(el);
-    return () => io.disconnect();
-  }, []);
+    return () => {
+      io.disconnect();
+      onScreen.current = false;
+    };
+    // The track exists only while there are slides: a row that starts empty (Insights before the first build)
+    // gets its observer when the first slide arrives, and loses it when the last one goes.
+  }, [has]);
 
   useEffect(() => {
     if (height === null || eased) return;

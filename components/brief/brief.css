@@ -1265,6 +1265,11 @@
     margin: 6px 0 0 -8px;
     color: var(--t2);
   }
+  /* On a deck card it stands where "N more" stood, and unfolds the rest of the rows. */
+  .brief-deck-card > .brief-fold.k-btn {
+    align-self: flex-start;
+    margin: 2px 0 0 -8px;
+  }
   .brief-fold .k-btn-glyph {
     transition: transform var(--d2) var(--ease);
   }

@@ -203,6 +203,12 @@ function blockViews(
   return out;
 }
 
+/** Every task a stored brief points at, in its picks and on its cards, may still be shown to this person. */
+function docShowable(doc: BriefDoc, c: BriefContext) {
+  const refs = [...(doc.first ? [doc.first] : []), ...doc.then, ...doc.blocks.flatMap((b) => b.actions ?? [])];
+  return refs.every(c.mayShow);
+}
+
 /** Safety alerts are never budgeted away (docs/home-priorities.md): any the picks left out are shown regardless. */
 function safetyAlerts(c: BriefContext, picked: (BriefPickDoc | null)[]): BriefPickView[] {
   const have = new Set(picked.filter(Boolean).map((p) => p!.actionId));
@@ -217,7 +223,11 @@ export async function getBriefView(user: CurrentUser, now = new Date()): Promise
   const ai = aiStatus();
   const widgets = availableWidgets(c, user);
   // With the AI brief switched off the page is the rules brief, even if something was written earlier today.
-  const row = settings.ai ? latestBrief(user.id, c.today) : undefined;
+  const stored = settings.ai ? latestBrief(user.id, c.today) : undefined;
+  // Access to a source can be taken away after a brief was written, and the stored brief names tasks in its picks,
+  // its cards and its own words. One that refers to anything this person may no longer see is not shown at all:
+  // the page is the rules brief (built from what they may see now) until the next build.
+  const row = stored && docShowable(parseDoc(stored), c) ? stored : undefined;
   const jobs = jobsFor(user.id, c.today);
 
   let brief: BriefView["brief"];

@@ -143,6 +143,9 @@ function Row({ row, actions }: { row: BriefDeckRow; actions?: BriefActions }) {
 function Card({ card, actions }: { card: BriefDeckCard; actions?: BriefActions }) {
   const label = BRIEF_DECK_LABEL[card.kind];
   const rest = card.total - card.rows.length;
+  // A card with no page behind it unfolds the rest of its rows in place.
+  const [open, setOpen] = useState(false);
+  const extra = card.extra ?? [];
   return (
     <article className="brief-deck-card" data-kind={card.kind}>
       <p className="brief-deck-top">
@@ -152,7 +155,7 @@ function Card({ card, actions }: { card: BriefDeckCard; actions?: BriefActions }
         </span>
       </p>
       <ul className="brief-deck-rows">
-        {card.rows.map((r) => (
+        {(open ? [...card.rows, ...extra] : card.rows).map((r) => (
           <Row key={r.id} row={r} actions={actions} />
         ))}
       </ul>
@@ -162,6 +165,11 @@ function Card({ card, actions }: { card: BriefDeckCard; actions?: BriefActions }
           <span className="sr-only">: {label}</span>
           <ChevronIcon className="h-4 w-4" />
         </Link>
+      ) : extra.length ? (
+        <Button variant="ghost" size="sm" className="brief-fold" aria-expanded={open} onClick={() => setOpen(!open)}>
+          {open ? "Show fewer" : `${rest} more`}
+          <span className="sr-only">: {label}</span>
+        </Button>
       ) : rest > 0 ? (
         <p className="brief-deck-more">{rest} more</p>
       ) : null}
