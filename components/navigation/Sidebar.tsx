@@ -252,7 +252,9 @@ export function Sidebar({
                   href={d.href}
                   aria-current={d.active ? "page" : undefined}
                   aria-label={
-                    d.badge ? `${d.label}, ${d.badge} ${d.key === "alerts" ? "unread" : d.key === "resume" ? (d.badge === 1 ? "needs you" : "need you") : "waiting"}` : d.label
+                    d.badge
+                      ? `${d.label}, ${d.badge} ${d.key === "alerts" ? "unread" : d.key === "resume" ? (d.badge === 1 ? "needs you" : "need you") : "waiting"}`
+                      : d.label
                   }
                   title={collapsed ? d.label : undefined}
                   className={rowCls(d.active)}
