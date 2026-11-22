@@ -26,6 +26,7 @@ import * as work from "@/server/work/store";
 import { BRIEF_DECK_GROUP_OF, BRIEF_LIMITS, assistIntent, briefImportSchema, type BriefNoteView, type BriefView } from "@/lib/brief";
 import { briefAutoTick, briefJobStale, getBriefView, saveBuiltBrief, startBuild } from "@/server/brief";
 import { runAnyway } from "@/server/ai/jobs";
+import { sourceCapability } from "@/lib/modules";
 import * as restoreRoute from "@/app/api/brief/profile/restore/route";
 import { briefContext, renderContext } from "@/server/brief/context";
 import { journalCompass, recentJournal } from "@/server/brief/journal";
@@ -401,6 +402,20 @@ describe("what the model is given", () => {
     saveBriefSettings(owner, { share: { [share]: false } });
     expect((await history()).text).not.toContain("GONE_PICK");
     saveBriefSettings(owner, { share: { [share]: true } });
+    // Losing access to the source itself (not the brief) stops it too: the stored reference is not a way around it.
+    const CAP = {
+      todos: "todos.view",
+      skylight: "skylight.view",
+      home_assistant: "home_assistant.view",
+      work: "work.use",
+      paperclip: "paperclip.view",
+    } as const;
+    const cap = sourceCapability(action.source);
+    expect(cap).toBe(CAP[action.source as keyof typeof CAP]);
+    const someone = { ...me(), capabilities: new Set([...me().capabilities].filter((c) => c !== cap)) };
+    expect(renderContext(await briefContext(me(), tomorrow))).toContain("GONE_PICK");
+    expect(renderContext(await briefContext(someone, tomorrow))).not.toContain("GONE_PICK");
+
     delete stored.source;
     delete stored.sourceId;
     put();

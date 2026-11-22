@@ -2,7 +2,7 @@ import "server-only";
 import type { CalendarEvent, HomeException, NextAction } from "@/lib/contracts";
 import type { CurrentUser } from "@/server/auth";
 import { can } from "@/server/access";
-import { adapterContext, homeSelection } from "@/server/sources";
+import { actionVisible, adapterContext, homeSelection } from "@/server/sources";
 import { listMilestones } from "@/server/home-tuning";
 import { visibleEvents } from "@/server/smart/data";
 import { lookup } from "@/server/smart/store";
@@ -232,13 +232,15 @@ export async function briefContext(user: CurrentUser, now = new Date()): Promise
   const exceptions = payload.glance.homeExceptions.slice(0, 6);
 
   // History: a stored reference may be quoted again only if it may go out today. The action as it is
-  // now decides; when it is gone, where it came from (kept with the reference) does; with neither, no.
+  // now decides (the selection is already scoped to what this person may see); when it is gone, where it
+  // came from (kept with the reference) does, starting with whether they may still see that source at all;
+  // with neither, no.
   const known = new Map([...attention.completed, ...attention.overdue, ...open].map((a) => [a.id, a]));
   const mayQuote = (p: { actionId: string } & BriefOrigin) => {
     const a = known.get(p.actionId);
     if (a) return allowed(a);
     if (!p.source || !p.sourceId) return false;
-    if (p.source === "work" && !items) return false;
+    if (!actionVisible(user, p.source, p.sourceId)) return false;
     return allowed({ source: p.source, sourceId: p.sourceId });
   };
   // A written card: every task it pointed at, and every input it rested on, must still be shared.
