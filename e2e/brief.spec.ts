@@ -253,8 +253,11 @@ test("settings list what it knows, with export, import and a confirmed reset", a
   await page.getByRole("button", { name: "Import, export or reset notes" }).click();
   await page.getByRole("menuitem", { name: "Forget everything…" }).click();
   const dialog = page.getByRole("dialog", { name: "Forget everything the brief knows?" });
-  await expect(dialog).toContainText("can't be undone");
+  await expect(dialog).toContainText("Briefs already written stay.");
   await dialog.getByRole("button", { name: "Forget everything" }).click();
   await expect(dialog).toHaveCount(0);
   await expect(page.getByText("No notes yet.")).toBeVisible();
+  // The reset is undoable like every other write here.
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(notes.getByText("Workouts matter more than inbox zero", { exact: true })).toBeVisible();
 });

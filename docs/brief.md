@@ -90,7 +90,7 @@ Rules that hold:
 
 **Rules** (`server/brief/compose.ts` `rulesBrief`): Home's ranked Now and Later today, in order, with Home's own reasons, plus every widget that has data. Computed on read, never stored. This is what you get with AI off, before the first build of the day, and when a build fails.
 
-**AI** (`server/brief/*`, job kind `brief`): one job on the normal AI runner (docs/work.md, AI actions), so the daily budget, the subscription meter, retries, cancel and the spend ledger all apply. Standard tier, hidden Hermes session, no report, no tools. Builds start when you ask (the rewrite button), or once a day in the background after your "Ready by" time when you turned that on (`brief_auto` dispatcher task; stopped by the meter like any background job). At most 4 builds a day per person.
+**AI** (`server/brief/*`, job kind `brief`): one job on the normal AI runner (docs/work.md, AI actions), so the daily budget, the subscription meter, retries, cancel and the spend ledger all apply. Standard tier, hidden Hermes session, no report, no tools. Builds start when you ask (the rewrite button), or once a day in the background after your "Ready by" time when you turned that on (`brief_auto` dispatcher task; stopped by the meter like any background job). At most 4 builds a day per person. A build can wait (in the queue, or held by the budget until the next day), so it is asked again when it runs and when it is stored: if you switched the AI brief off since, or the day it was for is over, it is skipped before any context is built and nothing is sent or saved. Switching the AI brief off also cancels builds that are waiting and asks a running one to stop.
 
 The model never supplies facts. It gets a table of opaque refs (`a` + 6 hex of the action id) and copies them; Jarvis shows the live title, due time and place for each. Its text is narrative only, rendered as plain text (markup and links are stripped, long text is clipped). A ref it was not given, an unknown card kind or a widget with no data is dropped on its own. A card about you (Noticed, Honest take) must cite something Jarvis actually sent, or memory when that is allowed; with nothing behind it, it is dropped. An answer with no headline fails the build (`bad_output`) and the rules brief stays.
 
@@ -131,7 +131,7 @@ What an earlier brief said is quoted to the next build only under today's rules,
 
 From these the model may propose at most three lasting notes per build, each with a kind (value, principle, driver, pattern) ("Prefers one deep block before noon", with its evidence). A proposal is dashed teal and is **not used until you keep it**. "Not true" dismisses it and it is never proposed again. At most six wait at a time. The prompt forbids proposals about money or other people's private matters, and anything from a single data point.
 
-Settings → Brief lists everything it knows, with import, export (`jarvis-brief-profile.json`) and "Forget everything". Forgetting one note asks first and offers Undo, as do Keep and Not true; "Forget everything" asks first and cannot be undone.
+Settings → Brief lists everything it knows, with import, export (`jarvis-brief-profile.json`) and "Forget everything". Every change here asks first where it removes something and offers Undo: forgetting one note, Keep, Not true, and "Forget everything". After "Forget everything" the removed notes, proposals and feedback are held in memory only (never written anywhere) for one minute so Undo can put them back; after that, or after a restart, they are gone.
 
 ## Storage
 
@@ -153,6 +153,7 @@ All routes need `brief.use` (the Improve and sparkle routes also `hermes.chat` a
 | `POST /api/brief/assist`                                         | `{target: {kind: action or item, id}, clientKey}`: the sparkle on one row                 |
 | `DELETE /api/brief/improve/:id`                                  | undo an Improve request or a sparkle: stop the run, archive what was made for it          |
 | `GET/POST/DELETE /api/brief/profile`                             | export, import (adds only), forget everything                                             |
+| `POST /api/brief/profile/restore`                                | Undo of forget everything (`token` from the reset; once, within a minute)                 |
 
 ## Not yet
 

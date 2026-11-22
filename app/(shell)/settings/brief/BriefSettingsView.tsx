@@ -91,13 +91,13 @@ export function BriefSettingsView() {
   };
 
   /** A change to one note: saved, then offered back with Undo. */
-  const change = async (run: () => Promise<unknown>, message: string, back: () => Promise<unknown>) => {
+  const change = async <T,>(run: () => Promise<T>, message: string, back: (done: T) => Promise<unknown>) => {
     setUndo(null);
     try {
-      await run();
+      const done = await run();
       await n.refetch();
       refresh();
-      setUndo({ message, back });
+      setUndo({ message, back: () => back(done) });
     } catch (e) {
       toast((e as Error).message, "danger");
     }
@@ -304,7 +304,7 @@ export function BriefSettingsView() {
         open={resetOpen}
         onClose={() => setResetOpen(false)}
         title="Forget everything the brief knows?"
-        description="Your notes, the proposals and your feedback on past briefs are deleted. This can't be undone; export first if you want a copy. Briefs already written stay."
+        description="Your notes, the proposals and your feedback on past briefs are deleted. Briefs already written stay."
         footer={
           <>
             <Button variant="ghost" onClick={() => setResetOpen(false)}>
@@ -315,7 +315,11 @@ export function BriefSettingsView() {
               loading={resetting}
               onClick={async () => {
                 setResetting(true);
-                await note(() => api.del("/api/brief/profile").then(() => n.refetch()), "Forgotten");
+                await change(
+                  () => api.del<{ undo: string }>("/api/brief/profile"),
+                  "Forgotten",
+                  (done) => api.post("/api/brief/profile/restore", { token: done.undo }),
+                );
                 setResetting(false);
                 setResetOpen(false);
               }}

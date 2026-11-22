@@ -13,12 +13,15 @@ export const GET = api(({ user }) => exportProfile(user.id), { cap: BRIEF_CAP })
 /** Import notes from an export. Adds what is missing; never removes or replaces. */
 export const POST = api<z.infer<typeof briefImportSchema>>(({ user, body }) => importProfile(user.id, body.notes), { body: briefImportSchema, cap: BRIEF_CAP });
 
-/** Forget everything the brief learned about this person: notes, proposals and feedback. Briefs already built stay. */
+/**
+ * Forget everything the brief learned about this person: notes, proposals and feedback. Briefs already built stay.
+ * `undo` puts it back through POST /api/brief/profile/restore for the next minute; after that it is gone.
+ */
 export const DELETE = api(
   ({ user, correlationId }) => {
-    resetProfile(user.id);
+    const undo = resetProfile(user.id);
     audit({ actor: user.id, action: "brief.profile.reset", source: "ai", sourceRecord: user.id, result: "ok", correlationId });
-    return { ok: true };
+    return { ok: true, undo };
   },
   { cap: BRIEF_CAP },
 );

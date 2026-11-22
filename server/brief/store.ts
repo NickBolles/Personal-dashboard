@@ -1,4 +1,5 @@
 import "server-only";
+import { processSingleton } from "@/server/singleton";
 import { and, desc, eq, gte, inArray } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { newId } from "@/server/crypto";
@@ -490,8 +491,63 @@ export function importProfile(userId: string, notes: { text: string; origin?: Br
 }
 
 /** Everything the brief stored about a person (Settings → Brief → Reset). */
-export function resetProfile(userId: string) {
+type Held = { token: string; until: number; notes: NoteRow[]; feedback: (typeof F.$inferSelect)[] };
+const RESET_UNDO_MS = 60_000;
+/** What the last "Forget everything" removed, per person, for Undo. In memory only: never written anywhere, gone after a minute or a restart. */
+const held = () => processSingleton("brief_reset_undo", () => new Map<string, Held>());
+
+/** Forget everything the brief learned about this person. Returns a token that puts it back for the next minute. */
+export function resetProfile(userId: string, now = Date.now()): string {
   const db = getDb();
+  const notes = db.select().from(N).where(eq(N.userId, userId)).all();
+  const feedback = db.select().from(F).where(eq(F.userId, userId)).all();
   db.delete(N).where(eq(N.userId, userId)).run();
   db.delete(F).where(eq(F.userId, userId)).run();
+  const map = held();
+  for (const [id, h] of map) if (h.until <= now) map.delete(id);
+  const token = newId("bru");
+  map.set(userId, { token, until: now + RESET_UNDO_MS, notes, feedback });
+  return token;
+}
+
+/** Undo of "Forget everything", once: puts back what that reset removed, except where something newer has taken its place. */
+export function restoreProfile(userId: string, token: string, now = Date.now()): { notes: number; feedback: number } {
+  const map = held();
+  const h = map.get(userId);
+  if (h && h.until <= now) map.delete(userId);
+  if (!h || h.token !== token || h.until <= now) throw new HttpError(410, "undo_expired", "That can't be undone any more");
+  map.delete(userId);
+  const db = getDb();
+  let notes = 0;
+  let feedback = 0;
+  for (const n of h.notes) {
+    const clash = db
+      .select({ id: N.id })
+      .from(N)
+      .where(and(eq(N.userId, userId), eq(N.norm, n.norm)))
+      .get();
+    if (clash) continue;
+    db.insert(N).values(n).run();
+    notes++;
+  }
+  const briefs = new Set(
+    db
+      .select({ id: B.id })
+      .from(B)
+      .where(eq(B.userId, userId))
+      .all()
+      .map((r) => r.id),
+  );
+  for (const f of h.feedback) {
+    if (!briefs.has(f.briefId)) continue;
+    const clash = db
+      .select({ id: F.id })
+      .from(F)
+      .where(and(eq(F.userId, userId), eq(F.briefId, f.briefId), eq(F.targetKey, f.targetKey)))
+      .get();
+    if (clash) continue;
+    db.insert(F).values(f).run();
+    feedback++;
+  }
+  return { notes, feedback };
 }

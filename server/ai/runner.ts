@@ -306,14 +306,14 @@ async function executeJob(id: string, signal: AbortSignal, adopt: boolean) {
   // Refused before anything starts: skip. A run that already exists upstream (adopted after a restart)
   // is stopped and reconciled instead, so it can't keep running after its lease and budget are released.
   const stopGuard = new AbortController();
-  const refuse = (reason?: string) => {
+  const refuse = (reason?: string, code: JobErrorCode = "finance_excluded") => {
     if (row.hermesRunId) {
       if (row.state === "running" || row.state === "waiting_approval")
-        transition(id, row.state as JobState, "cancelling", { errorCode: "finance_excluded", errorMessage: errorText("finance_excluded") });
+        transition(id, row.state as JobState, "cancelling", { errorCode: code, errorMessage: errorText(code) });
       stopGuard.abort();
       return false;
     }
-    transition(id, row.state as JobState, "skipped", { errorCode: "finance_excluded", errorMessage: errorText("finance_excluded") });
+    transition(id, row.state as JobState, "skipped", { errorCode: code, errorMessage: errorText(code) });
     if (row.subjectType === "inbox") setTriage(row.subjectId, kind, "skipped", reason);
     return true;
   };
@@ -348,8 +348,13 @@ async function executeJob(id: string, signal: AbortSignal, adopt: boolean) {
     outbound = convs.map((c) => `${c.id} — ${c.title}`).join("\n");
     input = `${taskFor(kind, { title, destinations: dests.map((d) => `${d.key} — ${d.path}`).join("\n") })}\n\nConversations (sessionId — title):\n<data source="conversation titles">\n${outbound}\n</data>`;
   } else if (row.subjectType === "brief") {
+    const brief = await import("@/server/brief");
+    // Asked again now: a build can wait in the queue, or on the budget until the next day, and by then the person
+    // may have switched the AI brief off or the day it was for may be over. Then no context is built or sent.
+    const stale = brief.briefJobStale(user, row.subjectId);
+    if (stale && refuse(undefined, stale)) return;
     // Daily brief: built now from cached Home data, already scoped, bounded and masked (server/brief/context.ts).
-    const built = await (await import("@/server/brief")).briefJobInput(user);
+    const built = stale ? { title: "Daily brief", input: "" } : await brief.briefJobInput(user);
     title = built.title;
     outbound = built.input;
     input = built.input;
@@ -601,8 +606,8 @@ async function onSuccess(
   if (kind === "brief") {
     // Validated and resolved against the person's current data; an answer with nothing usable is a failed build.
     const saved = await (await import("@/server/brief")).saveBuiltBrief(row, data as never);
-    if (saved) transition(row.id, row.state as JobState, "succeeded", costPatch);
-    else failJob(getJobRow(row.id)!, "bad_output", undefined, costPatch);
+    if (saved === "saved") transition(row.id, row.state as JobState, "succeeded", costPatch);
+    else failJob(getJobRow(row.id)!, saved === "empty" ? "bad_output" : saved, undefined, costPatch);
     return;
   }
   if (kind === "triage") {

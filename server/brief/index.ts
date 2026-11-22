@@ -337,16 +337,49 @@ export async function startBuild(
   return { job, created };
 }
 
+/**
+ * Why a build that was queued must not run, or be stored, any more. A build can wait (in the queue, or on the
+ * budget until the next local day), so both are asked again at that moment: the person may have switched the AI
+ * brief off since (`ai_disabled`), or the day it was for may be over (`cancelled`).
+ */
+export function briefJobStale(user: CurrentUser, date: string, now = new Date()): Extract<JobErrorCode, "ai_disabled" | "cancelled"> | null {
+  if (!can(user, BRIEF_CAP) || !getBriefSettings(user.id).ai) return "ai_disabled";
+  return date === localDate(now, getPreferences().timezone) ? null : "cancelled";
+}
+
+/** Switching the AI brief off: builds that have not started are cancelled, and one that is running is asked to stop. */
+export async function cancelPendingBuilds(userId: string, correlationId: string) {
+  const { requestCancel } = await import("@/server/ai/jobs");
+  const pending = getDb()
+    .select()
+    .from(J)
+    .where(and(eq(J.userId, userId), eq(J.kind, "brief"), eq(J.subjectType, "brief")))
+    .all()
+    .filter((j) => ["queued", "budget_blocked", "running", "waiting_approval"].includes(j.state));
+  for (const j of pending) requestCancel(userId, j.id, correlationId);
+  return pending.length;
+}
+
 /** Runner hook: the run input for a `brief` job, built when the job starts (so it sees current data). */
 export async function briefJobInput(user: CurrentUser, now = new Date()) {
   const c = await briefContext(user, now);
   return { title: "Daily brief", input: `Write today's brief from the data below.\n\n${renderContext(c)}` };
 }
 
-/** Runner hook: validate and store a finished build. Returns false when the answer had nothing usable. */
-export async function saveBuiltBrief(job: Pick<JobRow, "id" | "userId" | "subjectId" | "model">, data: BriefOutput, now = new Date()) {
+/**
+ * Runner hook: validate and store a finished build. "empty" when the answer had nothing usable. A build that
+ * finished after the person switched the AI brief off, or after its day ended (a run across midnight), is not
+ * stored: it would sit under a day nobody saw it on and read to the next build as picks that were ignored.
+ */
+export async function saveBuiltBrief(
+  job: Pick<JobRow, "id" | "userId" | "subjectId" | "model">,
+  data: BriefOutput,
+  now = new Date(),
+): Promise<"saved" | "empty" | NonNullable<ReturnType<typeof briefJobStale>>> {
   const user = userById(job.userId);
-  if (!user) return false;
+  if (!user) return "empty";
+  const stale = briefJobStale(user, job.subjectId, now);
+  if (stale) return stale;
   const c = await briefContext(user, now);
   const basis = new Map<string, BriefBasis>();
   for (const n of c.notes) basis.set(noteRef(n.id), { kind: "note", id: n.id, label: n.text.slice(0, 120) });
@@ -361,10 +394,10 @@ export async function saveBuiltBrief(job: Pick<JobRow, "id" | "userId" | "subjec
   };
   for (const k of BRIEF_BASIS_SOURCES) if (sent[k]) basis.set(`src:${k}`, { kind: "source", id: k, label: BRIEF_BASIS_SOURCE_LABEL[k] });
   const { doc, learned } = resolveOutput(data, { byRef: c.byRef, basis, widgets: new Set(availableWidgets(c, user).keys()) });
-  if (!doc.first && !doc.then.length && !doc.blocks.length && !doc.lead) return false;
+  if (!doc.first && !doc.then.length && !doc.blocks.length && !doc.lead) return "empty";
   const row = insertBrief({ userId: user.id, date: job.subjectId, jobId: job.id, model: job.model, doc, basedOn: c.basedOn });
   proposeNotes(user.id, row.id, learned);
-  return true;
+  return "saved";
 }
 
 // ---------------------------------------------------------------- scheduled build

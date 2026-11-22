@@ -23,10 +23,12 @@ import { saveAiSettings } from "@/server/ai/settings";
 import { drainRunner, runnerTick } from "@/server/ai/runner";
 import * as work from "@/server/work/store";
 import { BRIEF_DECK_GROUP_OF, BRIEF_LIMITS, assistIntent, type BriefNoteView, type BriefView } from "@/lib/brief";
-import { briefAutoTick, getBriefView, startBuild } from "@/server/brief";
+import { briefAutoTick, briefJobStale, getBriefView, saveBuiltBrief, startBuild } from "@/server/brief";
+import { runAnyway } from "@/server/ai/jobs";
+import * as restoreRoute from "@/app/api/brief/profile/restore/route";
 import { briefContext, renderContext } from "@/server/brief/context";
 import { journalCompass, recentJournal } from "@/server/brief/journal";
-import { addNote, getBriefSettings, latestBrief, listNotes, proposeNotes, saveBriefSettings } from "@/server/brief/store";
+import { addNote, getBriefSettings, latestBrief, listNotes, proposeNotes, resetProfile, restoreProfile, saveBriefSettings } from "@/server/brief/store";
 
 import * as briefRoute from "@/app/api/brief/route";
 import * as buildRoute from "@/app/api/brief/build/route";
@@ -129,6 +131,7 @@ describe("reading the brief", () => {
       [settingsRoute.PUT, "PUT", { ai: true }, undefined],
       [profileRoute.GET, "GET", undefined, undefined],
       [profileRoute.DELETE, "DELETE", {}, undefined],
+      [restoreRoute.POST, "POST", { token: "bru_none" }, undefined],
     ] as const) {
       expect((await call(handler, partner, { method, body, params })).status).toBe(403);
       expect((await call(handler, null, { method, body, params })).status).toBe(401);
@@ -246,6 +249,59 @@ describe("an AI build", () => {
     expect(jobs[0]).toMatchObject({ state: "succeeded", budgetOverride: true });
     expect((await view()).brief.source).toBe("ai");
     saveAiSettings({ dailyBudgetUsd: 5 });
+  });
+
+  it("a build that waited does not run once the AI brief is off or its day is over", async () => {
+    const jobs = () => getDb().select().from(schema.aiJobs).all();
+    const briefs = () => getDb().select().from(schema.briefs).all();
+    const today = (await view()).date;
+    const yesterday = new Date(Date.parse(`${today}T12:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+    expect(briefJobStale(me(), today)).toBeNull();
+    expect(briefJobStale(me(), yesterday)).toBe("cancelled");
+
+    // Held by the budget, then released after the person switched the AI brief off behind it: skipped before any
+    // context is built, so nothing reaches Hermes.
+    saveAiSettings({ dailyBudgetUsd: 0 });
+    const hold = async () => {
+      getDb().delete(schema.aiJobs).run();
+      const r = await startBuild(me(), { clientKey: key() }, "t");
+      await settle(2);
+      expect(jobs()[0]).toMatchObject({ id: r.job.id, state: "budget_blocked" });
+      return r.job.id;
+    };
+    let id = await hold();
+    saveBriefSettings(owner, { ai: false });
+    expect(briefJobStale(me(), today)).toBe("ai_disabled");
+    runAnyway(owner, id, "t");
+    await settle();
+    expect(jobs()[0]).toMatchObject({ state: "skipped", errorCode: "ai_disabled", hermesRunId: null });
+    expect(briefs()).toEqual([]);
+    saveBriefSettings(owner, { ai: true });
+
+    // Released the next morning: the day it was for is over, so it is skipped rather than stored under yesterday.
+    id = await hold();
+    getDb().update(schema.aiJobs).set({ subjectId: yesterday }).where(eq(schema.aiJobs.id, id)).run();
+    runAnyway(owner, id, "t");
+    await settle();
+    expect(jobs()[0]).toMatchObject({ state: "skipped", errorCode: "cancelled", hermesRunId: null });
+    expect(briefs()).toEqual([]);
+
+    // Switching it off in Settings cancels what is waiting, at once.
+    id = await hold();
+    expect((await call(settingsRoute.PUT, owner, { method: "PUT", body: { ai: false } })).status).toBe(200);
+    expect(jobs()[0]).toMatchObject({ state: "cancelled" });
+    saveBriefSettings(owner, { ai: true });
+    saveAiSettings({ dailyBudgetUsd: 5 });
+
+    // An answer that arrives after the day ended, or after the switch went off, is not stored.
+    const answer = { headline: "Late", lead: "Too late to matter", then: [], blocks: [], learned: [] };
+    const job = { id: "aij_late", userId: owner, subjectId: yesterday, model: null };
+    expect(await saveBuiltBrief(job, answer as never)).toBe("cancelled");
+    saveBriefSettings(owner, { ai: false });
+    expect(await saveBuiltBrief({ ...job, subjectId: today }, answer as never)).toBe("ai_disabled");
+    saveBriefSettings(owner, { ai: true });
+    expect(briefs()).toEqual([]);
+    expect(await saveBuiltBrief({ ...job, subjectId: today }, answer as never)).toBe("saved");
   });
 });
 
@@ -480,6 +536,44 @@ describe("what Jarvis knows about you", () => {
 
     expect((await call(profileRoute.DELETE, owner, { method: "DELETE", body: {} })).status).toBe(200);
     expect(listNotes(owner, ["active", "proposed", "dismissed"])).toEqual([]);
+  });
+
+  it("Forget everything can be undone once, and only by the reset that removed it", async () => {
+    const v = await build();
+    addNote(owner, "A standing note");
+    proposeNotes(owner, v.brief.id!, [
+      { text: "Proposed and waiting", evidence: "two briefs" },
+      { text: "Proposed then dismissed", evidence: "one brief" },
+    ]);
+    const dismissed = listNotes(owner, ["proposed"]).find((n) => n.text === "Proposed then dismissed")!;
+    await call(noteRoute.PATCH, owner, { method: "PATCH", params: { id: dismissed.id }, body: { state: "dismissed" } });
+    await call(feedbackRoute.POST, owner, { method: "POST", body: { briefId: v.brief.id, targetKey: "brief", verdict: "down", note: "Too long" } });
+    const all = () =>
+      listNotes(owner, ["active", "proposed", "dismissed"])
+        .map((n) => `${n.state}:${n.origin}:${n.text}`)
+        .sort();
+    const before = all();
+    expect(before).toHaveLength(3);
+
+    const reset = await call<{ undo: string }>(profileRoute.DELETE, owner, { method: "DELETE", body: {} });
+    expect(reset.body.undo).toMatch(/^bru_/);
+    expect(all()).toEqual([]);
+    expect((await view()).feedback).toEqual([]);
+
+    const restore = (token: string) => call<{ notes: number; feedback: number }>(restoreRoute.POST, owner, { method: "POST", body: { token } });
+    expect((await restore("bru_not_the_token")).status).toBe(410);
+    // A note written in the meantime is kept; the same note from before the reset does not come back twice.
+    addNote(owner, "a standing NOTE");
+    const back = await restore(reset.body.undo);
+    expect(back.body).toMatchObject({ notes: 2, feedback: 1 });
+    expect(all().map((x) => x.toLowerCase())).toEqual(before.map((x) => x.toLowerCase()));
+    expect((await view()).feedback).toEqual([expect.objectContaining({ targetKey: "brief", verdict: "down", note: "Too long" })]);
+    expect((await restore(reset.body.undo)).status).toBe(410);
+
+    // The token is the last reset's alone, and it does not outlive its minute.
+    const again = resetProfile(owner, Date.now() - 61_000);
+    expect(() => restoreProfile(owner, again)).toThrow(/can't be undone/);
+    expect(all()).toEqual([]);
   });
 });
 
