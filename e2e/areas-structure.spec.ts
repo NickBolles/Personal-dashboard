@@ -80,10 +80,7 @@ test("build structure: area page, inline path add, project page, decluttered ite
   await page.getByLabel("New item in Scoring engine").press("Escape");
 
   // Item page: a title with one ⋯, one primary action in its Next section, the chat as a pane (no wall of buttons).
-  await page
-    .getByTestId("children-work")
-    .getByRole("button", { name: /Cache warmup/ })
-    .click();
+  await page.getByTestId("children-work").getByRole("button", { name: "Cache warmup", exact: true }).click();
   await expect(article).toHaveAttribute("data-node-kind", "work");
   const header = article.locator("section").first();
   await expect(page.getByTestId("item-next").getByRole("button", { name: "Start focused work" })).toBeVisible();
