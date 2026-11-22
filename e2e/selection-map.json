@@ -26,6 +26,8 @@
       "scripts/e2e-server.mjs",
       "scripts/prepare-standalone.mjs",
       "scripts/e2e-select.mjs",
+      "scripts/e2e-shards.mjs",
+      "e2e/timings.json",
       "e2e/helpers.ts",
       "e2e/servers.ts",
       "e2e/onboarding.setup.ts",

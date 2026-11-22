@@ -847,6 +847,8 @@ button.wk-kpi:hover {
   cursor: text;
   min-height: 44px; /* touch */
   justify-content: center;
+  /* A long unbroken value (a URL, a pasted id) wraps instead of widening a phone page. */
+  overflow-wrap: anywhere;
 }
 .work-ui .jv-inline-read:hover {
   background: var(--surface-2);
