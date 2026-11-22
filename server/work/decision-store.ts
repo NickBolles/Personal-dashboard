@@ -344,6 +344,7 @@ function closeWithAnswer(tx: Tx, userId: string, r: Row, answer: string, state: 
       deliverAfter: target ? new Date(Date.parse(at) + DELIVERY_DELAY_MS).toISOString() : null,
       deliveredAt: null,
       deliveryError: null,
+      deliveryRun: null,
     })
     .where(eq(D.id, r.id))
     .run();
@@ -531,6 +532,7 @@ export function undoDecisionOp(tx: Tx, userId: string, op: DecisionOp) {
         deliverySession: null,
         deliverAfter: null,
         deliveryError: null,
+        deliveryRun: null,
       })
       .where(and(eq(D.id, op.closed), eq(D.userId, userId)))
       .run();

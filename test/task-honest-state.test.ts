@@ -16,6 +16,8 @@ import { CHECK_IN_TEXT, checkInTask, type TaskRunDeps } from "@/server/work/task
 import { __resetAgentRate, mintAgentToken } from "@/server/agent-access/tokens";
 import * as mcpRoute from "@/app/api/mcp/route";
 import { isStalled } from "@/lib/agent-runs";
+import { selectEscalation } from "@/lib/item-escalation";
+import { agentRuns } from "@/server/work/agent-runs";
 import { momentOf } from "@/lib/task-list";
 import type { RunEvent } from "@/lib/cw-runs";
 import type { WorkItem } from "@/lib/work";
@@ -64,6 +66,38 @@ describe("working is checked against the chat", () => {
     expect(isStalled({ ...base, chatActiveAt: new Date(Date.now() - 5 * 60_000).toISOString() })).toBe(false);
     expect(isStalled({ ...base, chatActiveAt: new Date(Date.now() - 45 * 60_000).toISOString() })).toBe(true);
     expect(isStalled(base)).toBe(true);
+  });
+
+  it("an AI action running on the task keeps it Working, with no registered run or chat turn", () => {
+    expect(rowOf(task.id).state).not.toBe("working");
+    getDb()
+      .insert(schema.aiJobs)
+      .values({
+        id: "aij_live",
+        userId: owner.id,
+        kind: "investigate",
+        subjectType: "work_item",
+        subjectId: task.id,
+        state: "running",
+        lane: "work",
+        tier: "standard",
+        idempotencyKey: "aij:live",
+        promptVersion: "investigate@1",
+        startedAt: new Date().toISOString(),
+      })
+      .run();
+    expect(rowOf(task.id).state).toBe("working");
+  });
+
+  it("the task page's escalation and the agents' own read use the chat's activity too", async () => {
+    const { runId } = registerAgentRun(owner, "devchief", { itemId: task.id, title: "Reconcile", hermesSessionId: "sess-busy" }, cid);
+    silence(runId, 60);
+    const info = () => agentRuns(owner).items[task.id];
+    expect(selectEscalation(task.id, [], info(), Date.now())).toMatchObject({ kind: "run", stalled: true });
+    const lookup = vi.fn(async () => ({ endReason: null, lastActiveAt: new Date(Date.now() - 2 * 60_000).toISOString() }));
+    await markEndedSessionRuns(new Date(), lookup);
+    expect(info()?.agentRuns?.[0]?.chatActiveAt).toBeTruthy();
+    expect(selectEscalation(task.id, [], info(), Date.now())).toBeNull();
   });
 
   it("a run whose chat has ended is Ready for review: never Working, never Stalled, and never Done", async () => {

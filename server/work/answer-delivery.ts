@@ -9,13 +9,16 @@ import * as assistant from "@/server/assistant";
 import { liveOfRun } from "@/lib/agent-runs";
 import { DELIVERY_CONFIRM_MS, decisionRef, deliveryText } from "@/lib/cw-decisions";
 import type { TimelineItem } from "@/lib/hermes";
+import { maskSecrets } from "@/server/ai/rules";
+import { maskAccountNumbers } from "@/lib/ai-redact";
 import { activeRun } from "./task-runs";
 
 /**
  * Answers reach the agent (task threads E3/E4). When the owner answers a question, the answer is recorded at once
  * and marked for delivery to the task's chat (decision-store.ts closeWithAnswer). Once the Undo window has passed,
  * this pass posts it there: guidance for the turn in flight, else the next message. It reads "Delivered" only after
- * the chat confirms it: the message read back in the conversation, or the running turn accepting the guidance.
+ * the chat confirms it: the message read back in the conversation, or the turn it was given to ending without
+ * handing it back unread (then it is posted as the next message).
  *
  * The owner's answer is the go-ahead for this one message. Nothing else is sent: an answer that was undone in time
  * is never posted, and a chat with a turn paused on an approval is waited for, not interrupted.
@@ -30,12 +33,15 @@ const GIVE_UP_MS = 30 * 60_000;
 export type DeliveryDeps = {
   startRun: typeof assistant.startRun;
   steerRun: typeof assistant.steerRun;
+  /** The run's state as Hermes has it now (its local record can lag when no chat is open). */
+  reconcile: (runId: string) => Promise<{ status: string; pendingSteer?: string }>;
   sessionDetail: (user: CurrentUser, id: string) => Promise<{ timeline: TimelineItem[] }>;
   user: (id: string) => CurrentUser | null;
 };
 const defaultDeps: DeliveryDeps = {
   startRun: (...args) => assistant.startRun(...args),
   steerRun: (...args) => assistant.steerRun(...args),
+  reconcile: (runId) => assistant.reconcileRun(runId),
   sessionDetail: (user, id) => assistant.getSessionDetail(user, id),
   user: (id) => userById(id),
 };
@@ -82,24 +88,34 @@ async function pass(now: Date, deps: DeliveryDeps) {
       continue;
     }
     const text = deliveryText(decisionRef(row.seq), row.question, answer);
+    // What the chat will show: the assistant masks secrets and account numbers before anything is sent.
+    const outbound = maskAccountNumbers(maskSecrets(text).text);
     const answeredAt = Date.parse(row.answeredAt ?? at);
     if (row.deliveryState === "pending") {
-      const running = activeRun(row.userId, session);
+      let running = activeRun(row.userId, session);
       try {
+        if (running) {
+          // Jarvis's record of the turn can lag (no chat open, worker off): ask Hermes before steering or waiting.
+          const fresh = await deps.reconcile(running.runId).catch(() => null);
+          const live = liveOfRun(fresh?.status ?? running.status);
+          if (live !== "running" && live !== "waiting") running = null;
+          else if (fresh) running = { ...running, status: fresh.status };
+        }
         if (running && liveOfRun(running.status) === "waiting") {
           // A turn paused on an approval: wait for it rather than interrupt it.
           set(row.id, { deliverAfter: new Date(now.getTime() + RETRY_MS).toISOString() }, "pending");
           continue;
         }
         if (running) {
-          // The turn in flight takes it as guidance: its acceptance is the confirmation.
+          // The turn in flight takes it as guidance. Accepted means queued, not read: it counts as delivered once
+          // that turn ends without handing it back (pending_steer).
           await deps.steerRun(user, running.runId, text, `answer:${row.id}`);
-          set(row.id, { deliveryState: "delivered", deliveredAt: at, deliveryError: null }, "pending");
-          delivered++;
+          set(row.id, { deliveryState: "sent", deliveryRun: running.runId, deliverAfter: at, deliveryError: null }, "pending");
+          sent++;
         } else {
           await deps.startRun(user, { sessionId: session, input: text, idempotencyKey: `answer:${row.id}` }, `answer:${row.id}`);
           // Read back on a later pass: the message has to be in the conversation.
-          set(row.id, { deliveryState: "sent", deliverAfter: at, deliveryError: null }, "pending");
+          set(row.id, { deliveryState: "sent", deliveryRun: null, deliverAfter: at, deliveryError: null }, "pending");
           sent++;
         }
         audit({
@@ -120,10 +136,29 @@ async function pass(now: Date, deps: DeliveryDeps) {
       }
       continue;
     }
-    // Sent: read it back.
+    // Sent as guidance: wait for that turn to end, then see whether it used it.
+    if (row.deliveryRun) {
+      try {
+        const run = await deps.reconcile(row.deliveryRun);
+        const live = liveOfRun(run.status);
+        if (live === "running" || live === "waiting") continue;
+        const handedBack = !!run.pendingSteer && (run.pendingSteer.includes(outbound) || run.pendingSteer.includes(answer));
+        if (handedBack) {
+          // The turn ended before reading it: post it as the next message instead.
+          set(row.id, { deliveryState: "pending", deliveryRun: null, deliverAfter: at }, "sent");
+        } else {
+          set(row.id, { deliveryState: "delivered", deliveredAt: at }, "sent");
+          delivered++;
+        }
+      } catch {
+        /* the turn could not be read: try again next pass */
+      }
+      continue;
+    }
+    // Sent as a message: read it back.
     try {
       const detail = await deps.sessionDetail(user, session);
-      const there = detail.timeline.some((m) => m.kind === "user" && m.text.includes(text));
+      const there = detail.timeline.some((m) => m.kind === "user" && (m.text.includes(outbound) || m.text.includes(text)));
       if (there) {
         set(row.id, { deliveryState: "delivered", deliveredAt: at }, "sent");
         delivered++;

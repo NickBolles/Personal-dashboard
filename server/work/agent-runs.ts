@@ -267,6 +267,8 @@ export function agentRuns(user: CurrentUser, items: WorkItem[] = listItems(user.
         hermesSessionId: r.hermesSessionId,
         delegationId: r.delegationId,
         transcriptPath: r.transcriptPath,
+        // Recent activity in its chat keeps it from reading Stalled everywhere it is shown (lib/agent-runs.ts isStalled).
+        ...(r.chatActiveAt ? { chatActiveAt: r.chatActiveAt } : {}),
         children: parseRunChildren(r.childrenJson),
       });
       external.set(r.itemId, list);
@@ -312,7 +314,8 @@ export function agentRuns(user: CurrentUser, items: WorkItem[] = listItems(user.
     const report = reports.get(i.id) ?? null;
     if (!who && !samples.length && !prs.length && !report) continue;
     const agg = aggregateRunState(samples);
-    const chatTurn = samples.filter((s) => s.source === "chat" && s.live === "running").sort((a, b) => b.at.localeCompare(a.at))[0];
+    // A turn in one of its chats, or an AI action on it, is work in flight even with no registered run.
+    const chatTurn = samples.filter((s) => (s.source === "chat" || s.source === "job") && s.live === "running").sort((a, b) => b.at.localeCompare(a.at))[0];
     const kids = kidsOf.get(i.id) ?? [];
     out[i.id] = {
       itemId: i.id,

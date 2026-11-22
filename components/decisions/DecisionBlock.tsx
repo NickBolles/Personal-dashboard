@@ -36,6 +36,9 @@ import {
 import { Markdown } from "@/components/markdown/Markdown";
 import { ageLabel, decisionKeyAction, defaultLine, deferUntil, safeEvidenceHref } from "@/lib/coordinator/needs";
 import { isAppPath } from "@/lib/decisions";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/client/api";
+import type { DecisionDelivery } from "@/lib/cw-decisions";
 import {
   aboutItem,
   answerGate,
@@ -125,8 +128,8 @@ export function DecisionReceiptLine({
             <span className="sr-only">answered: </span>
             <span className="dcs-rc-q">{shortQuestion(view)}</span>
             <span className="dcs-rc-a"> · {choice}</span>
-            {/* Until Undo is gone the answer has not left Jarvis; then it is posted to the agent's chat. */}
-            {receipt.sending ? <span className="dcs-rc-s"> · {receipt.undoable ? "Sending" : "Sent to the agent"}</span> : null}
+            {/* Until Undo is gone the answer has not left Jarvis; then the line follows its actual delivery. */}
+            {receipt.sending ? <DeliveryWord refId={view.ref} undoable={receipt.undoable} /> : null}
           </span>
         }
         actions={
@@ -614,6 +617,28 @@ export function DecisionCard({
     >
       <DecisionCardView view={view} card={card} flow={flow} now={now} {...rest} />
     </div>
+  );
+}
+
+const DELIVERY_WORD = { pending: "Sending", sent: "Sending", delivered: "Delivered", failed: "Not delivered" } as const;
+
+/** Where the answer stands: Sending while it can be undone or is on its way, then Delivered or Not delivered. */
+function DeliveryWord({ refId, undoable }: { refId: string; undoable: boolean }) {
+  const q = useQuery({
+    queryKey: ["work", "decisions", "delivery", refId],
+    queryFn: ({ signal }) => api.get<{ delivery: DecisionDelivery | null }>(`/api/work/decisions/${encodeURIComponent(refId)}/delivery`, signal),
+    enabled: !undoable,
+    refetchInterval: (query) => {
+      const state = query.state.data?.delivery?.state;
+      return state === "delivered" || state === "failed" ? false : 5_000;
+    },
+  });
+  const state = undoable ? "pending" : (q.data?.delivery?.state ?? "pending");
+  return (
+    <span className="dcs-rc-s" data-delivery={state}>
+      {" "}
+      · {DELIVERY_WORD[state]}
+    </span>
   );
 }
 
