@@ -2148,6 +2148,8 @@ for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     const now = await freezeSkylightClock(page);
     await page.route(/\/api\/sources\/skylight(?:\?.*)?$/, (route) => route.fulfill({ json: skylightVisual(now) }));
+    // The sidebar's area tree would list other specs' areas: a fixed tree.
+    await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
     await page.goto("/skylight");
     await page.locator("h1").first().waitFor();
     await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
