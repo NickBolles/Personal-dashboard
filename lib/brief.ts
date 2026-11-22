@@ -140,13 +140,15 @@ export type BriefOutput = z.infer<typeof briefOutput>;
 // --- Stored document (resolved refs; what a brief row holds) ---
 
 export type BriefBasis = { kind: "note" | "checkin" | "feedback" | "source"; id: string; label: string };
-export type BriefPickDoc = { actionId: string; title: string; why: string; step?: string };
+/** Where a stored reference came from, so a later build can recheck it against the sharing rules of that day. */
+export type BriefOrigin = { source?: NextAction["source"]; sourceId?: string };
+export type BriefPickDoc = { actionId: string; title: string; why: string; step?: string } & BriefOrigin;
 export type BriefBlockDoc = {
   id: string;
   kind: BriefBlockKind;
   title?: string;
   text?: string;
-  actions?: { actionId: string; title: string }[];
+  actions?: ({ actionId: string; title: string } & BriefOrigin)[];
   basis?: BriefBasis[];
   /** one to three small things to do (plain text; nothing is created from them) */
   steps?: string[];
@@ -500,7 +502,13 @@ export const briefAssistSchema = z
   .strict();
 export type BriefAssistInput = z.infer<typeof briefAssistSchema>;
 
-export const briefNoteCreateSchema = z.object({ text: z.string().trim().min(3).max(BRIEF_LIMITS.note) }).strict();
+/** `kind` is for putting a forgotten note back as it was (Undo); a note the model proposed is restored by its state instead. */
+export const briefNoteCreateSchema = z
+  .object({
+    text: z.string().trim().min(3).max(BRIEF_LIMITS.note),
+    kind: z.enum(BRIEF_NOTE_KINDS).optional(),
+  })
+  .strict();
 export const briefNotePatchSchema = z
   .object({
     text: z.string().trim().min(3).max(BRIEF_LIMITS.note).optional(),

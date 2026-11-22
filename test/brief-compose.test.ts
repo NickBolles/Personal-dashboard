@@ -51,7 +51,7 @@ describe("rules brief", () => {
     const now = [action("todos:a", "Renew passport", ["Due today", "Pinned by you"]), action("todos:b", "Call plumber")];
     const later = [action("todos:c", "C"), action("todos:d", "D"), action("todos:e", "E")];
     const doc = rulesBrief({ ...base, now, later, totals: { now: 2, today: 3, overdue: 1, open: 9 } });
-    expect(doc.first).toEqual({ actionId: "todos:a", title: "Renew passport", why: "Due today. Pinned by you" });
+    expect(doc.first).toEqual({ actionId: "todos:a", title: "Renew passport", why: "Due today. Pinned by you", source: "todos", sourceId: "a" });
     expect(doc.then.map((p) => p.actionId)).toEqual(["todos:b", "todos:c", "todos:d"]);
     expect(doc.headline).toBe("2 things need you first");
     expect(doc.lead).toContain("1 item overdue.");
@@ -102,8 +102,15 @@ describe("resolving a model answer", () => {
       }),
       maps(),
     );
-    expect(r.doc.first).toEqual({ actionId: "todos:a", title: "Renew passport", why: "The trip depends on it.", step: "Find the old passport." });
-    expect(r.doc.then).toEqual([{ actionId: "todos:b", title: "Call plumber", why: "Quick." }]);
+    expect(r.doc.first).toEqual({
+      actionId: "todos:a",
+      title: "Renew passport",
+      why: "The trip depends on it.",
+      step: "Find the old passport.",
+      source: "todos",
+      sourceId: "a",
+    });
+    expect(r.doc.then).toEqual([{ actionId: "todos:b", title: "Call plumber", why: "Quick.", source: "todos", sourceId: "b" }]);
     expect(r.dropped).toBe(2);
   });
 
@@ -138,7 +145,7 @@ describe("resolving a model answer", () => {
     );
     expect(r.doc.blocks.map((x) => x.kind)).toEqual(["focus", "schedule", "momentum"]);
     const focus = r.doc.blocks[0]!;
-    expect(focus.actions).toEqual([{ actionId: "todos:b", title: "Call plumber" }]);
+    expect(focus.actions).toEqual([{ actionId: "todos:b", title: "Call plumber", source: "todos", sourceId: "b" }]);
     expect(focus.basis?.map((x) => x.kind)).toEqual(["note", "checkin"]);
     expect(r.doc.blocks[1]).toEqual({ id: "w-schedule", kind: "schedule", text: "Meetings after lunch." });
     expect(r.doc.blocks[2]).toEqual({ id: "w-momentum", kind: "momentum" });

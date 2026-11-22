@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import {
@@ -17,6 +17,7 @@ import {
   MenuButton,
   PageHeader,
   Pill,
+  Toast,
   Toggle,
   useAnchoredMenu,
   useOnline,
@@ -24,9 +25,13 @@ import {
 } from "@/components/ui";
 import { BRIEF_LIMITS, BRIEF_NOTE_KIND_LABEL, briefImportSchema, type BriefNoteView, type BriefSettings } from "@/lib/brief";
 import { BRIEF_KEY, BRIEF_NOTES_KEY } from "@/components/brief/useBrief";
+import "@/components/brief/brief.css";
 
 type SettingsRes = { settings: BriefSettings; ai: { available: boolean; reason?: string } };
 type Patch = Partial<Omit<BriefSettings, "share">> & { share?: Partial<BriefSettings["share"]> };
+/** One pending Undo at a time: what was done, and how to put it back. */
+type Undo = { message: string; back: () => Promise<unknown> } | null;
+const noteUrl = (id: string) => `/api/brief/notes/${encodeURIComponent(id)}`;
 
 const SHARE: { key: keyof BriefSettings["share"]; label: string }[] = [
   { key: "todos", label: "Todos" },
@@ -49,6 +54,16 @@ export function BriefSettingsView() {
   const [resetOpen, setResetOpen] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [buildAt, setBuildAt] = useState<string | null>(null);
+  const [forget, setForget] = useState<BriefNoteView | null>(null);
+  const [forgetting, setForgetting] = useState(false);
+  const [undo, setUndo] = useState<Undo>(null);
+
+  // An Undo offer lasts 8 seconds.
+  useEffect(() => {
+    if (!undo) return;
+    const t = window.setTimeout(() => setUndo(null), 8000);
+    return () => window.clearTimeout(t);
+  }, [undo]);
 
   const s = useQuery({ queryKey: ["brief", "settings"], queryFn: () => api.get<SettingsRes>("/api/brief/settings") });
   const n = useQuery({ queryKey: BRIEF_NOTES_KEY, queryFn: () => api.get<{ notes: BriefNoteView[] }>("/api/brief/notes") });
@@ -69,6 +84,42 @@ export function BriefSettingsView() {
     try {
       await run();
       toast(ok, "ok");
+      refresh();
+    } catch (e) {
+      toast((e as Error).message, "danger");
+    }
+  };
+
+  /** A change to one note: saved, then offered back with Undo. */
+  const change = async (run: () => Promise<unknown>, message: string, back: () => Promise<unknown>) => {
+    setUndo(null);
+    try {
+      await run();
+      await n.refetch();
+      refresh();
+      setUndo({ message, back });
+    } catch (e) {
+      toast((e as Error).message, "danger");
+    }
+  };
+  const setState = (x: BriefNoteView, state: BriefNoteView["state"], message: string) =>
+    change(
+      () => api.patch(noteUrl(x.id), { state }),
+      message,
+      () => api.patch(noteUrl(x.id), { state: x.state }),
+    );
+  /** A note the model proposed is kept as dismissed, so Undo makes it active again; a person's own note is deleted, so Undo writes it back. */
+  const forgetNote = (x: BriefNoteView) =>
+    change(
+      () => api.del(noteUrl(x.id)),
+      "Forgotten",
+      () => (x.origin === "learned" ? api.patch(noteUrl(x.id), { state: "active" }) : api.post("/api/brief/notes", { text: x.text, kind: x.kind })),
+    );
+  const runUndo = async (u: NonNullable<Undo>) => {
+    setUndo(null);
+    try {
+      await u.back();
+      await n.refetch();
       refresh();
     } catch (e) {
       toast((e as Error).message, "danger");
@@ -168,18 +219,10 @@ export function BriefSettingsView() {
                     {x.text}
                     {x.evidence ? <span className="block text-xs text-muted">{x.evidence}</span> : null}
                   </span>
-                  <Button
-                    size="sm"
-                    variant="agent"
-                    onClick={() => void note(() => api.patch(`/api/brief/notes/${x.id}`, { state: "active" }).then(() => n.refetch()), "Kept")}
-                  >
+                  <Button size="sm" variant="agent" onClick={() => void setState(x, "active", "Kept")}>
                     Keep<span className="sr-only">: {x.text}</span>
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => void note(() => api.patch(`/api/brief/notes/${x.id}`, { state: "dismissed" }).then(() => n.refetch()), "Dismissed")}
-                  >
+                  <Button size="sm" variant="ghost" onClick={() => void setState(x, "dismissed", "Dismissed")}>
                     Not true<span className="sr-only">: {x.text}</span>
                   </Button>
                 </li>
@@ -192,8 +235,8 @@ export function BriefSettingsView() {
                 <li key={x.id} className="flex flex-wrap items-center gap-2 py-1.5 text-sm">
                   <span className="min-w-0 flex-1">{x.text}</span>
                   <Pill tone={x.origin === "learned" ? "ai" : "neutral"}>{BRIEF_NOTE_KIND_LABEL[x.kind]}</Pill>
-                  <Button size="sm" variant="ghost" onClick={() => void note(() => api.del(`/api/brief/notes/${x.id}`).then(() => n.refetch()), "Forgotten")}>
-                    Forget<span className="sr-only">: {x.text}</span>
+                  <Button size="sm" variant="ghost" disabled={!online} onClick={() => setForget(x)}>
+                    Forget…<span className="sr-only">: {x.text}</span>
                   </Button>
                 </li>
               ))}
@@ -231,6 +274,33 @@ export function BriefSettingsView() {
       </Card>
 
       <Dialog
+        open={forget !== null}
+        onClose={() => setForget(null)}
+        title="Forget this note?"
+        description={forget?.text}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setForget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              loading={forgetting}
+              onClick={async () => {
+                if (!forget) return;
+                setForgetting(true);
+                await forgetNote(forget);
+                setForgetting(false);
+                setForget(null);
+              }}
+            >
+              Forget
+            </Button>
+          </>
+        }
+      />
+
+      <Dialog
         open={resetOpen}
         onClose={() => setResetOpen(false)}
         title="Forget everything the brief knows?"
@@ -255,6 +325,12 @@ export function BriefSettingsView() {
           </>
         }
       />
+
+      {undo ? (
+        <div className="brief-undo">
+          <Toast tone="ok" message={undo.message} action={{ label: "Undo", onClick: () => void runUndo(undo) }} />
+        </div>
+      ) : null}
     </div>
   );
 }

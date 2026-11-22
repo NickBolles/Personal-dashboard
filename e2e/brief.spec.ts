@@ -235,6 +235,21 @@ test("settings list what it knows, with export, import and a confirmed reset", a
     .toBe(false);
   await api(page, "put", "/api/brief/settings", { share: { calendar: true } });
 
+  // Forgetting one note asks first, and Undo puts it back.
+  await notes.getByRole("button", { name: /^Forget/ }).click();
+  const one = page.getByRole("dialog", { name: "Forget this note?" });
+  await expect(one).toContainText("Workouts matter more than inbox zero");
+  expect(await serious(page)).toEqual([]);
+  await one.getByRole("button", { name: "Cancel" }).click();
+  await expect(notes.getByText("Workouts matter more than inbox zero", { exact: true })).toBeVisible();
+  await notes.getByRole("button", { name: /^Forget/ }).click();
+  await one.getByRole("button", { name: "Forget", exact: true }).click();
+  await expect(one).toHaveCount(0);
+  await expect(page.getByText("No notes yet.")).toBeVisible();
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(notes.getByText("Workouts matter more than inbox zero", { exact: true })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+
   await page.getByRole("button", { name: "Import, export or reset notes" }).click();
   await page.getByRole("menuitem", { name: "Forget everything…" }).click();
   const dialog = page.getByRole("dialog", { name: "Forget everything the brief knows?" });

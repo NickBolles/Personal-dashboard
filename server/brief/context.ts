@@ -9,9 +9,20 @@ import { lookup } from "@/server/smart/store";
 import { maskSecrets } from "@/server/ai/rules";
 import { maskAccountNumbers } from "@/lib/ai-redact";
 import { addDays, localDate, localMinutes } from "@/lib/time";
-import { briefRef, shortHash, type BriefNoteView, type BriefSettings } from "@/lib/brief";
+import { briefRef, shortHash, type BriefBlockDoc, type BriefNoteView, type BriefOrigin, type BriefSettings } from "@/lib/brief";
 import { listWorkouts } from "@/server/workouts";
-import { getBriefSettings, listNotes, parseDoc, parseOutcomes, parseTicks, recentBriefs, recentFeedback, tickedSteps, type RecentFeedback } from "./store";
+import {
+  briefDocs,
+  getBriefSettings,
+  listNotes,
+  parseDoc,
+  parseOutcomes,
+  parseTicks,
+  recentBriefs,
+  recentFeedback,
+  tickedSteps,
+  type RecentFeedback,
+} from "./store";
 import { recentJournal, type JournalEntry } from "./journal";
 
 /**
@@ -25,6 +36,12 @@ import { recentJournal, type JournalEntry } from "./journal";
  * credential-looking text (masked per line). `events`, `journal`, `focus` and
  * `exceptions` are what the PERSON sees in the widgets; `renderContext` applies
  * the share switches before anything goes to the model.
+ *
+ * Earlier briefs are quoted back (how picks went, small steps, feedback). Each
+ * quote is checked against the rules as they are NOW, not as they were the day
+ * it was written: a task from a source since switched off, or work since moved
+ * into an AI-excluded area, is left out, and so is anything Jarvis can no
+ * longer place.
  */
 
 export const CANDIDATE_LIMIT = 40;
@@ -141,7 +158,7 @@ export async function briefContext(user: CurrentUser, now = new Date()): Promise
 
   // What the model may pick from: never Finance, never AI-excluded work, only shared sources.
   const items = can(user, "work.use") ? lookup(user) : null;
-  const allowed = (a: NextAction) => {
+  const allowed = (a: Pick<NextAction, "source" | "sourceId">) => {
     if (a.source === "finance") return false;
     const key = SOURCE_SHARE[a.source];
     if (key && !share[key]) return false;
@@ -214,24 +231,54 @@ export async function briefContext(user: CurrentUser, now = new Date()): Promise
   const householdKnown = payload.sources.some((s) => s.source === "home_assistant" && (s.state === "ok" || s.state === "stale"));
   const exceptions = payload.glance.homeExceptions.slice(0, 6);
 
+  // History: a stored reference may be quoted again only if it may go out today. The action as it is
+  // now decides; when it is gone, where it came from (kept with the reference) does; with neither, no.
+  const known = new Map([...attention.completed, ...attention.overdue, ...open].map((a) => [a.id, a]));
+  const mayQuote = (p: { actionId: string } & BriefOrigin) => {
+    const a = known.get(p.actionId);
+    if (a) return allowed(a);
+    if (!p.source || !p.sourceId) return false;
+    if (p.source === "work" && !items) return false;
+    return allowed({ source: p.source, sourceId: p.sourceId });
+  };
+  // A written card: every task it pointed at, and every input it rested on, must still be shared.
+  const cardOk = (b: BriefBlockDoc) =>
+    (b.actions ?? []).every(mayQuote) &&
+    (b.basis ?? []).every((x) => (x.kind === "checkin" ? share.checkins : x.kind === "source" ? share[x.id as keyof typeof share] === true : true));
+
   const earlier = recentBriefs(user.id, today, 7).slice(0, 5);
   const stepOutcomes: StepOutcome[] = earlier.flatMap((row) => {
     const ticks = parseTicks(row);
     return parseDoc(row)
-      .blocks.filter((b) => b.steps?.length)
+      .blocks.filter((b) => b.steps?.length && cardOk(b))
       .map((b) => ({ date: row.date, kind: b.kind, title: b.title ?? "", done: tickedSteps(ticks, b.id, b.steps!.length).length, total: b.steps!.length }));
   });
   const outcomes: PickOutcome[] = earlier
     .map((row) => {
       const doc = parseDoc(row);
       const done = parseOutcomes(row);
-      const picks = [...(doc.first ? [{ ...doc.first, first: true }] : []), ...doc.then.map((p) => ({ ...p, first: false }))];
+      const picks = [...(doc.first ? [{ ...doc.first, first: true }] : []), ...doc.then.map((p) => ({ ...p, first: false }))].filter(mayQuote);
       return { date: row.date, picks: picks.map((p) => ({ title: p.title, first: p.first, done: Boolean(done[p.actionId]) })) };
     })
     .filter((o) => o.picks.length);
 
   const notes = listNotes(user.id, ["active"]);
-  const feedback = recentFeedback(user.id, today);
+  // Feedback quotes what it was about: the same check, on the pick or card it was given on.
+  const said = recentFeedback(user.id, today);
+  const docs = briefDocs(user.id, [...new Set(said.map((f) => f.briefId))]);
+  const feedback = said.flatMap((f): RecentFeedback[] => {
+    const doc = docs.get(f.briefId);
+    if (!doc) return [];
+    const picks = [doc.first, ...doc.then].filter((p) => p !== null);
+    // On the brief as a whole: the verdict and their note stay; the headline is quoted only if every pick it could name still may be.
+    if (f.targetKey === "brief") return [picks.every(mayQuote) ? f : { ...f, excerpt: "" }];
+    if (f.targetKey.startsWith("pick:")) {
+      const pick = picks.find((p) => p.actionId === f.targetKey.slice(5));
+      return pick && mayQuote(pick) ? [f] : [];
+    }
+    const card = doc.blocks.find((b) => `block:${b.id}` === f.targetKey);
+    return card && cardOk(card) ? [f] : [];
+  });
 
   const basedOn: string[] = [];
   const sources = new Set(candidates.map((c) => c.action.source));
@@ -364,7 +411,7 @@ export function renderContext(c: BriefContext): string {
       "their feedback on recent briefs, newest first: id | date | verdict | what it was about | their note",
       c.feedback.map(
         (f) =>
-          `${feedbackRef(f.id)} | ${f.date} | ${f.verdict === "up" ? "right call" : "wrong call"} | ${f.kind}: ${line(f.excerpt, 140)} | ${line(f.note, 300) || "-"}`,
+          `${feedbackRef(f.id)} | ${f.date} | ${f.verdict === "up" ? "right call" : "wrong call"} | ${f.kind}${f.excerpt ? `: ${line(f.excerpt, 140)}` : ""} | ${line(f.note, 300) || "-"}`,
       ),
     ),
     block(

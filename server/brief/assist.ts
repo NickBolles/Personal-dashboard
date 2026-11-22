@@ -22,6 +22,7 @@ import {
   type BriefImprovementView,
 } from "@/lib/brief";
 import { briefContext, line, type BriefContext } from "./context";
+import { getBriefSettings } from "./store";
 import { canImprove, eligibleAreas, improveDeps, launch, priorRow, recentRows, resultFor, stillOpen, type ImproveDeps, type ImprovementRow } from "./improve";
 
 /**
@@ -138,12 +139,16 @@ export function assistForAction(ax: AssistIndex, c: BriefContext, a: NextAction)
   return { intent, target, ...(was ? { request: was.request } : {}) };
 }
 
-/** The sparkle for an initiative: offered while it has no next action (that is the suggestion), and kept once asked. */
-export function assistForItem(ax: AssistIndex, user: CurrentUser, item: WorkItem): BriefAssistView | undefined {
+/**
+ * The sparkle for an initiative: offered while it has no next action (that is the suggestion) and
+ * Areas are shared with the model, and kept once asked (what was asked then is read from Jarvis'
+ * own records; nothing more is sent).
+ */
+export function assistForItem(ax: AssistIndex, c: Pick<BriefContext, "share">, user: CurrentUser, item: WorkItem): BriefAssistView | undefined {
   if (!ax.available) return undefined;
   const target = { kind: "item" as const, id: item.id };
   const was = ax.asked.get(targetKey(target));
-  if (!was && item.nextAction.trim()) return undefined;
+  if (!was && (!c.share.work || item.nextAction.trim())) return undefined;
   if (areaPolicyFor(user.id, item.id) === "excluded" || maskSecrets(item.title).masked.length) return undefined;
   return { intent: was?.intent ?? "steps", target, ...(was ? { request: was.request } : {}) };
 }
@@ -211,6 +216,8 @@ export async function startAssist(
   } else {
     const item = byId.get(body.target.id);
     if (!item || item.archived || !WORK_KINDS.has(item.kind)) throw new HttpError(404, "not_found", "That isn't open any more");
+    // The same switch that keeps Areas out of the brief keeps an initiative from being sent here.
+    if (!getBriefSettings(user.id).share.work) throw new HttpError(409, "not_shareable", "This one isn't shared with AI");
     title = item.title;
     intent = "steps";
     where = "Areas";

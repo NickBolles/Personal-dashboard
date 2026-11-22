@@ -277,7 +277,16 @@ export function setFeedback(userId: string, input: BriefFeedbackInput): { feedba
   return { feedback: feedbackFor(userId, row.id), previous: prior ? feedbackView(prior) : null };
 }
 
-export type RecentFeedback = { id: string; date: string; kind: string; verdict: BriefVerdict; note: string; excerpt: string };
+export type RecentFeedback = {
+  id: string;
+  date: string;
+  kind: string;
+  verdict: BriefVerdict;
+  note: string;
+  excerpt: string;
+  briefId: string;
+  targetKey: string;
+};
 
 /** Feedback from the last `days` days, newest first (bounded: it goes into the next build's context). */
 export function recentFeedback(userId: string, today: string, days = 14, limit = 20): RecentFeedback[] {
@@ -288,7 +297,29 @@ export function recentFeedback(userId: string, today: string, days = 14, limit =
     .orderBy(desc(F.createdAt))
     .limit(limit)
     .all()
-    .map((r) => ({ id: r.id, date: r.date, kind: r.targetKind, verdict: r.verdict as BriefVerdict, note: r.note, excerpt: r.excerpt }));
+    .map((r) => ({
+      id: r.id,
+      date: r.date,
+      kind: r.targetKind,
+      verdict: r.verdict as BriefVerdict,
+      note: r.note,
+      excerpt: r.excerpt,
+      briefId: r.briefId,
+      targetKey: r.targetKey,
+    }));
+}
+
+/** The stored documents of this person's briefs, by id (to look up what a piece of feedback was about). */
+export function briefDocs(userId: string, ids: string[]): Map<string, BriefDoc> {
+  if (!ids.length) return new Map();
+  return new Map(
+    getDb()
+      .select()
+      .from(B)
+      .where(and(eq(B.userId, userId), inArray(B.id, ids)))
+      .all()
+      .map((r) => [r.id, parseDoc(r)]),
+  );
 }
 
 // ---------------------------------------------------------------- notes ("what Jarvis knows about you")

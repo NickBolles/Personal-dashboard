@@ -80,7 +80,7 @@ What comes back is read from Jarvis' own records, never from Hermes on read: the
 
 Rules that hold:
 
-- Never offered on, and refused for: Finance, work in an AI-excluded area, a source switched off under Settings → Brief → Shared with the model, and a title that looks like a credential.
+- Never offered on, and refused for: Finance, work in an AI-excluded area, a source switched off under Settings → Brief → Shared with the model (for an initiative that is "Areas and initiatives"), and a title that looks like a credential.
 - Only that one task is sent. No other row, no brief content, check-ins or notes ride along.
 - A second tap on a row that is already being looked into returns the same request: one agent per row.
 - **Undo** stops the run and archives the conversation, and the item too if Jarvis made it for this. It cannot reverse what the agent already did elsewhere.
@@ -121,6 +121,8 @@ The runner's import guard (`test/ai-rules.test.ts`) lists `@/server/brief` as a 
 
 Nothing is learned silently. There are five inputs. Notes and feedback are listed and removable; check-ins can be switched off for the model; pick outcomes live on each stored brief and expire with it (60 days).
 
+What an earlier brief said is quoted to the next build only under today's rules, not the rules of the day it was written. A past pick, the feedback given on it, and a card with its small steps are left out once their source is switched off or the work has moved into an AI-excluded area, and so is a reference Jarvis can no longer place. Feedback on a brief as a whole keeps the verdict and your note; its headline is quoted only while every pick of that brief still may be.
+
 1. **Notes** ("Deep work before 10", "Family dinner is not movable"). Up to 40, used from the next build. They come from proposals you keep and from an import; there is deliberately no "teach it" form on the page or in settings (the owner had it removed, 2026-11-21). `POST /api/brief/notes` still accepts one.
 2. **Thumbs on a pick, a card or the whole brief.** "Wrong call" asks what was off; that sentence is quoted to the next builds for 14 days. One reaction per target; tap again to remove; every change offers Undo.
 3. **Check-ins.** Jarvis used to hold only today's Daily Compass answer. Each day's validated answer (summary, priorities, and the new optional `tomorrow`: the one thing the check-in named for the next day) is now copied to a journal (`compass_entries`) when it is read, so the brief can look back. Only what the check-in recorded; nothing is invented. The summary is kept once the check-in is complete (before that it is only a status line). The journal has no screen of its own yet and "Forget everything" does not clear it.
@@ -129,7 +131,7 @@ Nothing is learned silently. There are five inputs. Notes and feedback are liste
 
 From these the model may propose at most three lasting notes per build, each with a kind (value, principle, driver, pattern) ("Prefers one deep block before noon", with its evidence). A proposal is dashed teal and is **not used until you keep it**. "Not true" dismisses it and it is never proposed again. At most six wait at a time. The prompt forbids proposals about money or other people's private matters, and anything from a single data point.
 
-Settings → Brief lists everything it knows, with import, export (`jarvis-brief-profile.json`) and "Forget everything".
+Settings → Brief lists everything it knows, with import, export (`jarvis-brief-profile.json`) and "Forget everything". Forgetting one note asks first and offers Undo, as do Keep and Not true; "Forget everything" asks first and cannot be undone.
 
 ## Storage
 

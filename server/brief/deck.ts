@@ -119,7 +119,7 @@ export function briefDeck(user: CurrentUser, c: BriefContext, picked: Set<string
       ...card(
         "initiatives",
         live.map((i) => {
-          const assist = assistForItem(ax, user, i);
+          const assist = assistForItem(ax, c, user, i);
           return {
             id: i.id,
             title: i.title,

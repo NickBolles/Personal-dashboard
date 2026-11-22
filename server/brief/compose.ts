@@ -42,7 +42,13 @@ export type ComposeInput = {
   hasTraining?: boolean;
 };
 
-const pick = (a: NextAction): BriefPickDoc => ({ actionId: a.id, title: a.title, why: (a.why ?? []).slice(0, 2).join(". ") });
+const pick = (a: NextAction): BriefPickDoc => ({
+  actionId: a.id,
+  title: a.title,
+  why: (a.why ?? []).slice(0, 2).join(". "),
+  source: a.source,
+  sourceId: a.sourceId,
+});
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
@@ -128,7 +134,14 @@ export function resolveOutput(out: BriefOutput, maps: ResolveMaps): Resolved {
     }
     used.add(action.id);
     const step = plain(p.data.step, BRIEF_LIMITS.step);
-    return { actionId: action.id, title: action.title, why: plain(p.data.why, BRIEF_LIMITS.why), ...(step ? { step } : {}) };
+    return {
+      actionId: action.id,
+      title: action.title,
+      why: plain(p.data.why, BRIEF_LIMITS.why),
+      ...(step ? { step } : {}),
+      source: action.source,
+      sourceId: action.sourceId,
+    };
   };
 
   const picks = [toPick(out.first), ...out.then.map(toPick)].filter((p): p is BriefPickDoc => p !== null);
@@ -165,7 +178,7 @@ export function resolveOutput(out: BriefOutput, maps: ResolveMaps): Resolved {
       .map((r) => maps.byRef.get(r))
       .filter((a): a is NextAction => Boolean(a))
       .slice(0, BRIEF_LIMITS.blockRefs)
-      .map((a) => ({ actionId: a.id, title: a.title }));
+      .map((a) => ({ actionId: a.id, title: a.title, source: a.source, sourceId: a.sourceId }));
     const basis = [...new Set(b.data.basis ?? [])]
       .filter((id) => BRIEF_BASIS.test(id))
       .map((id) => maps.basis.get(id))
