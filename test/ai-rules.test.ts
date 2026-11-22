@@ -309,7 +309,9 @@ describe("credentials and integration isolation (static import graph)", () => {
       }
       // Dynamic imports: only allowlisted lazy boundaries; integration credentials stay isolated.
       for (const m of src.matchAll(/import\(\s*["']([^"']+)["']\s*\)/g)) {
-        if (!["@/server/context", "@/integrations/home-assistant/client", "./jobs", "./settings"].includes(m[1]!))
+        // "@/server/brief" is the daily brief's reviewed boundary (docs/brief.md): it reads the person's already-scoped
+        // Home selection, never sends Finance or AI-excluded work, and masks every line (test/brief.test.ts).
+        if (!["@/server/context", "@/server/brief", "@/integrations/home-assistant/client", "./jobs", "./settings"].includes(m[1]!))
           offenders.push(`${path.relative(root, f)} → import(${m[1]})`);
       }
     }

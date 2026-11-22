@@ -10,6 +10,7 @@ import {
   FlagIcon,
   HomeIcon,
   HouseIcon,
+  SunIcon,
   TodoIcon,
   ToolIcon,
   WalletIcon,
@@ -51,6 +52,7 @@ export const PRIMARY: Dest[] = [
 ];
 
 export const DESTINATIONS: Dest[] = [
+  { key: "brief", href: "/brief", label: "Brief", icon: SunIcon, match: (p) => p === "/brief", caps: ["brief.use"] },
   RESUME,
   {
     key: "workouts",

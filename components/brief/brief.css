@@ -1,0 +1,1419 @@
+/*
+ * Daily brief (docs/brief.md). Tokens only.
+ *
+ * The page opens under a sky that follows the time of day (dawn, day, dusk,
+ * night), drawn from the orb, action and agent hues. That wash is the one place
+ * a gradient sits behind content (owner, 2026-11-21; docs/design-system.md rule
+ * 4). Below it the picks run as one path, then cards about the person, then
+ * cards about the day. Cards are borders, not shadows. Every animation here is
+ * switched off by the global prefers-reduced-motion rule, and each element's
+ * resting style is its final state, so nothing is hidden when motion is off.
+ */
+@layer components {
+  .brief {
+    --brief-gap: 14px;
+    --brief-r: calc(var(--r4) + 4px);
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--brief-gap) + 4px);
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  @container (min-width: 600px) {
+    .brief {
+      --brief-gap: 16px;
+    }
+  }
+
+  /* The page arrives top to bottom, once. */
+  .brief > * {
+    animation: brief-rise 520ms var(--ease) both;
+  }
+  .brief > :nth-child(2) {
+    animation-delay: 70ms;
+  }
+  .brief > :nth-child(3) {
+    animation-delay: 140ms;
+  }
+  .brief > :nth-child(4) {
+    animation-delay: 210ms;
+  }
+  .brief > :nth-child(5) {
+    animation-delay: 280ms;
+  }
+  .brief > :nth-child(n + 6) {
+    animation-delay: 350ms;
+  }
+
+  .brief-h {
+    margin: 0 2px 8px;
+    color: var(--t3);
+    font: 600 11px/1.2 var(--sans);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  /* ---- Sky ---- */
+  .brief-sky,
+  .brief-entry {
+    --sky-a: var(--o2);
+    --sky-b: var(--ac);
+    --sky-c: var(--o1);
+    --sky-sun: var(--wn);
+    --sky-k: 1;
+  }
+  .brief-sky[data-source="rules"],
+  .brief-entry[data-source="rules"] {
+    --sky-k: 0.55;
+  }
+  .brief-sky[data-phase="dawn"],
+  .brief-entry[data-phase="dawn"] {
+    --sky-a: var(--ag-mom);
+    --sky-b: var(--o3);
+    --sky-c: var(--wn);
+  }
+  .brief-sky[data-phase="dusk"],
+  .brief-entry[data-phase="dusk"] {
+    --sky-a: var(--ag-mom);
+    --sky-b: var(--o3);
+    --sky-c: var(--bad);
+  }
+  .brief-sky[data-phase="night"],
+  .brief-entry[data-phase="night"] {
+    --sky-a: var(--acb);
+    --sky-b: var(--o3);
+    --sky-c: var(--o1);
+    --sky-sun: var(--t1);
+  }
+
+  .brief-sky {
+    position: relative;
+    isolation: isolate;
+    padding: 2px 0 4px;
+  }
+  /* On a phone the sky runs edge to edge from the top of the page and fades into it. */
+  .brief-sky-bg {
+    position: absolute;
+    z-index: -1;
+    inset: -16px -16px -36px;
+    overflow: hidden;
+    pointer-events: none;
+    mask-image: linear-gradient(to bottom, black 58%, transparent);
+  }
+  .brief-sky-bg > span,
+  .brief-entry-bg > span {
+    position: absolute;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    animation: k-drift 17s ease-in-out infinite alternate;
+  }
+  .brief-sky-bg > :nth-child(1) {
+    inset: -24% -30% auto auto;
+    width: 100%;
+    background: radial-gradient(closest-side, color-mix(in srgb, var(--sky-a) calc(56% * var(--sky-k)), transparent), transparent);
+  }
+  .brief-sky-bg > :nth-child(2) {
+    inset: -22% auto auto -40%;
+    width: 96%;
+    background: radial-gradient(closest-side, color-mix(in srgb, var(--sky-b) calc(44% * var(--sky-k)), transparent), transparent);
+    animation-duration: 23s;
+    animation-direction: alternate-reverse;
+  }
+  .brief-sky-bg > :nth-child(3) {
+    inset: 22% auto auto 18%;
+    width: 78%;
+    background: radial-gradient(closest-side, color-mix(in srgb, var(--sky-c) calc(22% * var(--sky-k)), transparent), transparent);
+    animation-duration: 29s;
+  }
+  /* At night a few stars come out. */
+  .brief-sky[data-phase="night"] .brief-sky-bg::after {
+    content: "";
+    position: absolute;
+    inset: 0 0 45%;
+    background-image:
+      radial-gradient(circle at 9% 22%, var(--t1) 0 1px, transparent 1.5px), radial-gradient(circle at 23% 58%, var(--t1) 0 0.8px, transparent 1.3px),
+      radial-gradient(circle at 38% 12%, var(--t1) 0 1px, transparent 1.5px), radial-gradient(circle at 52% 44%, var(--t1) 0 0.7px, transparent 1.2px),
+      radial-gradient(circle at 67% 20%, var(--t1) 0 1px, transparent 1.5px), radial-gradient(circle at 81% 52%, var(--t1) 0 0.8px, transparent 1.3px),
+      radial-gradient(circle at 93% 14%, var(--t1) 0 1px, transparent 1.5px);
+    opacity: 0.55;
+    animation: brief-stars 4.8s ease-in-out infinite alternate;
+  }
+  /* From the tablet tier up it is a panel of its own. */
+  @media (min-width: 640px) {
+    .brief-sky {
+      overflow: hidden;
+      padding: 18px 22px 20px;
+      border-radius: calc(var(--brief-r) + 4px);
+      border: 1px solid color-mix(in srgb, var(--sky-a) 24%, var(--bd));
+      background: var(--s1);
+    }
+    .brief-sky-bg {
+      inset: 0;
+      mask-image: none;
+    }
+  }
+
+  .brief-sky-top {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .brief-hello {
+    margin-top: 2px;
+    color: var(--t2);
+    font: 500 0.9375rem/1.3 var(--sans);
+  }
+
+  /* The day's arc: a dotted path, the stretch already behind you, calendar marks and the sun. */
+  .brief-arc {
+    position: relative;
+    height: 52px;
+    margin: 12px 8px 16px;
+  }
+  @container (min-width: 600px) {
+    .brief-arc {
+      height: 64px;
+      margin-top: 8px;
+    }
+  }
+  .brief-arc::after {
+    content: "";
+    position: absolute;
+    inset: auto -8px 0;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--t3) 45%, transparent) 18%,
+      color-mix(in srgb, var(--t3) 45%, transparent) 82%,
+      transparent
+    );
+  }
+  .brief-arc > svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+  .brief-arc path {
+    fill: none;
+    vector-effect: non-scaling-stroke;
+    stroke-linecap: round;
+  }
+  .brief-arc-track {
+    stroke: color-mix(in srgb, var(--t3) 55%, transparent);
+    stroke-width: 1;
+    stroke-dasharray: 1 5;
+  }
+  .brief-arc-done {
+    stroke: color-mix(in srgb, var(--sky-sun) 70%, var(--t1));
+    stroke-width: 1.5;
+  }
+  .brief-arc > i {
+    position: absolute;
+    border-radius: 50%;
+  }
+  .brief-arc-ev {
+    width: 8px;
+    height: 8px;
+    margin: -4px 0 0 -4px;
+    border: 1.5px solid var(--t2);
+    background: var(--s0);
+  }
+  .brief-arc-ev[data-past] {
+    border-color: var(--t3);
+    opacity: 0.55;
+  }
+  .brief-arc-ev[data-next] {
+    border-color: var(--t1);
+    background: var(--t1);
+  }
+  .brief-arc-sun {
+    width: 14px;
+    height: 14px;
+    margin: -7px 0 0 -7px;
+    background: var(--sky-sun);
+    box-shadow:
+      0 0 0 4px color-mix(in srgb, var(--sky-sun) 20%, transparent),
+      0 0 26px 8px color-mix(in srgb, var(--sky-sun) 42%, transparent);
+    transition:
+      left 600ms var(--ease),
+      top 600ms var(--ease);
+  }
+  .brief-arc-sun::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 1px solid var(--sky-sun);
+    animation: brief-pulse 3.6s var(--ease) infinite;
+  }
+  .brief-arc:not([data-up]) .brief-arc-sun {
+    opacity: 0.75;
+  }
+
+  .brief-byline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+    color: var(--t3);
+    font: 12px/1.3 var(--sans);
+  }
+  .brief-byline[data-source="ai"] > :first-child {
+    color: var(--ai);
+    font-weight: 600;
+  }
+  .brief-headline {
+    margin-top: 6px;
+    color: var(--t1);
+    font: 600 1.75rem/1.14 var(--sans);
+    letter-spacing: -0.028em;
+    text-wrap: balance;
+  }
+  .brief-w {
+    display: inline-block;
+    max-width: 100%;
+    animation: brief-word 560ms var(--ease) both;
+    animation-delay: calc(var(--i) * 38ms + 140ms);
+  }
+  .brief-lead {
+    margin-top: 10px;
+    max-width: 60ch;
+    color: var(--t2);
+    font: 1rem/1.5 var(--sans);
+    text-wrap: pretty;
+  }
+  @container (min-width: 600px) {
+    .brief-headline {
+      max-width: 22ch;
+      font-size: 2.25rem;
+      line-height: 1.1;
+    }
+  }
+
+  /* Right now: a few facts on glass. */
+  .brief-now {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 14px;
+  }
+  .brief-now > li {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 26px;
+    max-width: 100%;
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--t1) 12%, transparent);
+    background: color-mix(in srgb, var(--s1) 62%, transparent);
+    color: var(--t1);
+    font: 500 0.8125rem/1.3 var(--sans);
+    backdrop-filter: blur(10px);
+  }
+  .brief-now > li:first-child::before {
+    content: "";
+    flex: none;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--sky-sun);
+  }
+  .brief-status {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    color: var(--ai);
+    font: 13px/1.3 var(--sans);
+  }
+  .brief-status[data-tone="bad"] {
+    color: var(--bad);
+  }
+  .brief-status[data-tone="wn"] {
+    color: var(--wn);
+  }
+
+  /* ---- The path through the picks ---- */
+  .brief-path > li,
+  .brief-alerts > li {
+    position: relative;
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 0 10px;
+    padding-bottom: 14px;
+  }
+  .brief-path > li:last-child,
+  .brief-alerts > li:last-child {
+    padding-bottom: 0;
+  }
+  /* The line to the next pick. */
+  .brief-path > li:not(:last-child)::before {
+    content: "";
+    position: absolute;
+    left: 13.5px;
+    top: 32px;
+    bottom: 4px;
+    width: 1px;
+    background: var(--bd2);
+  }
+  .brief-path > li[data-state="done"]:not(:last-child)::before {
+    background: color-mix(in srgb, var(--ok) 55%, var(--bd2));
+  }
+  .brief-node {
+    display: inline-grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1px solid var(--bd2);
+    background: var(--s1);
+    color: var(--t2);
+    font: 600 12px/1 var(--mono);
+    font-variant-numeric: tabular-nums;
+  }
+  [data-current] > .brief-node {
+    border-color: var(--ac);
+    background: var(--s1);
+    color: var(--ac);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--ac) 16%, transparent);
+  }
+  [data-state="done"] > .brief-node {
+    border-color: transparent;
+    background: var(--oks);
+    color: var(--ok);
+    animation: k-pop 280ms var(--ease-pop);
+  }
+  .brief-alerts .brief-node {
+    border-color: transparent;
+    background: var(--bads);
+    color: var(--bad);
+  }
+  .brief-pick {
+    min-width: 0;
+    padding-top: 4px;
+  }
+  .brief-pick-title {
+    color: var(--t1);
+    font: 500 0.9375rem/1.35 var(--sans);
+  }
+  a.brief-pick-title:hover,
+  .brief-pick-title a:hover {
+    text-decoration: underline;
+  }
+  /* The one to be on now opens up. */
+  [data-current] > .brief-pick {
+    grid-column: 2 / -1;
+    padding: 12px 14px;
+    border-radius: var(--brief-r);
+    border: 1px solid color-mix(in srgb, var(--ac) 30%, var(--bd));
+    background: radial-gradient(130% 90% at 100% 0%, color-mix(in srgb, var(--ac) 12%, transparent), transparent 62%), var(--s1);
+  }
+  [data-current] .brief-pick-title {
+    font: 600 1.1875rem/1.28 var(--sans);
+    letter-spacing: -0.012em;
+  }
+  [data-state="done"] .brief-pick-title {
+    color: var(--t3);
+    text-decoration: line-through;
+  }
+  [data-state="gone"] .brief-pick-title {
+    color: var(--t3);
+  }
+  .brief-why {
+    margin-top: 3px;
+    color: var(--t2);
+    font: 0.875rem/1.45 var(--sans);
+  }
+  .brief-step {
+    margin-top: 10px;
+    padding: 8px 10px;
+    border-radius: var(--r3);
+    background: color-mix(in srgb, var(--s3) 70%, transparent);
+    color: var(--t1);
+    font: 0.875rem/1.4 var(--sans);
+  }
+  .brief-step b {
+    color: var(--ac);
+    font-weight: 600;
+  }
+  .brief-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    margin-top: 5px;
+    color: var(--t3);
+    font: 12px/1.3 var(--sans);
+  }
+  .brief-row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 12px;
+  }
+  .brief-row-actions > .brief-fb {
+    margin-left: auto;
+  }
+  /* Thumbs sit in the third column; the "what was off?" field and the saved note take the text width below. */
+  .brief-path > li > .brief-fb {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
+  }
+  .brief-path > li > .brief-fb-note,
+  .brief-path > li > .brief-because {
+    grid-column: 2 / -1;
+    margin-top: 6px;
+  }
+
+  /* ---- Cards and widgets ---- */
+  /* Cards pack like a wall of notes: one column on the cover screen, two when unfolded. */
+  .brief-grid {
+    column-count: 1;
+    column-gap: var(--brief-gap);
+    margin-bottom: calc(var(--brief-gap) * -1);
+  }
+  @container (min-width: 600px) {
+    .brief-grid {
+      column-count: 2;
+    }
+  }
+  .brief-card {
+    --brief-tone: var(--t3);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-content: start;
+    break-inside: avoid;
+    margin-bottom: var(--brief-gap);
+    min-width: 0;
+    padding: 10px 14px 14px;
+    border-radius: var(--brief-r);
+    border: 1px solid var(--bd);
+    background: var(--s1);
+  }
+  .brief-card > * {
+    grid-column: 1 / -1;
+    min-width: 0;
+  }
+  .brief-card > .brief-kind {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: center;
+    min-height: 28px;
+  }
+  .brief-card > .brief-fb {
+    grid-column: 2;
+    grid-row: 1;
+    margin-right: -6px;
+  }
+  .brief-card[data-kind="focus"] {
+    --brief-tone: var(--ac);
+  }
+  .brief-card[data-kind="watch"] {
+    --brief-tone: var(--wn);
+  }
+  .brief-card[data-kind="nudge"],
+  .brief-card[data-kind="reflect"] {
+    --brief-tone: var(--ai);
+  }
+  .brief-card[data-kind="win"] {
+    --brief-tone: var(--ok);
+  }
+  /* About the person: something noticed (agent teal), an honest take (warn), an idea (yours to act on). */
+  .brief-card[data-kind="insight"] {
+    --brief-tone: var(--ai);
+  }
+  .brief-card[data-kind="callout"] {
+    --brief-tone: var(--wn);
+  }
+  .brief-card[data-kind="idea"] {
+    --brief-tone: var(--ac);
+  }
+  /* These carry their tone as a wash of light from the corner, and speak a size up. */
+  .brief-card[data-family="you"] {
+    padding-bottom: 16px;
+    border-color: color-mix(in srgb, var(--brief-tone) 28%, var(--bd));
+    background: radial-gradient(140% 90% at 100% 0%, color-mix(in srgb, var(--brief-tone) 14%, transparent), transparent 64%), var(--s1);
+  }
+  .brief-card[data-family="you"] .brief-card-title {
+    margin-top: 4px;
+    font: 600 1.1875rem/1.26 var(--sans);
+    letter-spacing: -0.014em;
+    text-wrap: balance;
+  }
+  .brief-card[data-family="you"] .brief-card-text {
+    margin-top: 6px;
+    font-size: 0.9375rem;
+  }
+  .brief-kind {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--brief-tone);
+    font: 600 11px/1.2 var(--sans);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .brief-kind::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent);
+  }
+  .brief-card-title {
+    margin-top: 2px;
+    color: var(--t1);
+    font: 600 0.9375rem/1.35 var(--sans);
+  }
+  .brief-card-text {
+    margin-top: 4px;
+    color: var(--t2);
+    font: 0.875rem/1.5 var(--sans);
+  }
+
+  /* Small things to do: tick them off. */
+  .brief-steps {
+    margin-top: 8px;
+  }
+  .brief-steps > li {
+    color: var(--t1);
+    font: 0.875rem/1.4 var(--sans);
+  }
+  .brief-steps .k-check {
+    display: flex;
+    align-items: flex-start;
+    min-height: 36px;
+    padding: 8px 0;
+    font: inherit;
+  }
+  .brief-steps .k-check-box,
+  .brief-steps .k-check-in {
+    margin-top: 1px;
+    border-radius: 50%;
+  }
+  .brief-steps .k-check-on .k-check-box {
+    background: var(--brief-tone);
+    border-color: var(--brief-tone);
+  }
+  .brief-steps[data-plain] > li {
+    position: relative;
+    padding: 3px 0 3px 16px;
+  }
+  .brief-steps[data-plain] > li::before {
+    content: "";
+    position: absolute;
+    left: 3px;
+    top: 0.72em;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--brief-tone);
+  }
+
+  /* One question, put to the person: the whole row opens a chat to answer it. */
+  .brief-ask {
+    margin-top: 10px;
+    color: var(--t1);
+    font: 500 0.9375rem/1.45 var(--sans);
+  }
+  .brief-reply {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    margin-top: 12px;
+    padding: 8px 8px 8px 12px;
+    border-radius: var(--r4);
+    border: 1px solid color-mix(in srgb, var(--ai) 26%, transparent);
+    background: var(--ais);
+    color: var(--t1);
+    font: 500 0.9375rem/1.35 var(--sans);
+    transition:
+      border-color var(--d1) var(--ease),
+      transform var(--d1) var(--ease);
+  }
+  .brief-reply > span {
+    flex: 1;
+    min-width: 0;
+  }
+  .brief-reply > svg {
+    flex: none;
+    color: var(--ai);
+  }
+  .brief-reply:hover {
+    border-color: var(--aib);
+  }
+  .brief-reply:active {
+    transform: scale(0.99);
+  }
+
+  .brief-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .brief-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    max-width: 100%;
+    padding: 2px 8px;
+    border-radius: var(--r2);
+    border: 1px solid var(--bd);
+    background: var(--s2);
+    color: var(--t1);
+    font: 12px/1.3 var(--sans);
+  }
+  a.brief-chip:hover {
+    border-color: var(--bdc);
+  }
+  .brief-chip[data-state="done"] {
+    color: var(--t3);
+    text-decoration: line-through;
+  }
+  .brief-chip[data-state="gone"] {
+    color: var(--t3);
+  }
+  .brief-because {
+    margin-top: 10px;
+    color: var(--t3);
+    font: 12px/1.45 var(--sans);
+  }
+  .brief-because b {
+    color: var(--ai);
+    font-weight: 600;
+  }
+
+  /* Training: four weeks of completed workouts. */
+  .brief-train {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .brief-train > li {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    min-width: 0;
+    color: var(--t3);
+  }
+  .brief-train-n {
+    color: var(--t2);
+    font: 600 12px/1 var(--mono);
+    font-variant-numeric: tabular-nums;
+  }
+  .brief-train-bar {
+    display: flex;
+    align-items: flex-end;
+    width: 100%;
+    height: 40px;
+    border-radius: var(--r2);
+    background: var(--s2);
+  }
+  .brief-train-bar > span {
+    width: 100%;
+    min-block-size: 2px;
+    border-radius: var(--r2);
+    background: var(--bdc);
+    transform-origin: bottom;
+    animation: brief-grow 620ms var(--ease) 320ms both;
+  }
+  .brief-train > li[data-now] .brief-train-bar > span {
+    background: var(--ac);
+  }
+  .brief-train > li[data-now] .brief-train-n {
+    color: var(--t1);
+  }
+  .brief-train-l {
+    font: 11px/1.3 var(--sans);
+    text-align: center;
+  }
+
+  /* Feedback: two quiet icon buttons; the chosen one takes its tone. */
+  /* Sleek controls keep a 44px tap area through hit-slop, so the two thumbs sit far enough apart not to share it. */
+  .brief-fb {
+    display: inline-flex;
+    align-items: center;
+    gap: 16px;
+  }
+  @media (min-width: 1024px) and (pointer: fine) {
+    .brief-fb {
+      gap: 10px;
+    }
+  }
+  .brief-fb .k-btn[aria-pressed="true"] {
+    color: var(--ac);
+    background: var(--acs);
+  }
+  .brief-fb .k-btn[aria-pressed="true"][data-verdict="down"] {
+    color: var(--wn);
+    background: var(--wns);
+  }
+  .brief-fb-note {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    margin-top: 8px;
+  }
+  .brief-fb-note > .k-input {
+    flex: 1 1 12rem;
+    min-width: 0;
+  }
+
+  /* Schedule */
+  .brief-sched {
+    margin-top: 6px;
+  }
+  .brief-sched > li {
+    display: grid;
+    grid-template-columns: 5.25rem minmax(0, 1fr);
+    gap: 8px;
+    padding: 5px 0;
+    color: var(--t1);
+    font: 0.875rem/1.35 var(--sans);
+  }
+  .brief-sched > li + li {
+    border-top: 1px solid var(--bd);
+  }
+  .brief-sched time {
+    color: var(--t3);
+    font: 12px/1.6 var(--mono);
+    font-variant-numeric: tabular-nums;
+  }
+  .brief-sched > li[data-past] {
+    color: var(--t3);
+  }
+  .brief-sched > li[data-next] time {
+    color: var(--ac);
+    font-weight: 600;
+  }
+
+  .brief-list > li {
+    padding: 4px 0;
+    color: var(--t1);
+    font: 0.875rem/1.4 var(--sans);
+  }
+  .brief-list > li + li {
+    border-top: 1px solid var(--bd);
+  }
+  .brief-list small {
+    color: var(--t3);
+    font-size: 12px;
+  }
+
+  /* ---- Footer ---- */
+  .brief-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px 12px;
+    padding: 0 2px;
+    color: var(--t3);
+    font: 12px/1.5 var(--sans);
+  }
+  .brief-undo {
+    position: sticky;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 76px);
+    z-index: 5;
+    display: flex;
+    justify-content: center;
+    pointer-events: none;
+  }
+  .brief-undo > * {
+    pointer-events: auto;
+  }
+  @media (min-width: 600px) {
+    .brief-undo {
+      bottom: 16px;
+    }
+  }
+
+  /* ---- Home's door to the brief: the same sky, small ---- */
+  .brief-entry {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 3px 8px;
+    padding: 12px 10px 12px 14px;
+    border-radius: var(--brief-r, calc(var(--r4) + 4px));
+    border: 1px solid color-mix(in srgb, var(--sky-a) 24%, var(--bd));
+    background: var(--s1);
+    transition: border-color var(--d1) var(--ease);
+  }
+  .brief-entry:hover {
+    border-color: color-mix(in srgb, var(--sky-a) 50%, var(--bd2));
+  }
+  .brief-entry-bg {
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    pointer-events: none;
+  }
+  .brief-entry-bg > :nth-child(1) {
+    inset: -120% -10% auto auto;
+    width: 60%;
+    background: radial-gradient(closest-side, color-mix(in srgb, var(--sky-a) calc(40% * var(--sky-k)), transparent), transparent);
+  }
+  .brief-entry-bg > :nth-child(2) {
+    inset: -90% auto auto -12%;
+    width: 52%;
+    background: radial-gradient(closest-side, color-mix(in srgb, var(--sky-b) calc(30% * var(--sky-k)), transparent), transparent);
+    animation-duration: 23s;
+    animation-direction: alternate-reverse;
+  }
+  .brief-entry > :not(svg, .brief-entry-bg) {
+    grid-column: 1;
+  }
+  .brief-entry[data-source="ai"] .eyebrow {
+    color: var(--ai);
+  }
+  .brief-entry-h {
+    color: var(--t1);
+    font: 600 1.0625rem/1.28 var(--sans);
+    letter-spacing: -0.012em;
+    text-wrap: balance;
+  }
+  .brief-entry-s {
+    color: var(--t2);
+    font: 0.8125rem/1.35 var(--sans);
+  }
+  .brief-entry-s b {
+    color: var(--t1);
+    font-weight: 600;
+  }
+  .brief-entry-dots {
+    display: flex;
+    gap: 4px;
+    margin-top: 5px;
+  }
+  .brief-entry-dots > i {
+    width: 18px;
+    height: 3px;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--t3) 40%, transparent);
+  }
+  .brief-entry-dots > i[data-state="done"] {
+    background: var(--ok);
+  }
+  .brief-entry-dots > i[data-current] {
+    background: var(--ac);
+  }
+  .brief-entry > svg {
+    grid-row: 1 / span 4;
+    grid-column: 2;
+    color: var(--t3);
+  }
+}
+
+/*
+ * Carousels (Next up, Insights, Initiatives, Coming up): one card wide on the
+ * cover screen with the next one peeking in, two across when unfolded. A row
+ * scrolls itself (snap), never the page. Pips show the place and arrows appear
+ * where there is a mouse, both only when there is somewhere to go.
+ */
+@layer components {
+  .brief-deck-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 28px;
+    margin: 0 2px 8px;
+  }
+  .brief-deck-head > .brief-h {
+    flex: 1;
+    margin: 0;
+  }
+  .brief-deck-pips {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .brief-deck-pips > i {
+    width: 5px;
+    height: 5px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--t3) 50%, transparent);
+    transition:
+      width var(--d3) var(--ease),
+      background var(--d3) var(--ease);
+  }
+  .brief-deck-pips > i[data-on] {
+    width: 16px;
+    background: var(--t1);
+  }
+  .brief-deck-nav {
+    display: none;
+    gap: 2px;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .brief-deck-nav {
+      display: inline-flex;
+    }
+  }
+
+  .brief-deck {
+    position: relative;
+    display: flex;
+    gap: 10px;
+    margin-inline: -16px;
+    padding: 2px 16px 4px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: 16px;
+    scrollbar-width: none;
+  }
+  .brief-deck::-webkit-scrollbar {
+    display: none;
+  }
+  .brief-deck:focus-visible {
+    outline: 2px solid var(--ac);
+    outline-offset: 2px;
+    border-radius: var(--r3);
+  }
+  @media (min-width: 640px) {
+    .brief-deck {
+      margin-inline: 0;
+      padding-inline: 0;
+      scroll-padding-inline: 0;
+    }
+  }
+
+  .brief-slide {
+    flex: 0 0 84%;
+    display: flex;
+    min-width: 0;
+    scroll-snap-align: start;
+  }
+  @container (min-width: 600px) {
+    .brief-slide {
+      flex-basis: calc((100% - 10px) / 2);
+    }
+  }
+  /* A lone card has nothing to peek at: it takes the row. */
+  .brief-slide:only-child {
+    flex-basis: 100%;
+  }
+  .brief-slide > * {
+    flex: 1;
+    min-width: 0;
+    margin-bottom: 0;
+    transition: border-color var(--d2) var(--ease);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .brief-slide > :hover {
+      border-color: color-mix(in srgb, var(--brief-tone) 46%, var(--bd));
+    }
+  }
+
+  /*
+   * Fit: written cards differ a lot in length, so in Insights each keeps its own
+   * height and the row is as tall as the cards showing (it eases to the new
+   * height as you swipe). No card is stretched to match the longest one.
+   */
+  .brief-deck[data-fit] {
+    align-items: flex-start;
+    overflow-y: hidden;
+  }
+  .brief-deck[data-fit="ready"] {
+    transition: height var(--d3) var(--ease);
+  }
+  .brief-deck[data-fit] > .brief-slide > * {
+    flex: 1 1 auto;
+  }
+
+  .brief-deck-card {
+    --brief-tone: var(--t3);
+    display: flex;
+    flex-direction: column;
+    padding: 10px 14px;
+    border-radius: var(--brief-r);
+    border: 1px solid color-mix(in srgb, var(--brief-tone) 24%, var(--bd));
+    background: radial-gradient(140% 90% at 100% 0%, color-mix(in srgb, var(--brief-tone) 12%, transparent), transparent 62%), var(--s1);
+  }
+  .brief-deck-card[data-kind="urgent"],
+  .brief-deck-card[data-kind="initiatives"] {
+    --brief-tone: var(--ac);
+  }
+  .brief-deck-card[data-kind="decisions"] {
+    --brief-tone: var(--wn);
+  }
+  .brief-deck-card[data-kind="ahead"] {
+    --brief-tone: var(--inf);
+  }
+  .brief-deck-card[data-kind="habits"] {
+    --brief-tone: var(--ok);
+  }
+  .brief-deck-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 28px;
+  }
+  .brief-deck-n {
+    color: var(--t2);
+    font: 600 12px/1 var(--mono);
+    font-variant-numeric: tabular-nums;
+  }
+  .brief-deck-rows {
+    flex: 1;
+  }
+  .brief-deck-rows > li + li {
+    border-top: 1px solid color-mix(in srgb, var(--bd2) 55%, transparent);
+  }
+  .brief-deck-row {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr);
+    align-items: start;
+    gap: 8px;
+    min-height: 40px;
+    margin-inline: -6px;
+    padding: 8px 6px;
+    border-radius: var(--r3);
+    color: var(--t1);
+    transition: background var(--d1) var(--ease);
+  }
+  a.brief-deck-row:active {
+    background: color-mix(in srgb, var(--brief-tone) 10%, transparent);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    a.brief-deck-row:hover {
+      background: color-mix(in srgb, var(--brief-tone) 7%, transparent);
+    }
+  }
+  a.brief-deck-row:focus-visible {
+    outline: 2px solid var(--ac);
+    outline-offset: -2px;
+  }
+  .brief-deck-mark {
+    width: 8px;
+    height: 8px;
+    margin: 6px 0 0 3px;
+    border-radius: 50%;
+    border: 1.5px solid var(--brief-tone);
+  }
+  [data-done] > .brief-deck-row > .brief-deck-mark {
+    display: grid;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+    margin: 2px 0 0 -1px;
+    border: 0;
+    background: var(--oks);
+    color: var(--ok);
+  }
+  /* One line each: the card is a summary, the row opens the thing itself. */
+  .brief-deck-t,
+  .brief-deck-m {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .brief-deck-t {
+    display: block;
+    font: 500 0.9375rem/1.35 var(--sans);
+  }
+  .brief-deck-m {
+    display: block;
+    margin-top: 1px;
+    color: var(--t3);
+    font: 12px/1.35 var(--sans);
+  }
+  .brief-deck-more {
+    display: inline-flex;
+    align-items: center;
+    align-self: flex-start;
+    gap: 2px;
+    min-height: 32px;
+    margin-top: 2px;
+    color: var(--t3);
+    font: 500 12px/1.3 var(--sans);
+  }
+  a.brief-deck-more {
+    color: var(--ac);
+  }
+  a.brief-deck-more:hover {
+    text-decoration: underline;
+  }
+
+  /*
+   * The sparkle: on a row an agent can look into, a quiet teal action under the
+   * title ("Find how to book"). Once asked, the same place says how that stands
+   * and, when the agent is done, the next step it left. Dashed teal while it is
+   * the agent's; the line opens the conversation.
+   */
+  .brief-spark.k-btn {
+    margin: -4px 0 6px 16px;
+    color: var(--ai);
+    font-weight: 500;
+  }
+  .brief-spark.k-btn:hover:not(:disabled) {
+    background: var(--ais);
+    color: var(--ai);
+  }
+  .brief-spark .k-btn-glyph {
+    transition: transform var(--d3) var(--ease);
+  }
+  .brief-spark:hover:not(:disabled) .k-btn-glyph {
+    transform: rotate(18deg) scale(1.15);
+  }
+  .brief-asked {
+    margin: -2px 0 8px 24px;
+    border: 1px dashed color-mix(in oklab, var(--ai) 50%, transparent);
+    border-radius: var(--r3);
+    background: color-mix(in oklab, var(--ai) 6%, var(--s1));
+    animation: brief-rise 320ms var(--ease) both;
+  }
+  .brief-asked-line {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+    padding: 6px 8px 6px 10px;
+    border-radius: inherit;
+    color: var(--t1);
+    font: 13px/1.4 var(--sans);
+  }
+  .brief-asked-line:active {
+    background: color-mix(in oklab, var(--ai) 12%, transparent);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .brief-asked-line:hover {
+      background: color-mix(in oklab, var(--ai) 8%, transparent);
+    }
+  }
+  .brief-asked-line:focus-visible {
+    outline: 2px solid var(--ac);
+    outline-offset: -2px;
+  }
+  .brief-asked-line > svg:first-child {
+    color: var(--ai);
+  }
+  .brief-asked-line > svg:last-child {
+    color: var(--t3);
+  }
+  .brief-asked-line b {
+    color: var(--ai);
+    font-weight: 600;
+  }
+  .brief-asked[data-live="waiting"] .brief-asked-line b {
+    color: var(--wn);
+  }
+  .brief-asked[data-live="failed"] .brief-asked-line b {
+    color: var(--bad);
+  }
+  /* Under way: light runs across the words and the sparkle breathes. */
+  .brief-asked[data-busy] .brief-asked-line b {
+    background: linear-gradient(100deg, var(--ai) 0%, var(--ai) 38%, var(--t1) 50%, var(--ai) 62%, var(--ai) 100%) 0 0 / 240% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: brief-shimmer 2.2s linear infinite;
+  }
+  .brief-asked[data-busy] .brief-asked-line > svg:first-child {
+    animation: brief-twinkle 1.6s var(--ease) infinite alternate;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .brief-asked[data-busy] .brief-asked-line b {
+      background: none;
+      color: var(--ai);
+    }
+  }
+  .brief-asked .brief-fold.k-btn {
+    margin: -2px 0 4px 6px;
+  }
+  .brief-asked-steps {
+    margin: 0;
+    padding: 0 10px 8px 34px;
+    color: var(--t1);
+    font: 13px/1.45 var(--sans);
+    list-style: decimal;
+    animation: brief-rise 260ms var(--ease) both;
+  }
+  .brief-asked-steps > li {
+    padding: 2px 0;
+  }
+  .brief-asked-steps > li::marker {
+    color: var(--ai);
+    font: 600 12px/1 var(--mono);
+  }
+
+  /* A fold: a small disclosure for steps that would otherwise stretch a card. */
+  .brief-fold.k-btn {
+    justify-self: start;
+    margin: 6px 0 0 -8px;
+    color: var(--t2);
+  }
+  .brief-fold .k-btn-glyph {
+    transition: transform var(--d2) var(--ease);
+  }
+  .brief-fold[aria-expanded="true"] .k-btn-glyph {
+    transform: rotate(90deg);
+  }
+  .brief-fold + .brief-steps {
+    margin-top: 0;
+    animation: brief-rise 260ms var(--ease) both;
+  }
+
+  /* Something Jarvis proposes to remember: dashed teal until it is kept. */
+  .brief-card.brief-propose {
+    --brief-tone: var(--ai);
+    border: 1px dashed color-mix(in oklab, var(--ai) 55%, transparent);
+    background: color-mix(in oklab, var(--ai) 7%, var(--s1));
+  }
+  .brief-kind-sub::before {
+    content: "· ";
+  }
+  .brief-propose-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 12px;
+  }
+  /* On the dashed teal fill the agent button needs a solid surface behind its label to stay readable. */
+  .brief-propose .k-btn-agent {
+    background: var(--s1);
+  }
+
+  /* Home only: the strips Home always had, and the way to the list. */
+  .brief-home-strips:empty {
+    display: none;
+  }
+  /* ---- In the works: what the person handed to an agent from here ---- */
+  .brief-works {
+    display: grid;
+    gap: 1px;
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+    border: 1px dashed color-mix(in oklab, var(--ai) 55%, transparent);
+    border-radius: var(--r3);
+    background: color-mix(in oklab, var(--ai) 6%, var(--s1));
+    list-style: none;
+  }
+  .brief-works > li + li {
+    border-top: 1px solid var(--bd);
+  }
+  .brief-works a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    padding: 8px 10px 8px 12px;
+    color: var(--t1);
+  }
+  .brief-works a:hover {
+    background: color-mix(in oklab, var(--ai) 8%, transparent);
+  }
+  .brief-works-t {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    font: 500 14px/1.35 var(--sans);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .brief-works-s {
+    flex: none;
+    color: var(--t2);
+    font: 12px/1.3 var(--sans);
+  }
+  .brief-works a[data-live="waiting"] .brief-works-s {
+    color: var(--wn);
+    font-weight: 600;
+  }
+  .brief-works a[data-live="failed"] .brief-works-s {
+    color: var(--bad);
+  }
+  .brief-works a > svg {
+    flex: none;
+    color: var(--t3);
+  }
+
+  .brief-views {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 18px;
+    padding: 0 2px;
+  }
+  .brief-views > a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    color: var(--ac);
+    font: 500 13px/1.3 var(--sans);
+  }
+  .brief-views > a:hover {
+    text-decoration: underline;
+  }
+}
+
+@keyframes brief-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+@keyframes brief-word {
+  from {
+    opacity: 0;
+    transform: translateY(0.4em);
+    filter: blur(6px);
+  }
+}
+@keyframes brief-pulse {
+  from {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  to {
+    transform: scale(2.8);
+    opacity: 0;
+  }
+}
+@keyframes brief-grow {
+  from {
+    transform: scaleY(0.05);
+  }
+}
+@keyframes brief-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -140% 0;
+  }
+}
+@keyframes brief-twinkle {
+  from {
+    transform: scale(0.9) rotate(-8deg);
+    opacity: 0.7;
+  }
+  to {
+    transform: scale(1.12) rotate(10deg);
+    opacity: 1;
+  }
+}
+@keyframes brief-stars {
+  to {
+    opacity: 0.25;
+  }
+}

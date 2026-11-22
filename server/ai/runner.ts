@@ -347,6 +347,12 @@ async function executeJob(id: string, signal: AbortSignal, adopt: boolean) {
     );
     outbound = convs.map((c) => `${c.id} — ${c.title}`).join("\n");
     input = `${taskFor(kind, { title, destinations: dests.map((d) => `${d.key} — ${d.path}`).join("\n") })}\n\nConversations (sessionId — title):\n<data source="conversation titles">\n${outbound}\n</data>`;
+  } else if (row.subjectType === "brief") {
+    // Daily brief: built now from cached Home data, already scoped, bounded and masked (server/brief/context.ts).
+    const built = await (await import("@/server/brief")).briefJobInput(user);
+    title = built.title;
+    outbound = built.input;
+    input = built.input;
   } else {
     const ctx = inboxContext(row.userId, row.subjectId, { imagesAnalysed: false, brief: params.brief });
     if (!ctx) return void failJob(row, "upstream", "capture not found");
@@ -398,7 +404,7 @@ async function executeJob(id: string, signal: AbortSignal, adopt: boolean) {
       input: maskAccountNumbers(input),
       schema: OUTPUT_SCHEMAS[kind] as never,
       idempotencyKey: row.idempotencyKey,
-      timeoutMs: settings.timeoutsS[kind === "file" ? "triage" : kind === "summarize" ? "draft" : kind] * 1000,
+      timeoutMs: settings.timeoutsS[kind === "file" ? "triage" : kind === "summarize" ? "draft" : kind === "brief" ? "plan" : kind] * 1000,
       signal: AbortSignal.any([signal, stopGuard.signal]),
       adopt: adopt && row.hermesSessionId ? { sessionId: row.hermesSessionId, runId: row.hermesRunId } : undefined,
       onIds: (ids) => {
@@ -494,7 +500,8 @@ async function handleFailure(id: string, e: unknown, kind: AiJobKind, title: str
   }
   if (["running", "waiting_approval", "cancelling"].includes(row.state)) failJob(row, code, undefined, costPatch);
   if (row.subjectType === "inbox") setTriage(row.subjectId, kind, "failed");
-  if (kind !== "triage" && kind !== "file")
+  // The brief page shows its own build failure; no alert for a page that still works without AI.
+  if (kind !== "triage" && kind !== "file" && kind !== "brief")
     notify(
       {
         type: "ai.job_failed",
@@ -589,6 +596,13 @@ async function onSuccess(
       }));
     setSetting(fileSuggestionsKey(row.userId), { jobId: row.id, at: new Date().toISOString(), suggestions: out });
     transition(row.id, row.state as JobState, "succeeded", costPatch);
+    return;
+  }
+  if (kind === "brief") {
+    // Validated and resolved against the person's current data; an answer with nothing usable is a failed build.
+    const saved = await (await import("@/server/brief")).saveBuiltBrief(row, data as never);
+    if (saved) transition(row.id, row.state as JobState, "succeeded", costPatch);
+    else failJob(getJobRow(row.id)!, "bad_output", undefined, costPatch);
     return;
   }
   if (kind === "triage") {
