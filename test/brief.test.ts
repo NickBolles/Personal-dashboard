@@ -37,7 +37,7 @@ import * as feedbackRoute from "@/app/api/brief/feedback/route";
 import * as stepsRoute from "@/app/api/brief/steps/route";
 import * as improveRoute from "@/app/api/brief/improve/route";
 import * as improveOneRoute from "@/app/api/brief/improve/[id]/route";
-import { improvePrompt, improveTitle, startImprovement } from "@/server/brief/improve";
+import { improveDeps, improvePrompt, improveTitle, startImprovement } from "@/server/brief/improve";
 import * as assistRoute from "@/app/api/brief/assist/route";
 import { assistIndex, assistPrompt, parseSteps, startAssist } from "@/server/brief/assist";
 import * as notesRoute from "@/app/api/brief/notes/route";
@@ -801,7 +801,13 @@ describe("the rows under the picks", () => {
     const urgent = v.deck.find((d) => d.kind === "urgent");
     expect(urgent).toBeDefined();
     for (const r of urgent!.rows) expect(onPage.has(r.id)).toBe(false);
-    expect(urgent!.more).toBe("/home/all");
+    // "N more" opens a bucket that holds the rows that did not fit, never the page's default (the backlog) by accident.
+    expect(urgent!.more).toMatch(/^\/home\/all\?bucket=(now|today|upcoming|backlog)$/);
+    const c = await briefContext(me());
+    const rest = [...c.nowList, ...c.todayList, ...c.lists.overdue].filter((a, i, all) => !onPage.has(a.id) && all.findIndex((b) => b.id === a.id) === i);
+    const firstHidden = rest[BRIEF_LIMITS.urgentRows - urgent!.rows.filter((r) => r.id.startsWith("rock-")).length];
+    if (firstHidden?.rank?.bucket) expect(urgent!.more).toBe(`/home/all?bucket=${firstHidden.rank.bucket}`);
+    else expect(urgent!.more).toBe("/home/all?bucket=now");
     // The check-in is a habit; its widget is not repeated among the day's cards.
     const habits = v.deck.find((d) => d.kind === "habits");
     expect(habits?.rows.map((r) => r.id)).toContain("checkin");
@@ -960,6 +966,34 @@ describe("the sparkle: an agent looks into one row", () => {
     // With a next action of its own there is nothing to suggest.
     work.updateItem(u, p.id, { nextAction: "Write the outline" }, "t");
     expect((await rows()).find((x) => x.id === p.id)?.assist).toBeUndefined();
+    work.updateItem(u, p.id, { archived: true }, "t");
+  });
+
+  it("on an initiative, sends that initiative and nothing that is filed under it", async () => {
+    const u = me();
+    const area = work.createItem(u, { kind: "area", title: "Scoped area" }, "t");
+    const p = work.createItem(u, { kind: "project", title: "SCOPED_INITIATIVE", parentId: area.id }, "t");
+    work.updateItem(u, p.id, { status: "exploring" }, "t");
+    const child = work.createItem(u, { kind: "thread", title: "SCOPED_CHILD_TASK", parentId: p.id }, "t");
+    work.updateItem(u, child.id, { nextAction: "SCOPED_CHILD_NEXT" }, "t");
+    work.createItem(u, { kind: "note", title: "SCOPED_CHILD_NOTE", parentId: p.id }, "t");
+
+    let sent: { input: string; instructions?: string } | undefined;
+    const deps = {
+      ...improveDeps,
+      startRun: (async (...args: Parameters<typeof improveDeps.startRun>) => {
+        sent = args[1];
+        return improveDeps.startRun(...args);
+      }) as typeof improveDeps.startRun,
+    };
+    const r = await startAssist(u, { target: { kind: "item", id: p.id }, clientKey: key() }, "t", deps);
+    expect(sent!.input).toContain("SCOPED_INITIATIVE");
+    expect(sent!.instructions).toContain("filed in Jarvis under: Scoped area › SCOPED_INITIATIVE");
+    // Not its child tasks, their next actions or its notes: the open-items snapshot a typed chat message carries is left out.
+    expect(`${sent!.input}
+${sent!.instructions}`).not.toContain("SCOPED_CHILD");
+    expect(sent!.instructions).not.toContain("Open items there");
+    await undo(r.improvement.id);
     work.updateItem(u, p.id, { archived: true }, "t");
   });
 

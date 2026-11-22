@@ -238,7 +238,10 @@ export async function launch(user: CurrentUser, l: Launch, correlationId: string
       where && s && (modeHint || s.instructions)
         ? [`Jarvis area: ${where.area.title}.`, modeHint ? `Agent mode: ${modeHint}.` : "", s.instructions ?? ""].filter(Boolean).join(" ")
         : undefined;
-    const instructions = maskAccountNumbers(maskSecrets([areaInstructions, filedChatContext(user, sessionId, onProfile)].filter(Boolean).join("\n\n")).text);
+    // Where it is filed and whether the agent has Jarvis tools, and no more: not the open items under it. A
+    // sparkle on an initiative sends that one task, never its child tasks and notes; Improve sends only the words.
+    const filed = filedChatContext(user, sessionId, onProfile, { snapshot: false });
+    const instructions = maskAccountNumbers(maskSecrets([areaInstructions, filed].filter(Boolean).join("\n\n")).text);
     const prefs = getPreferences().hermes;
     const run = await deps.startRun(
       user,

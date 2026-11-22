@@ -71,7 +71,10 @@ export function briefDeck(user: CurrentUser, c: BriefContext, picked: Set<string
     seen.add(a.id);
     rest.push(a);
   }
-  out.push(...card("urgent", [...rocks, ...rest.map(withAssist)], "/home/all", BRIEF_LIMITS.urgentRows));
+  // "N more" opens the Home bucket the first row that did not fit is in (the page's own default is the backlog).
+  const hidden = rest[Math.max(0, BRIEF_LIMITS.urgentRows - rocks.length)]?.rank?.bucket;
+  const bucket = hidden === "today" || hidden === "upcoming" || hidden === "backlog" ? hidden : "now";
+  out.push(...card("urgent", [...rocks, ...rest.map(withAssist)], `/home/all?bucket=${bucket}`, BRIEF_LIMITS.urgentRows));
 
   // Decisions waiting on the person.
   if (can(user, "work.use") || can(user, "hermes.chat")) {

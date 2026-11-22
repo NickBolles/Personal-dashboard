@@ -81,7 +81,7 @@ What comes back is read from Jarvis' own records, never from Hermes on read: the
 Rules that hold:
 
 - Never offered on, and refused for: Finance, work in an AI-excluded area, a source switched off under Settings → Brief → Shared with the model (for an initiative that is "Areas and initiatives"), and a title that looks like a credential.
-- Only that one task is sent. No other row, no brief content, check-ins or notes ride along.
+- Only that one task is sent. No other row, no brief content, check-ins or notes ride along. On an initiative that means the initiative itself: the first message says where it is filed, and leaves out the snapshot of open items under it that a message typed in that chat would carry (child tasks, their next actions, notes).
 - A second tap on a row that is already being looked into returns the same request: one agent per row.
 - **Undo** stops the run and archives the conversation, and the item too if Jarvis made it for this. It cannot reverse what the agent already did elsewhere.
 - It needs the same three capabilities as Improve, and Hermes connected.
