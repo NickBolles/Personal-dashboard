@@ -88,7 +88,7 @@ function MomentLine({ moment, now }: { moment: TaskMoment; now: number }) {
 }
 
 /** A task's whole timeline, newest first, each line with its type and time. Read when a row is opened. */
-export function TaskTimeline({ taskId, title, seed }: { taskId: string; title: string; seed: TaskMoment[] }) {
+export function TaskTimeline({ taskId, title, seed, onOpen }: { taskId: string; title: string; seed: TaskMoment[]; onOpen?: () => void }) {
   const now = useNow();
   const q = useQuery({
     queryKey: ["work", "tasks", "timeline", taskId],
@@ -110,9 +110,15 @@ export function TaskTimeline({ taskId, title, seed }: { taskId: string; title: s
         <p className="tl-quiet">{q.isLoading ? "Loading…" : "Nothing has happened yet"}</p>
       )}
       {q.error && !q.data ? <p className="tl-quiet">Couldn&apos;t load the rest</p> : null}
-      <ButtonLink href={taskHref(taskId)} size="sm" variant="ghost" className="tl-open">
-        Open task
-      </ButtonLink>
+      {onOpen ? (
+        <Button size="sm" variant="ghost" className="tl-open" onClick={onOpen}>
+          Open task
+        </Button>
+      ) : (
+        <ButtonLink href={taskHref(taskId)} size="sm" variant="ghost" className="tl-open">
+          Open task
+        </ButtonLink>
+      )}
     </div>
   );
 }
@@ -121,6 +127,8 @@ type RowHooks = {
   flow: DecisionFlow;
   /** Split view: picking a row shows its thread beside the list instead of leaving it. */
   onPick?: (row: TaskRow, to: "overview" | "chat") => void;
+  /** The list sits on a page that opens tasks itself (the areas page): every way into a task goes through this. */
+  open?: (id: string, to: "overview" | "chat") => void;
   selectedId?: string | null;
   /** The review queue: rows can be ticked. */
   select?: { ids: readonly string[]; toggle: (id: string) => void };
@@ -143,7 +151,9 @@ export function TaskRowView({ row, depth = 0, ...hooks }: { row: TaskRow; depth?
     onError: (error) => toast(error instanceof Error ? error.message : "Couldn't stop it. Try again.", "danger"),
   });
   const go = (to: Parameters<typeof taskHref>[1]) => {
-    if (hooks.onPick && (to === "steer" || to === "chat")) hooks.onPick(row, "chat");
+    const chat = to !== "overview" && to !== "question";
+    if (hooks.open) hooks.open(row.id, chat ? "chat" : "overview");
+    else if (hooks.onPick && (to === "steer" || to === "chat")) hooks.onPick(row, "chat");
     else router.push(taskHref(row.id, to));
   };
   const answers = rowAnswers(row.question);
@@ -188,7 +198,11 @@ export function TaskRowView({ row, depth = 0, ...hooks }: { row: TaskRow; depth?
             ))}
           </>
         }
-        {...(hooks.onPick ? { onOpen: () => hooks.onPick!(row, "overview") } : { href: taskHref(row.id) })}
+        {...(hooks.open
+          ? { onOpen: () => hooks.open!(row.id, "overview") }
+          : hooks.onPick
+            ? { onOpen: () => hooks.onPick!(row, "overview") }
+            : { href: taskHref(row.id) })}
         peek={peek ?? undefined}
         sub={
           row.state === "needs" && !receipt ? (
@@ -200,6 +214,10 @@ export function TaskRowView({ row, depth = 0, ...hooks }: { row: TaskRow; depth?
                     {choice}
                   </Button>
                 ))
+              ) : hooks.open ? (
+                <Button size="sm" onClick={() => go(row.question ? "question" : "chat")}>
+                  Answer
+                </Button>
               ) : (
                 <ButtonLink size="sm" href={taskHref(row.id, row.question ? "question" : "chat")}>
                   Answer
@@ -270,13 +288,19 @@ export function TaskRowView({ row, depth = 0, ...hooks }: { row: TaskRow; depth?
               <TaskRowView key={child.id} row={child} depth={depth + 1} {...hooks} />
             ))}
             {row.more ? (
-              <ButtonLink href={taskHref(row.id)} size="sm" variant="ghost" className="tl-open">
-                Open project · {row.more} inside
-              </ButtonLink>
+              hooks.open ? (
+                <Button size="sm" variant="ghost" className="tl-open" onClick={() => go("overview")}>
+                  Open project · {row.more} inside
+                </Button>
+              ) : (
+                <ButtonLink href={taskHref(row.id)} size="sm" variant="ghost" className="tl-open">
+                  Open project · {row.more} inside
+                </ButtonLink>
+              )
             ) : null}
           </div>
         ) : (
-          <TaskTimeline taskId={row.id} title={row.title} seed={row.activity} />
+          <TaskTimeline taskId={row.id} title={row.title} seed={row.activity} onOpen={hooks.open ? () => go("overview") : undefined} />
         )}
       </ThingRow>
       {confirmStop ? (
@@ -314,6 +338,7 @@ export type TaskListProps = {
   lead?: ReactNode;
   empty?: ReactNode;
   onPick?: RowHooks["onPick"];
+  open?: RowHooks["open"];
   selectedId?: string | null;
   select?: RowHooks["select"];
   /** Rows shown per group before "Show more". */
@@ -322,7 +347,7 @@ export type TaskListProps = {
   exclude?: readonly string[];
 };
 
-export function TaskList({ scope, view, reviewHref, bare, lead, empty, onPick, selectedId, select, limit, exclude }: TaskListProps) {
+export function TaskList({ scope, view, reviewHref, bare, lead, empty, onPick, open, selectedId, select, limit, exclude }: TaskListProps) {
   const q = useTaskList(scope, view);
   const qc = useQueryClient();
   const flow = useDecisionFlowController();
@@ -333,7 +358,7 @@ export function TaskList({ scope, view, reviewHref, bare, lead, empty, onPick, s
     .map((g) => (exclude?.length ? { ...g, rows: g.rows.filter((r) => !exclude.includes(r.id)) } : g))
     .filter((g) => g.rows.length);
   const data = q.data;
-  const hooks: RowHooks = { flow, onPick, selectedId, select, onChanged };
+  const hooks: RowHooks = { flow, onPick, open, selectedId, select, onChanged };
   return (
     <div className="tl" data-testid="task-list" data-view={view} data-stale={q.error && data ? "" : undefined}>
       {q.error && !data ? <ErrorNote error={q.error} retry={() => void q.refetch()} /> : null}

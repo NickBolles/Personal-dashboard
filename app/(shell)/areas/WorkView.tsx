@@ -386,6 +386,7 @@ export function WorkView({
               onMove={(ids) => setMoving(ids)}
               section={shownTab === "chat" ? "chat" : "overview"}
               onSection={setTab}
+              onOpenTask={(id, to) => go({ kind: "item", id }, { push: true, tab: to })}
               chatTab={chatTab}
               split={split}
               logOpen={tab === "activity"}
@@ -815,6 +816,7 @@ function ItemDetail({
   onMove,
   section,
   onSection,
+  onOpenTask,
   chatTab = false,
   split = false,
   logOpen = false,
@@ -822,6 +824,8 @@ function ItemDetail({
   id: string;
   items: WorkItem[];
   onSelect: (id: string) => void;
+  /** Open another task on its Overview or its Chat (a project's rows). */
+  onOpenTask?: (id: string, to: "overview" | "chat") => void;
   onOp: OnOp;
   /** from the command palette / Today: packet | continue | settle | validate */
   initialAction?: string;
@@ -1373,6 +1377,7 @@ function ItemDetail({
       onDialog={setDialog}
       onCopy={() => void copyHandoff()}
       onFull={(next) => setTab(next)}
+      onOpenTask={onOpenTask ?? ((taskId) => onSelect(taskId))}
     />
   ) : null;
   /** The tab bar shows while one pane shows at a time; side by side there is nothing to switch. */
@@ -1553,6 +1558,7 @@ function ContainerBody({
   onDialog,
   onCopy,
   onFull,
+  onOpenTask,
 }: {
   d: WorkDetail;
   items: WorkItem[];
@@ -1568,6 +1574,8 @@ function ContainerBody({
   onCopy: () => void;
   /** Open Board or Graph as a full view of this project. */
   onFull: (view: "board" | "graph") => void;
+  /** Open a task inside this project on its Overview or its Chat. */
+  onOpenTask: (id: string, to: "overview" | "chat") => void;
 }) {
   const { item } = d;
   const isArea = item.parentId === null;
@@ -1606,7 +1614,7 @@ function ContainerBody({
         {isArea ? (
           <AreaProjects areaId={item.id} onOpen={onSelect} />
         ) : (
-          <ProjectTasks parent={item} items={items} done={rollup.done} onSelect={onSelect} onFull={onFull} />
+          <ProjectTasks parent={item} items={items} done={rollup.done} onSelect={onSelect} onOpenTask={onOpenTask} onFull={onFull} />
         )}
         {usedAsWork ? (
           <>

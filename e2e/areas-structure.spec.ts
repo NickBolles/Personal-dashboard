@@ -67,13 +67,13 @@ test("build structure: area page, inline path add, project page, decluttered ite
   await expect(page.getByLabel("Status", { exact: true })).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
 
-  // Project page: children + "+ Item"; inline add below the list.
+  // Project page: its Tasks section (the shared task list) + "+ Item"; inline add under the heading.
   await page
     .getByTestId("area-project-cards")
     .getByRole("link", { name: /Scoring engine/ })
     .click();
   await expect(article).toHaveAttribute("data-node-kind", "project");
-  await page.getByTestId("children-work").getByRole("button", { name: "Add item, sub-project or path" }).click();
+  await page.getByTestId("children-work").getByRole("button", { name: "Add task, sub-project or path" }).click();
   await page.getByLabel("New item in Scoring engine").fill("Load bench");
   await page.getByLabel("New item in Scoring engine").press("Enter");
   await expect(page.getByTestId("children-work")).toContainText("Load bench");

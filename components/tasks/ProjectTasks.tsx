@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { PlusIcon } from "@/components/icons";
@@ -14,7 +13,7 @@ import type { RollupItemRow } from "@/lib/item-page";
 import { rollupLine } from "@/lib/task-list";
 import { shortAge, shortWhen } from "@/lib/task-state";
 import type { WorkItem } from "@/lib/work";
-import { TaskList, TaskRowView, taskHref, useTaskList } from "./TaskList";
+import { TaskList, TaskRowView, useTaskList } from "./TaskList";
 
 const VIEWS = [
   { value: "list", label: "List" },
@@ -33,6 +32,7 @@ export function ProjectTasks({
   items,
   done,
   onSelect,
+  onOpenTask,
   onFull,
 }: {
   parent: WorkItem;
@@ -41,6 +41,8 @@ export function ProjectTasks({
   /** Closed tasks directly inside, folded to one row under the list. */
   done: readonly RollupItemRow[];
   onSelect: (id: string) => void;
+  /** Open a task on its Overview or its Chat (this page opens tasks itself, without leaving). */
+  onOpenTask: (id: string, to: "overview" | "chat") => void;
   /** Open Board or Graph as a full view of this project. */
   onFull: (view: "board" | "graph") => void;
 }) {
@@ -70,7 +72,7 @@ export function ProjectTasks({
           </h3>
           <div>
             {needs.map((row) => (
-              <TaskRowView key={row.id} row={row} flow={flow} onChanged={onChanged} />
+              <TaskRowView key={row.id} row={row} flow={flow} onChanged={onChanged} open={onOpenTask} />
             ))}
           </div>
         </section>
@@ -106,7 +108,15 @@ export function ProjectTasks({
         ) : null}
         {view === "list" ? (
           <>
-            <TaskList scope={parent.id} view="all" bare limit={8} exclude={needs.map((r) => r.id)} empty={<p className="tl-quiet">No open tasks</p>} />
+            <TaskList
+              scope={parent.id}
+              view="all"
+              bare
+              limit={8}
+              open={onOpenTask}
+              exclude={needs.map((r) => r.id)}
+              empty={<p className="tl-quiet">No open tasks</p>}
+            />
             {done.length ? (
               <div className="ip-rows">
                 <ItemRows open={[]} done={done} onSelect={onSelect} />
@@ -131,10 +141,10 @@ export function ProjectTasks({
           <ul className="tl-plain">
             {project.atWork.map((w) => (
               <li key={w.id}>
-                <Link href={taskHref(w.id)} className="tl-plain-link">
+                <Button size="sm" variant="ghost" className="tl-plain-link" onClick={() => onOpenTask(w.id, "overview")}>
                   {w.who ? `${w.who} · ` : ""}
                   {w.title}
-                </Link>
+                </Button>
                 <span className="tl-plain-age" data-dynamic>
                   {shortAge(w.since, now)}
                 </span>
@@ -154,10 +164,10 @@ export function ProjectTasks({
                 <Pill tone={m.tone} className="tl-chip">
                   {m.label}
                 </Pill>
-                <Link href={taskHref(m.taskId)} className="tl-plain-link">
+                <Button size="sm" variant="ghost" className="tl-plain-link" onClick={() => onOpenTask(m.taskId, "overview")}>
                   {m.text ? `${m.text} · ` : ""}
                   {m.task}
-                </Link>
+                </Button>
                 <time className="tl-plain-age" dateTime={m.at} data-dynamic>
                   {shortWhen(m.at, now)}
                 </time>
