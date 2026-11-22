@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { cx } from "@/components/ui";
+import { createContext, useContext, useState } from "react";
+import { Button, cx } from "@/components/ui";
 import { ChevronIcon } from "@/components/icons";
 import type { ChatNotice, NoticeTask } from "@/lib/chat-notices";
 
@@ -51,7 +51,19 @@ export function NoticeCard({ notice, time }: { notice: Extract<ChatNotice, { kin
   );
 }
 
+/**
+ * "Ask about this": puts a question about one delegated step into the thread's composer, with the step quoted, so
+ * it goes to the agent that delegated it. A step with no chat of its own has nowhere else to be asked about.
+ * The thread provides it (ChatThread); without one the control is not drawn. It only fills the field: nothing is sent.
+ */
+export const AskAboutStep = createContext<((text: string) => void) | null>(null);
+
+/** The words that quote a step in a question about it. */
+export const askAboutText = (task: Pick<NoticeTask, "goal" | "index" | "total">) =>
+  `About the step “${(task.goal || `task ${task.index}${task.total ? `/${task.total}` : ""}`).replace(/\s+/g, " ").slice(0, 160)}”: `;
+
 function TaskRow({ task }: { task: NoticeTask }) {
+  const ask = useContext(AskAboutStep);
   return (
     <details className="chat-notice-task" data-testid="notice-task">
       <summary className="flex-wrap py-1">
@@ -73,6 +85,11 @@ function TaskRow({ task }: { task: NoticeTask }) {
           <p className="text-xs text-muted">No summary.</p>
         )}
         {task.transcript ? <TranscriptPath path={task.transcript} /> : null}
+        {ask ? (
+          <Button size="sm" variant="ghost" onClick={() => ask(askAboutText(task))}>
+            Ask about this
+          </Button>
+        ) : null}
       </div>
     </details>
   );
