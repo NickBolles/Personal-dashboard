@@ -532,11 +532,49 @@ describe("what Jarvis knows about you", () => {
       method: "POST",
       body: { kind: "jarvis-brief-profile", version: 1, notes: [...exported.body.notes, { text: "Third from a backup" }] },
     });
-    expect(imported.body).toEqual({ added: 1, skipped: 2 });
+    expect(imported.body).toEqual({ added: 1, skipped: 2, undo: expect.stringMatching(/^bru_/) });
     expect((await call(profileRoute.POST, owner, { method: "POST", body: { kind: "other", version: 1, notes: [] } })).status).toBe(400);
 
     expect((await call(profileRoute.DELETE, owner, { method: "DELETE", body: {} })).status).toBe(200);
     expect(listNotes(owner, ["active", "proposed", "dismissed"])).toEqual([]);
+  });
+
+  it("an import can be taken back whole: what it wrote goes, what it revived is as it was", async () => {
+    const v = await build();
+    addNote(owner, "Already here");
+    proposeNotes(owner, v.brief.id!, [{ text: "Dismissed long ago", evidence: "one brief", kind: "driver" }]);
+    const old = listNotes(owner, ["proposed"])[0]!;
+    await call(noteRoute.PATCH, owner, { method: "PATCH", params: { id: old.id }, body: { state: "dismissed" } });
+    const all = () =>
+      listNotes(owner, ["active", "proposed", "dismissed"])
+        .map((n) => `${n.state}:${n.origin}:${n.kind}:${n.text}:${n.evidence ?? ""}`)
+        .sort();
+    const before = all();
+
+    const imported = await call<{ added: number; skipped: number; undo?: string }>(profileRoute.POST, owner, {
+      method: "POST",
+      body: {
+        kind: "jarvis-brief-profile",
+        version: 1,
+        notes: [{ text: "Already here" }, { text: "dismissed long AGO" }, { text: "Brand new", kind: "value" }],
+      },
+    });
+    expect(imported.body).toMatchObject({ added: 2, skipped: 1 });
+    // The import revived the dismissed note as the person's own: that is what Undo has to put back.
+    expect(all()).toContain("active:you:pattern:dismissed long AGO:one brief");
+    expect(all()).toContain("active:you:value:Brand new:");
+
+    const back = await call<{ notes: number }>(restoreRoute.POST, owner, { method: "POST", body: { token: imported.body.undo } });
+    expect(back.body).toMatchObject({ notes: 2, feedback: 0 });
+    expect(all()).toEqual(before);
+    expect((await call(restoreRoute.POST, owner, { method: "POST", body: { token: imported.body.undo } })).status).toBe(410);
+
+    // Nothing new, nothing to undo.
+    const none = await call<{ added: number; undo?: string }>(profileRoute.POST, owner, {
+      method: "POST",
+      body: { kind: "jarvis-brief-profile", version: 1, notes: [{ text: "Already here" }] },
+    });
+    expect(none.body).toEqual({ added: 0, skipped: 1 });
   });
 
   it("Forget everything can be undone once, and only by the reset that removed it", async () => {

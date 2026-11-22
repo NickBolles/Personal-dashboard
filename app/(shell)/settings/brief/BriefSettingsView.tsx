@@ -23,12 +23,14 @@ import {
   useOnline,
   useToast,
 } from "@/components/ui";
+import type { z } from "zod";
 import { BRIEF_LIMITS, BRIEF_NOTE_KIND_LABEL, briefImportSchema, type BriefNoteView, type BriefSettings } from "@/lib/brief";
 import { BRIEF_KEY, BRIEF_NOTES_KEY } from "@/components/brief/useBrief";
 import "@/components/brief/brief.css";
 
 type SettingsRes = { settings: BriefSettings; ai: { available: boolean; reason?: string } };
 type Patch = Partial<Omit<BriefSettings, "share">> & { share?: Partial<BriefSettings["share"]> };
+type ImportFile = { name: string; data: z.infer<typeof briefImportSchema> };
 /** One pending Undo at a time: what was done, and how to put it back. */
 type Undo = { message: string; back: () => Promise<unknown> } | null;
 const noteUrl = (id: string) => `/api/brief/notes/${encodeURIComponent(id)}`;
@@ -57,6 +59,8 @@ export function BriefSettingsView() {
   const [forget, setForget] = useState<BriefNoteView | null>(null);
   const [forgetting, setForgetting] = useState(false);
   const [undo, setUndo] = useState<Undo>(null);
+  const [incoming, setIncoming] = useState<ImportFile | null>(null);
+  const [importing, setImporting] = useState(false);
 
   // An Undo offer lasts 8 seconds.
   useEffect(() => {
@@ -80,16 +84,6 @@ export function BriefSettingsView() {
       toast((e as Error).message, "danger");
     }
   };
-  const note = async (run: () => Promise<unknown>, ok: string) => {
-    try {
-      await run();
-      toast(ok, "ok");
-      refresh();
-    } catch (e) {
-      toast((e as Error).message, "danger");
-    }
-  };
-
   /** A change to one note: saved, then offered back with Undo. */
   const change = async <T,>(run: () => Promise<T>, message: string, back: (done: T) => Promise<unknown>) => {
     setUndo(null);
@@ -115,6 +109,21 @@ export function BriefSettingsView() {
       "Forgotten",
       () => (x.origin === "learned" ? api.patch(noteUrl(x.id), { state: "active" }) : api.post("/api/brief/notes", { text: x.text, kind: x.kind })),
     );
+  /** Import: adds what is missing and can revive a dismissed note, so it is confirmed first and taken back whole by Undo. */
+  const runImport = async (file: ImportFile) => {
+    setUndo(null);
+    try {
+      const r = await api.post<{ added: number; skipped: number; undo?: string }>("/api/brief/profile", file.data);
+      await n.refetch();
+      refresh();
+      const message = `Imported ${r.added}${r.skipped ? `, skipped ${r.skipped} already known` : ""}`;
+      const token = r.undo;
+      if (token) setUndo({ message, back: () => api.post("/api/brief/profile/restore", { token }) });
+      else toast(message, "ok");
+    } catch (e) {
+      toast((e as Error).message, "danger");
+    }
+  };
   const runUndo = async (u: NonNullable<Undo>) => {
     setUndo(null);
     try {
@@ -263,15 +272,38 @@ export function BriefSettingsView() {
               }
               const parsed = briefImportSchema.safeParse(raw);
               if (!parsed.success) return toast("Choose a brief notes export (JSON)", "danger");
-              await note(async () => {
-                const r = await api.post<{ added: number; skipped: number }>("/api/brief/profile", parsed.data);
-                toast(`Imported ${r.added}${r.skipped ? `, skipped ${r.skipped} already known` : ""}`, "ok");
-                await n.refetch();
-              }, "Import finished");
+              setIncoming({ name: f.name, data: parsed.data });
             }}
           />
         </div>
       </Card>
+
+      <Dialog
+        open={incoming !== null}
+        onClose={() => setIncoming(null)}
+        title={incoming ? `Import ${incoming.data.notes.length === 1 ? "1 note" : `${incoming.data.notes.length} notes`}?` : "Import notes?"}
+        description={incoming?.name}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setIncoming(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              loading={importing}
+              onClick={async () => {
+                if (!incoming) return;
+                setImporting(true);
+                await runImport(incoming);
+                setImporting(false);
+                setIncoming(null);
+              }}
+            >
+              Import
+            </Button>
+          </>
+        }
+      />
 
       <Dialog
         open={forget !== null}

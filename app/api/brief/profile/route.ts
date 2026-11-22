@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 /** Export what this person taught the brief (their active notes) as JSON. */
 export const GET = api(({ user }) => exportProfile(user.id), { cap: BRIEF_CAP });
 
-/** Import notes from an export. Adds what is missing; never removes or replaces. */
+/** Import notes from an export. Adds what is missing; never removes one. `undo` takes the import back (profile/restore) for a minute. */
 export const POST = api<z.infer<typeof briefImportSchema>>(({ user, body }) => importProfile(user.id, body.notes), { body: briefImportSchema, cap: BRIEF_CAP });
 
 /**

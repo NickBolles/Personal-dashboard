@@ -509,7 +509,7 @@ export const briefNoteCreateSchema = z
     kind: z.enum(BRIEF_NOTE_KINDS).optional(),
   })
   .strict();
-/** Undo of "Forget everything": the token that reset returned. */
+/** Undo of "Forget everything" or of an import: the token that change returned. */
 export const briefRestoreSchema = z.object({ token: z.string().min(4).max(64) }).strict();
 export const briefNotePatchSchema = z
   .object({

@@ -259,6 +259,22 @@ test("settings list what it knows, with export, import and a confirmed reset", a
   await expect(notes.getByText("Workouts matter more than inbox zero", { exact: true })).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
+  // Importing asks first, and Undo takes the whole import back.
+  await page.getByLabel("Import brief notes").setInputFiles({
+    name: "notes.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({ kind: "jarvis-brief-profile", version: 1, notes: [{ text: "Family dinner is not movable" }] })),
+  });
+  const incoming = page.getByRole("dialog", { name: "Import 1 note?" });
+  await expect(incoming).toContainText("notes.json");
+  expect(await serious(page)).toEqual([]);
+  await incoming.getByRole("button", { name: "Import", exact: true }).click();
+  await expect(incoming).toHaveCount(0);
+  await expect(notes.getByText("Family dinner is not movable", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(notes.getByText("Family dinner is not movable", { exact: true })).toHaveCount(0);
+  await expect(notes.getByText("Workouts matter more than inbox zero", { exact: true })).toBeVisible();
+
   await page.getByRole("button", { name: "Import, export or reset notes" }).click();
   await page.getByRole("menuitem", { name: "Forget everything…" }).click();
   const dialog = page.getByRole("dialog", { name: "Forget everything the brief knows?" });

@@ -5,7 +5,7 @@ import { briefRestoreSchema } from "@/lib/brief";
 import { BRIEF_CAP } from "@/server/brief";
 import { restoreProfile } from "@/server/brief/store";
 
-/** Undo of "Forget everything": puts back what the reset removed, once, within a minute of it. */
+/** Undo of "Forget everything" or of an import, once, within a minute of it, by the token that change returned. */
 export const POST = api<z.infer<typeof briefRestoreSchema>>(
   ({ user, body, correlationId }) => {
     const restored = restoreProfile(user.id, body.token);

@@ -473,28 +473,58 @@ export function exportProfile(userId: string) {
   };
 }
 
-/** Adds notes that aren't there yet; never removes or replaces one. */
-export function importProfile(userId: string, notes: { text: string; origin?: BriefNoteView["origin"]; kind?: BriefNoteKind }[]) {
+/**
+ * Adds notes that aren't there yet; never removes one. A note that was dismissed or still only proposed comes back
+ * as active (that changes what the next build uses), so the import remembers each note it wrote and how the ones it
+ * revived were before: `undo` takes exactly this import back for the next minute.
+ */
+export function importProfile(
+  userId: string,
+  notes: { text: string; origin?: BriefNoteView["origin"]; kind?: BriefNoteKind }[],
+  now = Date.now(),
+): { added: number; skipped: number; undo?: string } {
+  const db = getDb();
   let added = 0;
   let skipped = 0;
+  const created: string[] = [];
+  const prior: NoteRow[] = [];
   for (const n of notes) {
     const before = activeCount(userId);
     if (before >= BRIEF_LIMITS.notes) {
       skipped++;
       continue;
     }
-    addNote(userId, n.text, n.origin ?? "you", n.kind ?? "pattern");
-    if (activeCount(userId) > before) added++;
-    else skipped++;
+    const was = db
+      .select()
+      .from(N)
+      .where(and(eq(N.userId, userId), eq(N.norm, normalizeNote(n.text))))
+      .get();
+    const note = addNote(userId, n.text, n.origin ?? "you", n.kind ?? "pattern");
+    if (activeCount(userId) > before) {
+      added++;
+      if (was) prior.push(was);
+      else created.push(note.id);
+    } else skipped++;
   }
-  return { added, skipped };
+  return { added, skipped, ...(added ? { undo: hold(userId, { kind: "import", created, prior }, now) } : {}) };
 }
 
 /** Everything the brief stored about a person (Settings → Brief → Reset). */
-type Held = { token: string; until: number; notes: NoteRow[]; feedback: (typeof F.$inferSelect)[] };
+type Change = { kind: "reset"; notes: NoteRow[]; feedback: (typeof F.$inferSelect)[] } | { kind: "import"; created: string[]; prior: NoteRow[] };
+type Held = Change & { token: string; until: number };
 const RESET_UNDO_MS = 60_000;
-/** What the last "Forget everything" removed, per person, for Undo. In memory only: never written anywhere, gone after a minute or a restart. */
+/**
+ * What the last "Forget everything" removed or the last import changed, per person, for Undo. In memory only:
+ * never written anywhere, gone after a minute or a restart. One at a time: a newer one replaces it.
+ */
 const held = () => processSingleton("brief_reset_undo", () => new Map<string, Held>());
+function hold(userId: string, change: Change, now: number): string {
+  const map = held();
+  for (const [id, h] of map) if (h.until <= now) map.delete(id);
+  const token = newId("bru");
+  map.set(userId, { ...change, token, until: now + RESET_UNDO_MS });
+  return token;
+}
 
 /** Forget everything the brief learned about this person. Returns a token that puts it back for the next minute. */
 export function resetProfile(userId: string, now = Date.now()): string {
@@ -503,14 +533,13 @@ export function resetProfile(userId: string, now = Date.now()): string {
   const feedback = db.select().from(F).where(eq(F.userId, userId)).all();
   db.delete(N).where(eq(N.userId, userId)).run();
   db.delete(F).where(eq(F.userId, userId)).run();
-  const map = held();
-  for (const [id, h] of map) if (h.until <= now) map.delete(id);
-  const token = newId("bru");
-  map.set(userId, { token, until: now + RESET_UNDO_MS, notes, feedback });
-  return token;
+  return hold(userId, { kind: "reset", notes, feedback }, now);
 }
 
-/** Undo of "Forget everything", once: puts back what that reset removed, except where something newer has taken its place. */
+/**
+ * Undo, once. After "Forget everything": puts back what that reset removed, except where something newer has taken
+ * its place. After an import: removes the notes it wrote and sets the ones it revived back to how they were.
+ */
 export function restoreProfile(userId: string, token: string, now = Date.now()): { notes: number; feedback: number } {
   const map = held();
   const h = map.get(userId);
@@ -518,6 +547,18 @@ export function restoreProfile(userId: string, token: string, now = Date.now()):
   if (!h || h.token !== token || h.until <= now) throw new HttpError(410, "undo_expired", "That can't be undone any more");
   map.delete(userId);
   const db = getDb();
+  if (h.kind === "import") {
+    for (const id of h.created)
+      db.delete(N)
+        .where(and(eq(N.id, id), eq(N.userId, userId)))
+        .run();
+    for (const { id, ...was } of h.prior)
+      db.update(N)
+        .set(was)
+        .where(and(eq(N.id, id), eq(N.userId, userId)))
+        .run();
+    return { notes: h.created.length + h.prior.length, feedback: 0 };
+  }
   let notes = 0;
   let feedback = 0;
   for (const n of h.notes) {

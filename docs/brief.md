@@ -131,7 +131,7 @@ What an earlier brief said is quoted to the next build only under today's rules,
 
 From these the model may propose at most three lasting notes per build, each with a kind (value, principle, driver, pattern) ("Prefers one deep block before noon", with its evidence). A proposal is dashed teal and is **not used until you keep it**. "Not true" dismisses it and it is never proposed again. At most six wait at a time. The prompt forbids proposals about money or other people's private matters, and anything from a single data point.
 
-Settings → Brief lists everything it knows, with import, export (`jarvis-brief-profile.json`) and "Forget everything". Every change here asks first where it removes something and offers Undo: forgetting one note, Keep, Not true, and "Forget everything". After "Forget everything" the removed notes, proposals and feedback are held in memory only (never written anywhere) for one minute so Undo can put them back; after that, or after a restart, they are gone.
+Settings → Brief lists everything it knows, with import, export (`jarvis-brief-profile.json`) and "Forget everything". Every change here offers Undo, and asks first where it removes or brings in something: forgetting one note, Keep, Not true, an import and "Forget everything". An import adds what is missing and makes a dismissed or proposed note active again; Undo removes what it wrote and sets the ones it revived back as they were. After "Forget everything" the removed notes, proposals and feedback are held in memory only (never written anywhere) for one minute so Undo can put them back; after that, or after a restart, they are gone. The same minute applies to an import.
 
 ## Storage
 
@@ -153,7 +153,7 @@ All routes need `brief.use` (the Improve and sparkle routes also `hermes.chat` a
 | `POST /api/brief/assist`                                         | `{target: {kind: action or item, id}, clientKey}`: the sparkle on one row                 |
 | `DELETE /api/brief/improve/:id`                                  | undo an Improve request or a sparkle: stop the run, archive what was made for it          |
 | `GET/POST/DELETE /api/brief/profile`                             | export, import (adds only), forget everything                                             |
-| `POST /api/brief/profile/restore`                                | Undo of forget everything (`token` from the reset; once, within a minute)                 |
+| `POST /api/brief/profile/restore`                                | Undo of forget everything or of an import (its `token`; once, within a minute)            |
 
 ## Not yet
 
