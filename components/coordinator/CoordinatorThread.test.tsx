@@ -558,68 +558,17 @@ function startedWork() {
   ]);
 }
 
-it("work that already has its row under the reply that started it is not drawn again as a mention, under any reply", async () => {
+it("keeps Chat free of run cards while decision mentions remain reachable", async () => {
   startedWork();
-  const mentions = mentionsOf({ "R-7": 0, "R-8": 3, "D-2": -1 });
-  mount({ mentions, onRef: vi.fn() });
-  const work = await screen.findByTestId("coordinator-run-card");
-  await waitFor(() => expect(work.getAttribute("data-run-ref")).toBe("R-7"));
-  // (the messages and the work load separately: until both are in, the row waits after the last message)
-  await waitFor(() =>
-    expect(
-      within(screen.getByText(/^Started/).closest("li")!)
-        .getByRole("region", { name: "Work started by this reply" })
-        .contains(work),
-    ).toBe(true),
-  );
-  // the later reply mentions R-7 too, and the host could draw it: it has its row already, so it is not drawn twice
-  expect(mentionSection(/^Started/)).toBeNull();
-  expect(rowsIn(mentionSection(/is half way/))).toEqual(["D-2", "R-8"]);
-  // (What is on screen is what matters: until the tracked runs have loaded the work has no R-n yet, so the host
-  // may be asked for R-7 once before the row claims it.)
-  expect(document.querySelectorAll('[data-run-ref="R-7"], [data-ref-row="R-7"]')).toHaveLength(1);
-});
-
-it("a chip in the text jumps to the thing's row when it is on screen in the thread, and only otherwise leaves the conversation", async () => {
-  startedWork();
-  const scrolled = vi.fn();
-  Element.prototype.scrollIntoView = scrolled;
   const onRef = vi.fn();
-  try {
-    mount({ mentions: mentionsOf({ "R-8": 3, "D-2": -1 }), onRef });
-    const work = await screen.findByTestId("coordinator-run-card");
-    await waitFor(() => expect(work.getAttribute("data-run-ref")).toBe("R-7"));
-    const chipsFor = (name: string) => screen.getAllByRole("button", { name }).filter((el) => el.classList.contains("gc-inline-ref"));
-    // R-7 is written three times (two replies and the owner's question): every chip lands on its one row
-    expect(chipsFor("Run R 7")).toHaveLength(3);
-    for (const [index, chip] of chipsFor("Run R 7").entries()) {
-      work.removeAttribute("data-landed");
-      fireEvent.click(chip);
-      expect(work.hasAttribute("data-landed")).toBe(true);
-      expect(scrolled).toHaveBeenCalledTimes(index + 1);
-      expect(scrolled.mock.contexts.at(-1)).toBe(work);
-      expect(scrolled).toHaveBeenLastCalledWith({ block: "nearest" });
-    }
-    // and hands the keyboard to the row (its title, which opens the work itself)
-    expect(document.activeElement).toBe(work.querySelector(".k-thing-title"));
-    expect((document.activeElement as HTMLAnchorElement).getAttribute("href")).toBe("/chat/child");
-    // a mentioned decision's row is on screen too
-    const decision = document.querySelector<HTMLElement>('[data-ref-row="D-2"]')!;
-    for (const chip of chipsFor("Decision D 2")) fireEvent.click(chip);
-    expect(decision.hasAttribute("data-landed")).toBe(true);
-    expect(document.activeElement).toBe(decision.querySelector(".k-thing-title"));
-    // staying in the conversation is not opening a tab
-    expect(onRef).not.toHaveBeenCalled();
-    // nothing on screen for R-99: that one goes to its tab
-    fireEvent.click(chipsFor("Run R 99")[0]!);
-    expect(onRef).toHaveBeenCalledExactlyOnceWith("R-99");
-    expect(document.querySelectorAll("[data-landed]")).toHaveLength(2);
-    // the mark is momentary
-    await waitFor(() => expect(document.querySelectorAll("[data-landed]")).toHaveLength(0), { timeout: 3000 });
-    expect(api.post).not.toHaveBeenCalled();
-  } finally {
-    Reflect.deleteProperty(Element.prototype, "scrollIntoView");
-  }
+  mount({ mentions: mentionsOf({ "R-7": 0, "R-8": 3, "D-2": -1 }), onRef });
+  await screen.findAllByRole("button", { name: "Run R 7" });
+  expect(screen.queryByTestId("coordinator-run-card")).toBeNull();
+  expect(screen.queryByRole("region", { name: "Work started by this reply" })).toBeNull();
+  // The mention host owns decision/task rows; no background-run card is injected by Chat.
+  expect(rowsIn(mentionSection(/is half way/))).toEqual(["D-2", "R-7", "R-8"]);
+  fireEvent.click(screen.getByRole("button", { name: "Run R 99" }));
+  expect(onRef).toHaveBeenCalledWith("R-99");
 });
 
 // ---- answering a decision in your own words -------------------------------------------------------------------
