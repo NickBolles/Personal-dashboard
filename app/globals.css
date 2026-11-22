@@ -4070,22 +4070,4 @@ button:active > .dock-orb {
   .k-panes-one {
     min-width: 0;
   }
-  .k-panes-one {
-    animation: k-pane-in var(--d2) var(--ease) both;
-  }
-  .k-panes-one[data-enter="back"] {
-    animation-name: k-pane-back;
-  }
-  @keyframes k-pane-in {
-    from {
-      opacity: 0;
-      transform: translateX(14px);
-    }
-  }
-  @keyframes k-pane-back {
-    from {
-      opacity: 0;
-      transform: translateX(-14px);
-    }
-  }
 }

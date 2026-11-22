@@ -263,13 +263,6 @@ export function SplitPane({
     0,
     panes.findIndex((p) => p.id === value),
   );
-  // Which way the pane that is showing came in from (the one before it sat on the other side).
-  const [seen, setSeen] = useState(index);
-  const [direction, setDirection] = useState<"forward" | "back">("forward");
-  if (seen !== index) {
-    setDirection(index > seen ? "forward" : "back");
-    setSeen(index);
-  }
   if (split)
     return (
       <div ref={root} className={cx("k-panes", className)} data-split="">
@@ -310,7 +303,7 @@ export function SplitPane({
         start.current = null;
       }}
     >
-      <div key={panes[index].id} className="k-panes-one" data-pane={panes[index].id} data-enter={direction}>
+      <div key={panes[index].id} className="k-panes-one" data-pane={panes[index].id}>
         {panes[index].content}
       </div>
     </div>

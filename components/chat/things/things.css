@@ -396,14 +396,16 @@
 }
 
 /* -- Header: glyph buttons without boxes, then one quiet line of context. -- */
-.chat-head .chat-head-btn {
+.chat-head .chat-head-btn,
+.chat-embed-bar .chat-head-btn {
   width: 2.25rem;
   min-width: 0;
   height: 2.25rem;
   min-height: 0;
   flex-shrink: 0;
 }
-.chat-head .chat-head-btn svg {
+.chat-head .chat-head-btn svg,
+.chat-embed-bar .chat-head-btn svg {
   width: 1.125rem;
   height: 1.125rem;
 }

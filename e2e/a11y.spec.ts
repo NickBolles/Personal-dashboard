@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import { stubPhase3Settings } from "./fixtures/phase3-gaps";
-import { ensureWorkflowActive, expectNoHorizontalOverflow, mock, openChatPanel, startConversation } from "./helpers";
+import { ensureWorkflowActive, expectNoHorizontalOverflow, mock, openChatPanel, openTaskPane, startConversation } from "./helpers";
 import { forceSourceState, SOURCE_STATES } from "./fixtures/states";
 import { PHOTO_PNG } from "./fixtures/chat-files";
 import teaching from "../lib/workflows/fixtures/teaching-notes.json";
@@ -1168,4 +1168,75 @@ test("phone width guard: long real-shaped data never widens key pages past the v
     if (r.iw > vw || r.sw > vw) offenders.push(`${path}: innerWidth ${r.iw}, scrollWidth ${r.sw} > ${vw}`);
   }
   expect(offenders, `${testInfo.project.name}: pages wider than the phone viewport`).toEqual([]);
+});
+
+test("task page: Overview and Chat stay inside the viewport with long text, at normal and 200% text, and pass axe", async ({ page }) => {
+  test.setTimeout(180_000);
+  const nonce = Date.now().toString(36);
+  const unbroken = "Supercalifragilisticexpialidocious_task_title_without_any_spaces_at_all_0123456789";
+  const url = "https://github.com/NickBolles/Personal-dashboard/pull/123456789?diff=split&w=1#discussion_r1234567890abcdef";
+  await page.goto("/home");
+  const post = async (path: string, data: unknown) => {
+    const r = await page.request.post(path, { data, headers: { "x-jarvis-csrf": "1" } });
+    expect(r.ok(), await r.text()).toBeTruthy();
+    return r.json();
+  };
+  const area = ((await post("/api/work/items", { kind: "area", title: `Pane lantern ${nonce}` })) as { item: { id: string } }).item.id;
+  const id = (
+    (await post("/api/work/items", {
+      kind: "thread",
+      parentId: area,
+      title: `${unbroken} ${nonce}`,
+      summary: `Compare the frames at ${url} and keep the current top. ${unbroken}`,
+      nextAction: `Pick a frame once the ceiling is set ${unbroken}`,
+    })) as { item: { id: string } }
+  ).item.id;
+  // An earlier chat linked to the task (it shows under Other chats) and a link (Made and linked).
+  const other = (await post("/api/hermes/sessions", { title: `${unbroken} earlier chat ${nonce}`, backend: "hermes" })) as { id: string };
+  await post(`/api/work/items/${id}/links`, { kind: "chat_session", targetId: other.id });
+  await post(`/api/work/items/${id}/links`, { kind: "url", url, title: `${unbroken} link` });
+  const axe = async (label: string) => {
+    const results = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+    expect.soft(results.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${label} ${v.id}`)).toEqual([]);
+  };
+  const zoom = () => page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+
+  // Before the task has a chat: Overview, then the Chat pane with its first-message composer and Other chats.
+  await page.goto(`/areas?item=${id}`);
+  await expect(page.locator("#work-item-title")).toBeVisible();
+  await expect(page.getByTestId("item-log")).toBeVisible();
+  await page.waitForTimeout(300);
+  await expectNoHorizontalOverflow(page, { soft: true });
+  await axe("overview");
+  let chat = await openTaskPane(page, "Chat");
+  await expect(chat.getByTestId("task-no-chat")).toBeVisible();
+  await chat
+    .getByTestId("task-other-chats")
+    .getByRole("button", { name: /^Other chats/ })
+    .click();
+  await expect(chat.getByRole("button", { name: "Make primary" })).toBeVisible();
+  await expectNoHorizontalOverflow(page, { soft: true });
+  await axe("chat, no chat yet");
+  await zoom();
+  await page.waitForTimeout(300);
+  await expectNoHorizontalOverflow(page, { soft: true });
+
+  // The first message creates the chat: the shared thread with its composer, at normal and at 200% text.
+  await page.goto(`/areas?item=${id}`);
+  chat = await openTaskPane(page, "Chat");
+  await chat.getByTestId("task-first-input").fill(`pane check ${nonce} ${unbroken} ${url}`);
+  await chat.getByTestId("task-first-send").click();
+  await expect(chat.getByText(/Got it: "pane check/)).toBeVisible({ timeout: 20_000 });
+  await page.waitForTimeout(500);
+  await expectNoHorizontalOverflow(page, { soft: true });
+  await axe("chat");
+  await zoom();
+  await page.waitForTimeout(300);
+  await expectNoHorizontalOverflow(page, { soft: true });
+  // Back on Overview with the chat's status bar under it, still at 200% text.
+  await page.goto(`/areas?item=${id}`);
+  await expect(page.locator("#work-item-title")).toBeVisible();
+  await zoom();
+  await page.waitForTimeout(300);
+  await expectNoHorizontalOverflow(page, { soft: true });
 });
