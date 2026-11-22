@@ -240,11 +240,8 @@ function FirstMessage({ d, scroll, lead, prefill }: { d: WorkDetail; scroll: "wi
       <div className="tc-first-body">
         {lead}
         {/* Beside Overview (docked) the summary and the log are already on screen: a thing is drawn once. */}
-        {docked ? (
-          <p className="tc-first-what tc-first-quiet">No dedicated chat on this task yet.</p>
-        ) : (
-          <p className="tc-first-what">{item.summary || item.nextAction || "No dedicated chat on this task yet."}</p>
-        )}
+        <p className={docked ? "tc-first-what tc-first-quiet" : "tc-first-what"}>No dedicated chat on this task yet.</p>
+        {!docked && (item.summary || item.nextAction) ? <p className="tc-first-what">{item.summary || item.nextAction}</p> : null}
         {happened.length && !docked ? (
           <ol className="tc-first-log" aria-label="What has happened">
             {happened.map((e) => (

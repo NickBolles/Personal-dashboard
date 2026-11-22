@@ -28,7 +28,21 @@ it("copies the exact canonical task id on tap without navigating", async () => {
 
   await waitFor(() => expect(writeText).toHaveBeenCalledExactlyOnceWith(id));
   expect(screen.getByRole("button", { name: "Copy task ID" }).textContent).toBe("Copied");
+  expect(screen.getByRole("status").textContent).toBe("Task ID copied.");
   expect(navigate).not.toHaveBeenCalled();
+});
+
+it("clears copied feedback when WorkView selects another task", async () => {
+  const writeText = vi.fn(async (_value: string) => undefined);
+  Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+  const view = render(<TaskIdentity id={id} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Copy task ID" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Copy task ID" }).textContent).toBe("Copied"));
+  view.rerender(<TaskIdentity id="wk_new" />);
+
+  expect(screen.getByRole("button", { name: "Copy task ID" }).textContent).toBe("Copy");
+  expect(screen.queryByRole("status")).toBeNull();
 });
 
 it("copies with the keyboard", async () => {

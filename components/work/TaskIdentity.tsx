@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type KeyboardEvent, type MouseEvent } from "react";
+import { useEffect, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { ChipButton } from "@/components/ui";
 
 /**
@@ -9,6 +9,9 @@ import { ChipButton } from "@/components/ui";
  */
 export function TaskIdentity({ id }: { id: string }) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+
+  // WorkView keeps this component mounted while selecting a different task.
+  useEffect(() => setCopyState("idle"), [id]);
 
   const copy = async () => {
     try {
@@ -43,6 +46,11 @@ export function TaskIdentity({ id }: { id: string }) {
       >
         {copyState === "copied" ? "Copied" : "Copy"}
       </ChipButton>
+      {copyState === "copied" ? (
+        <span className="sr-only" role="status">
+          Task ID copied.
+        </span>
+      ) : null}
       {copyState === "failed" ? (
         <span className="ip-task-id-fallback" role="status">
           Copy unavailable — select the ID above.

@@ -134,6 +134,7 @@ describe("a task with no chat yet", () => {
     });
     render(<TaskChat d={d} scroll="window" onOp={() => undefined} />, { wrapper });
     expect(screen.getByTestId("task-no-chat")).toBeTruthy();
+    expect(screen.getByText("No dedicated chat on this task yet.")).toBeTruthy();
     expect(screen.getByText("Three frames shortlisted. Budget not set.")).toBeTruthy();
     expect(screen.getByText("Captured from Inbox")).toBeTruthy();
     expect(screen.queryByTestId("thread")).toBeNull();
