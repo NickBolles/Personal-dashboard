@@ -189,6 +189,9 @@ jobs:
         env:
           CI: "1"
           E2E_BLOB: "1"
+          # Playwright names the blob report after --shard; with a --test-list every shard would write
+          # report.zip, and the report job (merge-multiple) would keep only one of them.
+          PLAYWRIGHT_BLOB_OUTPUT_NAME: report-${{ matrix.shard }}.zip
           MODE: ${{ needs.select.outputs.mode }}
           GREP: ${{ needs.select.outputs.grep }}
           SHARD: ${{ matrix.shard }}/${{ needs.select.outputs.total }}
