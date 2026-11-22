@@ -1272,6 +1272,8 @@ function ItemDetail({
             : topRow
               ? { state: topRow.state, text: said([topRow.title, topRow.note]) }
               : null;
+  // The task's own chat is a pane of this page (and the status bar speaks for it): a turn in it is not also a row.
+  const agentRows = chatTab ? work.rows.filter((row) => row.kind !== "chat" || (!!row.sessionId && row.sessionId !== item.primarySessionId)) : work.rows;
   const plan =
     summary || hasBlockers || d.packets.length || adds.length ? (
       <section className="ip-sec ip-plan" aria-labelledby="ip-plan-h" data-testid="item-plan">
@@ -1313,7 +1315,7 @@ function ItemDetail({
             label="Agents and sub-tasks"
             itemId={item.id}
             areaId={d.area?.id ?? null}
-            rows={work.rows}
+            rows={agentRows}
             open={workOpen}
             onToggle={toggleWork}
             onOp={onOp}

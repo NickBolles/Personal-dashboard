@@ -640,11 +640,16 @@
 /* The page scrolls (a phone pane): the column fills what is left of the screen under what sits above it
    (--chat-top, measured by ChatThread), so the composer rests at the bottom of a short thread. */
 .chat-things-container[data-frame="embedded"][data-scroll="window"] .chat-page {
-  min-height: calc(100dvh - 76px - var(--chat-top, 0px));
+  min-height: calc(100dvh - var(--task-bottom, 76px) - var(--chat-top, 0px));
 }
-@media (min-width: 640px) {
-  .chat-things-container[data-frame="embedded"][data-scroll="window"] .chat-page {
-    min-height: calc(100dvh - var(--chat-top, 0px));
+/* The composer docks above the shell's bottom chrome (--task-bottom, task-chat.css): the phone bar, and the Chief
+   of staff tray when it is showing. The chat page has no tray, so its own offsets do not cover that. */
+.chat-things-container[data-frame="embedded"][data-scroll="window"] .chat-dock {
+  bottom: var(--task-bottom, 76px);
+}
+@media (max-width: 639.98px) {
+  .chat-things-container[data-frame="embedded"][data-scroll="window"] .chat-page .chat-dock::after {
+    height: var(--task-bottom, 76px);
   }
 }
 /* The thread scrolls inside its column (a dock): the column has the dock's height and the composer sits under it. */
@@ -684,10 +689,6 @@
   .chat-embed-bar {
     min-height: 40px;
   }
-}
-/* A docked column on a touch tablet: the keyboard takes its share of the dock, not of the composer. */
-.k-panes-dock {
-  height: calc(100dvh - var(--k-dock-top, 0px) - var(--kb-inset, 0px));
 }
 /* ==== end embedded thread ==== */
 

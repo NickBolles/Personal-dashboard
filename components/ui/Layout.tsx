@@ -172,8 +172,8 @@ export function Sheet({
 
 /**
  * A column docked to the side of a page: it stays in view while the page beside it scrolls, with its own header,
- * a body that scrolls by itself and a footer that stays at the bottom (a composer). Set `--k-dock-top` on an
- * ancestor to the height of anything pinned above it.
+ * a body that scrolls by itself and a footer that stays at the bottom (a composer). `--k-dock-top` is the room
+ * taken above it (SplitPane measures it) and `--k-dock-bottom` the room the shell's floating bars take under it.
  */
 export function SideDock({
   label,
@@ -263,6 +263,31 @@ export function SplitPane({
     0,
     panes.findIndex((p) => p.id === value),
   );
+  // Side by side, the docked pane fills the screen from its own top edge down: under a page header at first, the
+  // whole height once the page has scrolled that header away. Its top edge is measured as the page scrolls.
+  useEffect(() => {
+    const dock = split ? root.current?.querySelector<HTMLElement>(":scope > .k-dock") : null;
+    if (!dock) return;
+    let frame = 0;
+    const place = () => {
+      frame = 0;
+      dock.style.setProperty("--k-dock-top", `${Math.max(0, Math.round(dock.getBoundingClientRect().top))}px`);
+    };
+    const queue = () => {
+      if (!frame) frame = requestAnimationFrame(place);
+    };
+    place();
+    window.addEventListener("scroll", queue, { passive: true });
+    window.addEventListener("resize", queue);
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(queue);
+    observer?.observe(document.body);
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", queue);
+      window.removeEventListener("resize", queue);
+      observer?.disconnect();
+    };
+  }, [split]);
   if (split)
     return (
       <div ref={root} className={cx("k-panes", className)} data-split="">

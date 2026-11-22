@@ -6,13 +6,13 @@
  * composer whose first message creates it. Nothing is created before there is a message to put in it.
  */
 import Link from "next/link";
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChatThread } from "@/components/chat/ChatThread";
 import { Composer } from "@/components/chat/Composer";
 import { useChatAttachments } from "@/components/chat/Attachments";
 import { NodeAgentChip, useNodeAgent } from "@/components/agents/NodeAgentChip";
-import { Button, Dialog, Disclosure, StateWord, useOnline, useToast } from "@/components/ui";
+import { Button, Dialog, Disclosure, useOnline, useToast } from "@/components/ui";
 import { useWorkMutation } from "@/components/work/common";
 import type { UndoOp } from "@/components/work/UndoBar";
 import { api } from "@/lib/client/api";
@@ -24,7 +24,6 @@ import { SMART_CAPABILITY } from "@/lib/jarvis-ui/types";
 import { taskChats, type TaskChat as TaskChatRow } from "@/lib/task-chat";
 import { relativeTime } from "@/lib/time";
 import { STATUS_LABELS, type WorkDetail, type WorkEvent, type WorkItem, type WorkStatus } from "@/lib/work";
-import type { WorkState } from "@/lib/work-words";
 import "./task-chat.css";
 
 const NO_COMMANDS = [] as const;
@@ -152,8 +151,6 @@ export function TaskChat({
   );
 }
 
-const STATUS_WORD: Partial<Record<WorkItem["status"], WorkState>> = { in_progress: "working", settled: "done" };
-
 /** One line for a change on the task: what was recorded with it, else the status it moved to. */
 function eventText(e: WorkEvent): string {
   if (e.reason) return e.reason;
@@ -214,16 +211,23 @@ function FirstMessage({
       return false;
     }
   };
-  const state = STATUS_WORD[item.status];
   const happened = [...d.events].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 4);
+  // On a page that scrolls, the pane fills what is left of the screen, so the composer rests at the bottom.
+  const root = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = root.current;
+    if (!el || scroll !== "window") return;
+    const place = () => el.style.setProperty("--chat-top", `${Math.max(0, Math.round(el.getBoundingClientRect().top + window.scrollY))}px`);
+    place();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(place);
+    observer?.observe(document.body);
+    return () => observer?.disconnect();
+  }, [scroll]);
   return (
-    <div className="tc-first chat-page" data-scroll={scroll} data-testid="task-no-chat">
+    <div ref={root} className="tc-first chat-page" data-scroll={scroll} data-testid="task-no-chat">
       <div className="tc-first-body">
         {lead}
-        <p className="tc-first-what">
-          {state ? <StateWord state={state} /> : null}
-          <span>{item.summary || item.nextAction || "No chat on this task yet."}</span>
-        </p>
+        <p className="tc-first-what">{item.summary || item.nextAction || "No chat on this task yet."}</p>
         {happened.length ? (
           <ol className="tc-first-log" aria-label="What has happened">
             {happened.map((e) => (

@@ -42,7 +42,10 @@
   flex-direction: column;
 }
 .tc-first[data-scroll="window"] {
-  min-height: 40dvh;
+  min-height: calc(100dvh - var(--task-bottom, 76px) - var(--chat-top, 0px));
+}
+.tc-first[data-scroll="window"] .chat-dock {
+  bottom: var(--task-bottom, 76px);
 }
 .tc-first[data-scroll="element"] {
   min-height: 0;
@@ -59,11 +62,7 @@
   padding: 12px;
 }
 .tc-first-what {
-  display: flex;
   min-width: 0;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 8px;
   color: var(--t1);
   font: 400 14px/1.45 var(--sans);
   overflow-wrap: anywhere;
@@ -91,19 +90,42 @@
 }
 
 /* ---- the status bar under Overview: one line for what is happening; a tap opens Chat ---- */
+/* What the shell floats over the bottom of the page, so that what a task page docks there stays clear of it:
+   the phone bar (76px), the Chief of staff tray above it when it is showing (coordinator.css gives main the same
+   gutter), the tablet's command dock, and nothing on desktop. With the keyboard up the bar and the tray are gone. */
+.jv-shell {
+  --task-bottom: 76px;
+  --k-dock-bottom: 76px;
+}
+@media (min-width: 1024px) {
+  .jv-shell {
+    --task-bottom: 0px;
+    --k-dock-bottom: 0px;
+  }
+}
+@media (max-width: 899.98px) {
+  html:not([data-kb="open"]) .jv-shell:has(.gc-tray) {
+    --task-bottom: calc(146px + env(safe-area-inset-bottom));
+    --k-dock-bottom: calc(150px + env(safe-area-inset-bottom));
+  }
+  html:not([data-kb="open"]) .jv-shell:has(.gc-tray-qa .qa-chip) {
+    --task-bottom: calc(198px + env(safe-area-inset-bottom));
+    --k-dock-bottom: calc(202px + env(safe-area-inset-bottom));
+  }
+}
+@media (max-width: 639.98px) {
+  html[data-kb="open"] .jv-shell {
+    --task-bottom: var(--kb-inset, 0px);
+  }
+}
 .task-status {
   position: sticky;
-  bottom: 76px;
+  bottom: var(--task-bottom, 76px);
   z-index: 15;
   margin-top: 4px;
   padding: 6px 12px;
   border-top: 1px solid var(--bd);
   background: var(--s0);
-}
-@media (min-width: 640px) {
-  .task-status {
-    bottom: 0;
-  }
 }
 .task-status-line {
   display: flex;

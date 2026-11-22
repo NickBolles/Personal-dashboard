@@ -4035,10 +4035,12 @@ button:active > .dock-orb {
   /* SideDock: a column that stays in view beside a scrolling page. */
   .k-dock {
     position: sticky;
-    top: var(--k-dock-top, 0px);
+    top: 0;
     display: flex;
     min-width: 0;
-    height: calc(100dvh - var(--k-dock-top, 0px));
+    box-sizing: border-box;
+    height: calc(100dvh - var(--k-dock-top, 0px) - var(--kb-inset, 0px));
+    padding-bottom: var(--k-dock-bottom, 0px);
     flex-direction: column;
     align-self: start;
     border-left: 1px solid var(--bd);

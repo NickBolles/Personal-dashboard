@@ -40,6 +40,7 @@ export function RunningSection({
 }) {
   const allOk = !error && !!execution?.sources.length && execution.sources.every((s) => s.state === "ok");
   const records = execution?.records ?? [];
+  const failed = !!error || (!loading && !execution) || execution?.sources.length === 0 || !!execution?.sources.some((s) => s.state === "unavailable");
   const groups = [
     { title: "Running", records: records.filter(isActiveExec) },
     { title: "Finished", records: records.filter((r) => ["completed", "failed", "cancelled"].includes(r.state)) },
@@ -52,7 +53,7 @@ export function RunningSection({
       {loading && !execution ? <Spinner label="Loading agents and jobs…" /> : null}
       {/* One plain line when the check failed. Which source it was, and a saved status that may be old, are not
           the owner's to read: what is known stays listed below either way. */}
-      {error || (!loading && !execution) || execution?.sources.length === 0 || execution?.sources.some((s) => s.state === "unavailable") ? (
+      {failed ? (
         <p className="text-xs text-muted" role="status">
           Couldn&apos;t check background work.{" "}
           <Button size="sm" onClick={retry}>
@@ -73,6 +74,8 @@ export function RunningSection({
           </section>
         ))}
       {!records.length && allOk ? <p className="text-muted">No agents or jobs for this chat</p> : null}
+      {/* Not every source answered freshly, so "none" is not claimed: only that nothing is known to be running. */}
+      {!records.length && !allOk && !failed && execution ? <p className="text-muted">Nothing running that Jarvis knows of</p> : null}
     </div>
   );
 }
