@@ -1173,7 +1173,8 @@ test("phone width guard: long real-shaped data never widens key pages past the v
 test("task page: Overview and Chat stay inside the viewport with long text, at normal and 200% text, and pass axe", async ({ page }) => {
   test.setTimeout(180_000);
   const nonce = Date.now().toString(36);
-  const unbroken = "Supercalifragilisticexpialidocious_task_title_without_any_spaces_at_all_0123456789";
+  // No "title" in it: other specs find fields by that label, and these rows show in the tree they share.
+  const unbroken = "Supercalifragilisticexpialidocious_task_heading_without_any_spaces_at_all_0123456789";
   const url = "https://github.com/NickBolles/Personal-dashboard/pull/123456789?diff=split&w=1#discussion_r1234567890abcdef";
   await page.goto("/home");
   const post = async (path: string, data: unknown) => {

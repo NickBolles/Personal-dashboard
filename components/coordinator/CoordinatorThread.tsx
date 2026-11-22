@@ -36,7 +36,7 @@ import { usePanelLinks } from "@/components/chat/LinksPanel";
 import { ModelSelectDialog } from "@/components/areas/ModelPicker";
 import type { ThingsTab } from "@/lib/chat/things";
 import { Composer, type ComposerHandle } from "@/components/chat/Composer";
-import { AssistantName, LiveRun, liveRunVisible } from "@/components/chat/Timeline";
+import { AssistantName, LiveRun, ToolGroup, liveRunVisible, toolRunsByReply } from "@/components/chat/Timeline";
 import { useRunStream, type RunState } from "@/components/chat/useRunStream";
 import { useRunAnswers } from "@/components/chat/useRunAnswers";
 import { kvDel, kvGet, kvSet } from "@/lib/client/idb";
@@ -555,6 +555,8 @@ export function CoordinatorThread({
     return running ? sendControl(said) : sendMessage(said, key);
   };
   const timeline = detail.data?.timeline ?? [];
+  // The tool work behind each reply, as the one folded row every chat draws (it opens to the steps).
+  const toolRuns = useMemo(() => toolRunsByReply(detail.data?.timeline ?? NO_ITEMS), [detail.data?.timeline]);
   const replyActions = useMemo(
     () => new Map(actionsByReply(detail.data?.timeline ?? []).map((group) => [group.replyId, group.actions])),
     [detail.data?.timeline],
@@ -833,6 +835,11 @@ export function CoordinatorThread({
                         </li>
                       ) : m.kind === "assistant" ? (
                         <li key={m.id} className="co-msg" data-who="assistant" data-msg={m.id}>
+                          {toolRuns.has(m.id) ? (
+                            <div className="gc-toolwork" data-testid="gc-toolwork">
+                              <ToolGroup group={toolRuns.get(m.id)!} />
+                            </div>
+                          ) : null}
                           <div className="co-msg-head flex items-center justify-between gap-1">
                             <p className="text-xs font-semibold text-muted">{name}</p>
                             {sid ? (

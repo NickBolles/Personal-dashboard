@@ -259,6 +259,40 @@ describe("shared coordinator thread", () => {
     expect(screen.getByRole("dialog", { name: "In this chat" })).toBeTruthy();
     expect(api.post).not.toHaveBeenCalledWith(expect.stringContaining("/runs"), expect.anything());
   });
+  it("draws the tool work behind a reply as the same folded row a regular chat has", async () => {
+    makeClient();
+    const t0 = Date.now() - 60_000;
+    const at = (ms: number) => new Date(t0 + ms).toISOString();
+    vi.mocked(api.get).mockImplementation(async (path) => {
+      if (path.endsWith("/execution"))
+        return { sessionId: "s1", parent: null, fetchedAt: at(0), sources: [{ source: "transcript", state: "ok" }], records: [] };
+      if (path.endsWith("/links-panel")) return { links: [] };
+      if (path.startsWith("/api/hermes/sessions/"))
+        return {
+          session: { id: "s1", pinned: false, archived: false },
+          timeline: [
+            { kind: "user", id: "u1", text: "Which storefront todos are still real?", at: at(0) },
+            { kind: "tool", id: "t1", tool: "read_file", input: "todos.md", detail: "14 todos", startedAt: at(1000), at: at(4000) },
+            { kind: "tool", id: "t2", tool: "jarvis_create_item", input: "Holiday sale checklist", detail: "created", startedAt: at(5000), at: at(9000) },
+            { kind: "assistant", id: "a1", text: "Two were still real, so I made them.", at: at(37_000) },
+            { kind: "user", id: "u2", text: "Thanks", at: at(40_000) },
+            { kind: "assistant", id: "a2", text: "Anytime.", at: at(41_000) },
+          ],
+        };
+      if (path === "/api/quick-actions") return { actions: [] };
+      throw new Error(`Unexpected API path: ${path}`);
+    });
+    render(<CoordinatorThread info={{ ...base, sessionId: "s1" }} compact name="Chief of staff" />, { wrapper });
+    const reply = (await screen.findByText("Two were still real, so I made them.")).closest("li")!;
+    // One folded row for the turn's work, above the reply; it opens to the steps.
+    const work = within(reply).getByTestId("gc-toolwork");
+    expect(work.textContent).toMatch(/Worked for 36s/);
+    expect(work.textContent).toMatch(/read 1 file/);
+    expect(work.compareDocumentPosition(within(reply).getByText("Two were still real, so I made them.")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // A reply that used no tools has no such row.
+    expect(within(screen.getByText("Anytime.").closest("li")!).queryByTestId("gc-toolwork")).toBeNull();
+    expect(screen.getAllByTestId("gc-toolwork")).toHaveLength(1);
+  });
   it("has the chat page's add menu (it is the same composer) and never uploads or sends by opening it", () => {
     makeClient();
     render(<CoordinatorThread info={{ ...base, sessionId: "s1" }} compact name="Chief of staff" />, { wrapper });

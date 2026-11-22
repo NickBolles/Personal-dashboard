@@ -85,14 +85,7 @@ export function Timeline({
           }
           return (
             <li key={`work-${g.tools[0].id}`} data-row="work">
-              <WorkSummary
-                id={g.tools[0].id}
-                steps={g.tools}
-                seconds={g.seconds}
-                alwaysShown={g.tools.flatMap((t, j) => (t.error ? [row(t, g.durations[j])] : []))}
-              >
-                {g.tools.map((t, j) => row(t, g.durations[j]))}
-              </WorkSummary>
+              <ToolGroup group={g} />
             </li>
           );
         })}
@@ -109,7 +102,49 @@ export function Timeline({
 }
 
 type ToolItem = Extract<TimelineItem, { kind: "tool" }>;
-type TimelineGroup = TimelineItem | { tools: ToolItem[]; seconds?: number; durations: (number | undefined)[] };
+/** A run of consecutive tool steps: one turn's work. */
+export type ToolRun = { tools: ToolItem[]; seconds?: number; durations: (number | undefined)[] };
+type TimelineGroup = TimelineItem | ToolRun;
+
+/**
+ * One turn's tool work as one folded row ("Worked for 36s · read 14 files"): it opens to the steps, and a step
+ * that failed stays in view. Drawn the same in every thread (the chat page, a task's chat, a bot chat).
+ */
+export function ToolGroup({ group }: { group: ToolRun }) {
+  const step = (t: ToolItem, j: number) => {
+    const sec = group.durations[j];
+    return (
+      <ToolStep
+        key={t.id}
+        id={t.id}
+        tool={t.tool}
+        input={t.input}
+        output={t.detail}
+        error={t.error}
+        duration={sec !== undefined ? formatStepSec(sec) : undefined}
+      />
+    );
+  };
+  return (
+    <WorkSummary id={group.tools[0].id} steps={group.tools} seconds={group.seconds} alwaysShown={group.tools.flatMap((t, j) => (t.error ? [step(t, j)] : []))}>
+      {group.tools.map(step)}
+    </WorkSummary>
+  );
+}
+
+/** The tool work behind each assistant reply (the steps since the message before it), by reply id. */
+export function toolRunsByReply(items: TimelineItem[]): Map<string, ToolRun> {
+  const out = new Map<string, ToolRun>();
+  let pending: ToolRun | null = null;
+  for (const g of groupTimeline(items)) {
+    if ("tools" in g) pending = g;
+    else {
+      if (g.kind === "assistant" && pending) out.set(g.id, pending);
+      if (g.kind === "assistant" || g.kind === "user") pending = null;
+    }
+  }
+  return out;
+}
 
 function span(from?: string, to?: string): number | undefined {
   const a = from ? Date.parse(from) : NaN;
