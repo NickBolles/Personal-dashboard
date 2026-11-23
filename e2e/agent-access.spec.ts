@@ -89,6 +89,13 @@ test("mint a token, MCP creates an item attributed to the agent, undo, revoke", 
   await expect(confirmDialog).toHaveCount(0);
   await expect(row3.getByRole("list", { name: `Scopes for Drawknife ${nonce}` })).toContainText("Start and steer tasks");
   expect(await listTools()).toContain("jarvis_start_task");
+  // Undo restores the previous scopes on the same token.
+  const saved = page.getByTestId("agent-scopes-saved");
+  await expect(saved).toContainText(`Scopes saved for Drawknife ${nonce}`);
+  await saved.getByRole("button", { name: "Undo" }).click();
+  await expect(saved).toContainText("restored");
+  await expect(row3.getByRole("list", { name: `Scopes for Drawknife ${nonce}` })).not.toContainText("Start and steer tasks");
+  expect(await listTools()).not.toContain("jarvis_start_task");
 
   // Revoke (confirmed, from the row's ⋯ menu) → MCP refuses the token.
   await page.goto("/settings/agents");

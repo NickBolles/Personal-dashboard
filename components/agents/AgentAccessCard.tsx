@@ -56,16 +56,33 @@ export function AgentAccessCard() {
   const [minted, setMinted] = useState<MintedAgentToken | null>(null);
   const [confirm, setConfirm] = useState<string | null>(null);
   const [editing, setEditing] = useState<AgentTokenView | null>(null);
+  /** The last saved scope edit, kept so it can be undone (restores the previous scopes on the same token). */
+  const [lastEdit, setLastEdit] = useState<{ id: string; name: string; before: AgentScope[]; undone?: boolean } | null>(null);
 
+  const putScopes = async (id: string, next: AgentScope[]) => {
+    await api.patch(`/api/settings/agents/tokens/${encodeURIComponent(id)}`, { scopes: next });
+    await qc.invalidateQueries({ queryKey: KEY });
+    await qc.invalidateQueries({ queryKey: ["settings", "agents", "coordinators"] });
+  };
   const saveScopes = async (t: AgentTokenView, next: AgentScope[]) => {
     try {
-      await api.patch(`/api/settings/agents/tokens/${encodeURIComponent(t.id)}`, { scopes: next });
+      await putScopes(t.id, next);
       setEditing(null);
-      await qc.invalidateQueries({ queryKey: KEY });
-      await qc.invalidateQueries({ queryKey: ["settings", "agents", "coordinators"] });
-      toast(`Scopes saved for ${t.name}`, "ok");
+      setLastEdit({ id: t.id, name: t.name, before: normaliseScopes(t.scopes) });
     } catch (err) {
       toast((err as Error).message, "danger");
+    }
+  };
+  const undoScopes = async () => {
+    if (!lastEdit || lastEdit.undone) return;
+    setBusy(true);
+    try {
+      await putScopes(lastEdit.id, lastEdit.before);
+      setLastEdit({ ...lastEdit, undone: true });
+    } catch (err) {
+      toast((err as Error).message, "danger");
+    } finally {
+      setBusy(false);
     }
   };
   const mint = async (e: React.FormEvent) => {
@@ -138,6 +155,21 @@ export function AgentAccessCard() {
                 Done
               </Button>
             </div>
+          </div>
+        ) : null}
+        {lastEdit ? (
+          <div className="mb-3 flex min-w-0 flex-wrap items-center gap-2 rounded-lg border border-line p-2 text-sm" data-testid="agent-scopes-saved">
+            <span role="status" className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+              {lastEdit.undone ? `Scopes for ${lastEdit.name} restored.` : `Scopes saved for ${lastEdit.name}.`}
+            </span>
+            {lastEdit.undone ? null : (
+              <Button type="button" size="sm" variant="ghost" loading={busy} onClick={() => void undoScopes()}>
+                Undo
+              </Button>
+            )}
+            <Button type="button" size="sm" variant="ghost" onClick={() => setLastEdit(null)}>
+              Dismiss
+            </Button>
           </div>
         ) : null}
         {q.isPending ? (
