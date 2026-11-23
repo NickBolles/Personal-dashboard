@@ -50,6 +50,15 @@ token** the owner mints in **Settings → Agents → Agent access**. The proposa
 
 `tools/list` returns only the tools the token's scopes allow.
 
+**Changing scopes later (same token).** Settings → Agents → Agent access → the token's ⋯ → **Edit scopes…** →
+tick/untick → **Review change** (shows what is added/removed; `tasks.run` is flagged because it spends model
+budget) → **Save scopes**. API: `PATCH /api/settings/agents/tokens/<id>` `{ "scopes": [...] }` (owner session,
+admin; unknown scopes 400, revoked token 409; audited as `agent_token.scopes` with the before/after diff). The
+secret is not rotated, so the profile's config is untouched. Jarvis reads scopes from the database on every MCP
+request (no cache), so the next `tools/call` is allowed or refused under the new scopes at once. The server is
+stateless and advertises `listChanged: false`, so an already-open Hermes session keeps the tool list it loaded:
+start a new chat (or `/reload-mcp` in the Hermes CLI) for new tools to appear.
+
 `jarvis_add_quick_action` (scope `work.write`) accepts `{label, prompt, scope?}`
 (label ≤60, prompt ≤2000; scope `global`, `area:<id>` or `page:<path>`). It only
 creates a `proposed` quick action attributed to `agent:<profile>` through
@@ -174,7 +183,8 @@ Hermes config.
    - Ask the agent to call `jarvis_tree`. It should list your areas, including Finance unless explicitly excluded from AI.
    - Then ask it to create a test item under Portfolio. In Jarvis → Activity, the row reads "by @chiefofstaff" with Undo.
    - Undo it.
-6. **Kill switch.** Settings → Agents → Agent access → **Revoke…**.
+6. **Kill switch.** Settings → Agents → Agent access → ⋯ → **Revoke…**. To change what a token may do
+   without replacing it, use ⋯ → **Edit scopes…** instead.
 
 A signed-out probe must answer with Jarvis' own 401:
 

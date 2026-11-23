@@ -62,13 +62,49 @@ test("mint a token, MCP creates an item attributed to the agent, undo, revoke", 
   await created.getByRole("button", { name: /Undo/ }).click();
   await expect.poll(async () => (await page.request.get(`/api/work/items/${itemId}`)).status()).toBe(404);
 
-  // Revoke (confirmed) → MCP refuses the token.
+  // Edit scopes on the SAME token (⋯ → Edit scopes…, confirm the diff): its next MCP call sees the new tools.
+  const listTools = async () => {
+    const r = await page.request.post("/api/mcp", {
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      data: { jsonrpc: "2.0", id: 2, method: "tools/list" },
+    });
+    expect(r.ok(), await r.text()).toBeTruthy();
+    return ((await r.json()) as { result: { tools: { name: string }[] } }).result.tools.map((t) => t.name);
+  };
+  expect(await listTools()).not.toContain("jarvis_start_task");
+  await page.goto("/settings/agents");
+  const row3 = page
+    .getByTestId("agent-access")
+    .getByTestId("agent-token-row")
+    .filter({ hasText: `Drawknife ${nonce}` });
+  await row3.getByRole("button", { name: `Actions for Drawknife ${nonce}` }).click();
+  await page.getByRole("menuitem", { name: "Edit scopes…" }).click();
+  const dialog = page.getByRole("dialog", { name: "Edit scopes" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("checkbox", { name: /Start and steer tasks/ }).check();
+  await dialog.getByRole("button", { name: "Review change" }).click();
+  const confirmDialog = page.getByRole("dialog", { name: "Confirm scope change" });
+  await expect(confirmDialog.getByRole("list", { name: "Scopes to add" })).toContainText("Start and steer tasks");
+  await confirmDialog.getByRole("button", { name: "Save scopes" }).click();
+  await expect(confirmDialog).toHaveCount(0);
+  await expect(row3.getByRole("list", { name: `Scopes for Drawknife ${nonce}` })).toContainText("Start and steer tasks");
+  expect(await listTools()).toContain("jarvis_start_task");
+  // Undo restores the previous scopes on the same token.
+  const saved = page.getByTestId("agent-scopes-saved");
+  await expect(saved).toContainText(`Scopes saved for Drawknife ${nonce}`);
+  await saved.getByRole("button", { name: "Undo" }).click();
+  await expect(saved).toContainText("restored");
+  await expect(row3.getByRole("list", { name: `Scopes for Drawknife ${nonce}` })).not.toContainText("Start and steer tasks");
+  expect(await listTools()).not.toContain("jarvis_start_task");
+
+  // Revoke (confirmed, from the row's ⋯ menu) → MCP refuses the token.
   await page.goto("/settings/agents");
   const row2 = page
     .getByTestId("agent-access")
     .getByTestId("agent-token-row")
     .filter({ hasText: `Drawknife ${nonce}` });
-  await row2.getByRole("button", { name: `Revoke Drawknife ${nonce}` }).click();
+  await row2.getByRole("button", { name: `Actions for Drawknife ${nonce}` }).click();
+  await page.getByRole("menuitem", { name: "Revoke…" }).click();
   await row2.getByRole("button", { name: "Revoke", exact: true }).click();
   await expect(row2).toContainText("Revoked");
   expect((await mcpCall(page, token, "jarvis_tree", {})).status()).toBe(401);
