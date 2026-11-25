@@ -45,6 +45,10 @@ describe("delegate presentation", () => {
   it.each(["{broken", "plain output", JSON.stringify(JSON.stringify({ status: "queued", note: "Accepted" }))])("safely handles %s", (output) => {
     expect(() => presentDelegate("[null]", output)).not.toThrow();
   });
+  it("unwraps persisted untrusted-tool envelopes without changing raw details", () => {
+    const output = `<untrusted_tool_result>{"result":"{\\"status\\":\\"dispatched\\",\\"subagent_ids\\":[\\"sa-1\\"]}"}</untrusted_tool_result>`;
+    expect(presentDelegate('{"action":"spawn"}', output).returned[0]).toMatchObject({ id: "sa-1", status: "dispatched" });
+  });
   it("redacts fields, preserves long ids, rejects unsafe result links", () => {
     const d = presentDelegate(
       JSON.stringify({ goal: "token=abcdefghijk", subagent_id: "x".repeat(300) }),

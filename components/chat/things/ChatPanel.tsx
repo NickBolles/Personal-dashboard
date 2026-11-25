@@ -42,10 +42,16 @@ export function RunningSection({
   const allOk = !error && !!execution?.sources.length && execution.sources.every((s) => s.state === "ok");
   const records = execution?.records ?? [];
   const failed = !!error || (!loading && !execution) || execution?.sources.length === 0 || !!execution?.sources.some((s) => s.state === "unavailable");
+  const correlated = presentExecutions(records);
+  // A relationship can contain a live parent and a failed child. Pick one section for the relationship, then retain
+  // every member within it; filtering first would silently lose that child.
   const groups = [
-    { title: "Running", records: presentExecutions(records.filter(isActiveExec)) },
-    { title: "Finished", records: presentExecutions(records.filter((r) => ["completed", "failed", "cancelled"].includes(r.state))) },
-    { title: "Status unknown", records: presentExecutions(records.filter((r) => r.state === "unknown")) },
+    { title: "Running", records: correlated.filter((g) => g.members.some(isActiveExec)) },
+    {
+      title: "Finished",
+      records: correlated.filter((g) => !g.members.some(isActiveExec) && g.members.some((r) => ["completed", "failed", "cancelled"].includes(r.state))),
+    },
+    { title: "Status unknown", records: correlated.filter((g) => g.members.every((r) => r.state === "unknown")) },
   ];
   return (
     <div className="space-y-3 text-sm" data-testid="chat-running">
@@ -68,8 +74,14 @@ export function RunningSection({
           <section key={g.title} aria-label={g.title}>
             <h4 className="mb-1 text-xs font-semibold text-muted">{g.title}</h4>
             <ul className="space-y-2">
-              {g.records.map(({ key, record, members }) => (
-                <ExecutionRow key={key} record={record} members={members} />
+              {g.records.map(({ key, members }) => (
+                <li key={key} className="cp-run-group">
+                  <ul className="space-y-1">
+                    {members.map((record) => (
+                      <ExecutionRow key={record.key} record={record} />
+                    ))}
+                  </ul>
+                </li>
               ))}
             </ul>
           </section>
@@ -80,14 +92,14 @@ export function RunningSection({
     </div>
   );
 }
-function ExecutionRow({ record: r, members = [r] }: { record: ExecutionRecord; members?: ExecutionRecord[] }) {
+function ExecutionRow({ record: r }: { record: ExecutionRecord }) {
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
   const Icon = r.source === "process" ? ToolIcon : r.source === "fork" ? ForkIcon : BrainIcon;
   const when = r.updatedAt ?? r.startedAt ?? r.endedAt;
   const tone = r.state === "failed" ? "bad" : r.state === "completed" ? "ok" : r.state === "waiting" ? "wn" : r.state === "running" ? "ai" : "neutral";
   const label = executionTitle(r);
-  const ids = [...new Set(members.flatMap((m) => [m.id, m.subagentId, m.delegationId]).filter((id): id is string => !!id))];
+  const ids = [r.subagentId, r.delegationId, r.id].filter((id): id is string => !!id);
   return (
     <li className="cp-run" data-state={r.state}>
       <details>
@@ -117,9 +129,38 @@ function ExecutionRow({ record: r, members = [r] }: { record: ExecutionRecord; m
           ) : (
             <p className="text-muted">No linked task or source chat is available.</p>
           )}
+          {r.task ? (
+            <div className="cp-provenance">
+              <Link className="text-accent underline" href={r.task.href}>
+                {r.task.title}
+              </Link>
+              <CopyValue label="Task ID" value={r.task.id} />
+            </div>
+          ) : null}
+          {r.run ? (
+            <div className="cp-provenance">
+              <span>Run {r.run.ref}</span>
+              <CopyValue label="Run ID" value={r.run.id} />
+              {r.run.events?.length ? (
+                <ul>
+                  {r.run.events.map((event) => (
+                    <li key={`${event.at}-${event.summary}`}>
+                      {event.type}: {event.summary}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
+          {r.sourceChat ? (
+            <Link className="text-accent underline" href={r.sourceChat.href}>
+              Open source chat
+            </Link>
+          ) : null}
           <details className="cp-run-raw">
-            <summary>Details and copy</summary>
-            {r.title !== label ? <p className="whitespace-pre-wrap break-words">{r.title || "No stored title or goal."}</p> : null}
+            <summary>Details and copy{r.titleTruncated ? " · stored source truncated" : ""}</summary>
+            <p className="whitespace-pre-wrap break-words">{typeof r.title === "string" && r.title ? r.title : "No stored title or goal."}</p>
+            <CopyValue label="Full available brief" value={typeof r.title === "string" ? r.title : ""} />
             {ids.map((id) => (
               <CopyValue key={id} value={id} />
             ))}

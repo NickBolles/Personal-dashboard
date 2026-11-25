@@ -25,7 +25,8 @@ import { listItems } from "./store";
 import { linksByItem } from "./decisions";
 import type { ExecutionRecord } from "@/lib/chat-execution";
 import { executionLinks, executionState, executionText, EXECUTION_LIMIT } from "@/server/chat/execution-store";
-import { ensureRunSeqs } from "./run-events";
+import { ensureRunSeqs, listRunEvents } from "./run-events";
+import { runRef } from "@/lib/cw-runs";
 
 const chunks = <T>(xs: T[], n = 500) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
 
@@ -131,6 +132,14 @@ export function executionRuns(user: CurrentUser, sessionId: string, childIds: st
           id: r.id,
           title: executionText(r.title, 300) ?? "Registered run",
           state: r.state === "done" ? ("completed" as const) : r.state === "interrupted" ? ("waiting" as const) : executionState(r.state),
+          approval: r.state === "waiting" && /approval/i.test(r.summary ?? ""),
+          task: { id: item.id, title: executionText(item.title, 300) ?? "Untitled task", href: `/areas?item=${encodeURIComponent(item.id)}` },
+          run: {
+            id: r.id,
+            ref: runRef(r.seq) ?? r.id,
+            events: listRunEvents(user.id, { runIds: [r.id], limit: 20 }).map((event) => ({ type: event.type, summary: event.summary, at: event.at })),
+          },
+          sourceChat: r.hermesSessionId ? { id: r.hermesSessionId, href: `/chat/${encodeURIComponent(r.hermesSessionId)}` } : null,
           summary: executionText(r.summary),
           startedAt: r.startedAt,
           endedAt: r.finishedAt,

@@ -40,6 +40,14 @@ export type ExecutionRecord = {
   progress?: number | null;
   summary?: string | null;
   error?: string | null;
+  /** Read-only provenance supplied only when an authorized source actually has it. */
+  task?: { id: string; title: string; href: string } | null;
+  run?: { id: string; ref: string; events?: { type: string; summary: string; at: string }[] } | null;
+  sourceChat?: { id: string; href: string } | null;
+  /** A source explicitly named an approval, distinct from generic waiting. */
+  approval?: boolean;
+  /** True only when the stored title was bounded upstream. */
+  titleTruncated?: boolean;
   childSessionId?: string | null;
   /** Hermes profile the child session lives on (null = default profile). */
   childProfile?: string | null;

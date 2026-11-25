@@ -11,21 +11,14 @@ const record = (overrides = {}) => ({
 });
 
 describe("execution presentation", () => {
-  it("uses a bounded stored-goal heading while retaining the source title", () => {
-    const item = record();
-    expect(executionTitle(item)).toMatch(/^Verify the phone sheet/);
-    expect(item.title).toContain("/home/hermes");
-  });
-  it("only groups records with an exact durable identifier", () => {
-    const related = record({ key: "registered_run:R-7", id: "R-7", source: "registered_run" as const, delegationId: "delegate:sa-a" });
-    const child = record({
-      key: "subagent:b",
-      id: "sa-a-child",
-      title: "Unrelated but correlated by exact delegation evidence",
-      childSessionId: "chat-a",
-      delegationId: "delegate:sa-a",
-    });
-    const sameTitle = record({ key: "subagent:c", id: "sa-c", title: related.title });
-    expect(presentExecutions([related, child, sameTitle]).map((group) => group.members.length)).toEqual([2, 1]);
+  it("uses a bounded stored-goal heading without leaking local paths", () =>
+    expect(executionTitle(record())).toBe("Verify the phone sheet at local path and report findings."));
+  it("groups only complete delegation identities and retains mixed member states", () => {
+    const parent = record({ key: "subagent:one", id: "sa-0", delegationId: "delegate:a", state: "running" as const });
+    const failedChild = record({ key: "subagent:two", id: "sa-1", delegationId: "delegate:a", state: "failed" as const, error: "failed" });
+    const collidingLocalHandle = record({ key: "subagent:three", id: "sa-0", delegationId: "delegate:b", state: "waiting" as const });
+    const sameTitle = record({ key: "subagent:four", id: "sa-2", title: parent.title, state: "completed" as const });
+    const groups = presentExecutions([parent, failedChild, collidingLocalHandle, sameTitle]);
+    expect(groups.map((group) => group.members.map((member) => member.state))).toEqual([["running", "failed"], ["waiting"], ["completed"]]);
   });
 });

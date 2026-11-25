@@ -1,4 +1,5 @@
 import { redactToolText } from "./tool-presentation";
+import { parseToolResult } from "./chat/actions";
 
 type Obj = Record<string, unknown>;
 const obj = (v: unknown): Obj | undefined => (v !== null && typeof v === "object" && !Array.isArray(v) ? (v as Obj) : undefined);
@@ -33,7 +34,7 @@ function row(v: unknown): DelegateRow {
 }
 export function presentDelegate(input?: string, output?: string) {
   const a = obj(decode(input)) ?? {};
-  const parsed = decode(output);
+  const parsed = parseToolResult(output) ?? decode(output);
   const r = obj(parsed) ?? {};
   const action = text(a.action) ?? text(r.action) ?? (a.tasks || a.goal ? "spawn" : "details");
   const labels: Record<string, string> = {

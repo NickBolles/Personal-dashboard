@@ -113,10 +113,10 @@ describe("ChatPanel: In this chat", () => {
       />,
       { wrapper },
     );
-    expect(within(section("Running")).getByText("Check delivery times")).toBeTruthy();
+    expect(within(section("Running")).getAllByText("Check delivery times").length).toBeGreaterThan(0);
     expect(within(section("Running")).queryByText("Budget ceiling")).toBeNull();
     expect(screen.getByRole("heading", { name: "Waiting on you · 2" })).toBeTruthy();
-    expect(within(section("Waiting")).getByText("Budget ceiling")).toBeTruthy();
+    expect(within(section("Waiting")).getAllByText("Budget ceiling").length).toBeGreaterThan(0);
     expect(within(section("Waiting")).getByText("Approval waiting")).toBeTruthy();
     expect(within(section("PRs")).getByText("Fix coupon test")).toBeTruthy();
     expect(within(section("Artifacts")).getByText("Frame comparison")).toBeTruthy();
@@ -157,7 +157,7 @@ describe("ChatPanel: In this chat", () => {
     // The failed refresh is said once, in plain words; a saved status that may be old is not a message of its own.
     expect(screen.getAllByText(/Couldn't check background work/)).toHaveLength(1);
     expect(screen.queryByText(/stale|jarvis runs|Last refresh failed/i)).toBeNull();
-    expect(screen.getByText("Saved job")).toBeTruthy();
+    expect(screen.getAllByText("Saved job").length).toBeGreaterThan(0);
     expect(screen.getByText("failed")).toBeTruthy();
     expect(screen.queryByText("No agents or jobs for this chat")).toBeNull();
   });
@@ -207,7 +207,7 @@ describe("ChatPanel: In this chat", () => {
     expect(screen.getByRole("link", { name: "Open child chat · @devchief" }).getAttribute("href")).toBe("/chat/child");
     expect(screen.getAllByText("unknown").length).toBeGreaterThan(0);
     expect(screen.getAllByRole("progressbar").length).toBe(1);
-    fireEvent.click(screen.getByText("Builder"));
+    fireEvent.click(screen.getAllByText("Builder")[0]!);
     expect(screen.getByText("/host/transcript.jsonl").tagName).toBe("CODE");
     expect(screen.queryByRole("link", { name: "/host/transcript.jsonl" })).toBeNull();
   });
