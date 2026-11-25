@@ -1,10 +1,11 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useId, useRef, useState, type ReactNode, type CSSProperties } from "react";
-import { Badge, Button, Spinner } from "@/components/ui/legacy";
+import { Button, ChipButton, KSpinner, Pill, ProgressBar } from "@/components/ui";
 import { BrainIcon, ForkIcon, ToolIcon } from "@/components/icons";
 import { safeHref } from "@/components/markdown/Markdown";
 import { isActiveExec, type ChatExecutionResponse, type ExecutionRecord } from "@/lib/chat-execution";
+import { executionTitle, presentExecutions } from "@/lib/chat/execution-presentation";
 import { isFailingLink, type ChatThings, type ThingsTab } from "@/lib/chat/things";
 import type { PanelLink } from "@/server/chat/links";
 import { relativeTime } from "@/lib/time";
@@ -42,15 +43,15 @@ export function RunningSection({
   const records = execution?.records ?? [];
   const failed = !!error || (!loading && !execution) || execution?.sources.length === 0 || !!execution?.sources.some((s) => s.state === "unavailable");
   const groups = [
-    { title: "Running", records: records.filter(isActiveExec) },
-    { title: "Finished", records: records.filter((r) => ["completed", "failed", "cancelled"].includes(r.state)) },
-    { title: "Status unknown", records: records.filter((r) => r.state === "unknown") },
+    { title: "Running", records: presentExecutions(records.filter(isActiveExec)) },
+    { title: "Finished", records: presentExecutions(records.filter((r) => ["completed", "failed", "cancelled"].includes(r.state))) },
+    { title: "Status unknown", records: presentExecutions(records.filter((r) => r.state === "unknown")) },
   ];
   return (
     <div className="space-y-3 text-sm" data-testid="chat-running">
       <ParentChatLink parent={execution?.parent} />
       {pending}
-      {loading && !execution ? <Spinner label="Loading agents and jobs…" /> : null}
+      {loading && !execution ? <KSpinner label="Loading agents and jobs…" /> : null}
       {/* One plain line when the check failed. Which source it was, and a saved status that may be old, are not
           the owner's to read: what is known stays listed below either way. */}
       {failed ? (
@@ -67,8 +68,8 @@ export function RunningSection({
           <section key={g.title} aria-label={g.title}>
             <h4 className="mb-1 text-xs font-semibold text-muted">{g.title}</h4>
             <ul className="space-y-2">
-              {g.records.map((record) => (
-                <ExecutionRow key={record.key} record={record} />
+              {g.records.map(({ key, record, members }) => (
+                <ExecutionRow key={key} record={record} members={members} />
               ))}
             </ul>
           </section>
@@ -79,84 +80,122 @@ export function RunningSection({
     </div>
   );
 }
-function ExecutionRow({ record: r }: { record: ExecutionRecord }) {
+function ExecutionRow({ record: r, members = [r] }: { record: ExecutionRecord; members?: ExecutionRecord[] }) {
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
   const Icon = r.source === "process" ? ToolIcon : r.source === "fork" ? ForkIcon : BrainIcon;
-  const seconds = r.startedAt && r.endedAt ? (Date.parse(r.endedAt) - Date.parse(r.startedAt)) / 1000 : null;
+  const when = r.updatedAt ?? r.startedAt ?? r.endedAt;
+  const tone = r.state === "failed" ? "bad" : r.state === "completed" ? "ok" : r.state === "waiting" ? "wn" : r.state === "running" ? "ai" : "neutral";
+  const label = executionTitle(r);
+  const ids = [...new Set(members.flatMap((m) => [m.id, m.subagentId, m.delegationId]).filter((id): id is string => !!id))];
   return (
-    <li className="rounded-lg border border-line p-2">
+    <li className="cp-run" data-state={r.state}>
       <details>
-        <summary className="min-h-11 cursor-pointer sm:min-h-10 dense:min-h-8">
-          <span className="inline-flex max-w-full flex-wrap items-center gap-1.5">
-            <Icon className="h-4 w-4 shrink-0" />
-            <strong className="break-words font-medium">{r.title}</strong>
-            <Badge tone={r.state === "failed" ? "danger" : r.state === "completed" ? "ok" : r.state === "waiting" ? "warn" : "neutral"}>{r.state}</Badge>
+        <summary className="cp-run-summary">
+          <Icon className="h-4 w-4 shrink-0" />
+          <span className="cp-run-main">
+            <span className="cp-run-title">{label}</span>
+            {r.step ? <span className="cp-run-step">{r.step}</span> : null}
           </span>
-          <span className="block text-xs text-muted">
-            {r.source.replaceAll("_", " ")}
-            {r.startedAt ? (
-              <>
-                {" "}
-                ·{" "}
-                <time dateTime={r.startedAt} title={r.startedAt}>
-                  Started {relativeTime(r.startedAt)}
-                </time>
-              </>
-            ) : null}
-            {seconds != null && Number.isFinite(seconds) && seconds >= 0 ? ` · ${Math.round(seconds)}s elapsed` : ""}
-          </span>
-          {r.step ? <span className="block text-xs text-muted">{r.step}</span> : null}
-          {r.progress != null && Number.isFinite(r.progress) ? (
-            <progress className="mt-1 w-full accent-accent" max={1} value={Math.min(1, Math.max(0, r.progress))} aria-label={`${r.title} progress`} />
+          <Pill tone={tone}>{r.state}</Pill>
+          {when ? (
+            <time className="cp-run-time" dateTime={when} title={when}>
+              {relativeTime(when)}
+            </time>
           ) : null}
         </summary>
-        <div className="mt-2 space-y-2 break-words text-xs">
+        <div className="cp-run-detail">
           {r.summary ? <p className="whitespace-pre-wrap">{r.summary}</p> : null}
           {r.error ? <p className="whitespace-pre-wrap text-danger">{r.error}</p> : null}
-          {r.links?.map((l) =>
-            safeHref(l.url) ? (
-              <a
-                key={l.url}
-                className="block text-accent underline"
-                href={safeHref(l.url)!}
-                target={l.url.startsWith("/") ? undefined : "_blank"}
-                rel="noopener noreferrer"
-              >
-                {l.label ?? l.url}
-              </a>
-            ) : null,
+          {r.progress != null && Number.isFinite(r.progress) ? (
+            <ProgressBar value={Math.min(100, Math.max(0, r.progress * 100))} tone="ai" label={`${label} progress`} />
+          ) : null}
+          {r.href && internalHref(r.href) ? (
+            <Link className="text-accent underline" href={r.href}>
+              {r.childSessionId ? `Open child chat · @${r.childProfile ?? "default"}` : "Open work item"}
+            </Link>
+          ) : (
+            <p className="text-muted">No linked task or source chat is available.</p>
           )}
+          <details className="cp-run-raw">
+            <summary>Details and copy</summary>
+            {r.title !== label ? <p className="whitespace-pre-wrap break-words">{r.title || "No stored title or goal."}</p> : null}
+            {ids.map((id) => (
+              <CopyValue key={id} value={id} />
+            ))}
+            {r.links?.map((l) =>
+              safeHref(l.url) ? (
+                <a
+                  key={l.url}
+                  className="block text-accent underline"
+                  href={safeHref(l.url)!}
+                  target={l.url.startsWith("/") ? undefined : "_blank"}
+                  rel="noopener noreferrer"
+                >
+                  {l.label ?? l.url}
+                </a>
+              ) : null,
+            )}
+          </details>
           {r.transcriptPath ? (
-            <div>
-              <span className="text-muted">Transcript: </span>
-              <code className="break-all select-text">{r.transcriptPath}</code>
-              <Button
-                size="sm"
-                onClick={() => {
-                  void (navigator.clipboard?.writeText(r.transcriptPath!) ?? Promise.reject()).then(
-                    () => {
-                      setCopied(true);
-                      setCopyError(false);
-                    },
-                    () => setCopyError(true),
-                  );
-                }}
-              >
-                {copied ? "Copied" : "Copy transcript path"}
-              </Button>
-              {copyError ? <p role="status">Couldn&apos;t copy. Select the path to copy it.</p> : null}
-            </div>
+            <CopyValue
+              label="Transcript path"
+              value={r.transcriptPath}
+              compact
+              copied={copied}
+              setCopied={setCopied}
+              copyError={copyError}
+              setCopyError={setCopyError}
+            />
           ) : null}
         </div>
       </details>
-      {r.href && internalHref(r.href) ? (
-        <Link className="inline-flex min-h-11 items-center gap-1 text-xs text-accent underline sm:min-h-10 dense:min-h-8" href={r.href}>
-          {r.childSessionId ? "Open child chat" : "Open work item"}
-          {r.childSessionId ? ` · @${r.childProfile ?? "default"}` : ""}
-        </Link>
-      ) : null}
     </li>
+  );
+}
+function CopyValue({
+  label = "Run ID",
+  value,
+  compact,
+  copied,
+  setCopied,
+  copyError,
+  setCopyError,
+}: {
+  label?: string;
+  value: string;
+  compact?: boolean;
+  copied?: boolean;
+  setCopied?: (value: boolean) => void;
+  copyError?: boolean;
+  setCopyError?: (value: boolean) => void;
+}) {
+  const [ownCopied, ownSetCopied] = useState(false);
+  const [ownError, ownSetError] = useState(false);
+  const done = copied ?? ownCopied;
+  const failed = copyError ?? ownError;
+  const setDone = setCopied ?? ownSetCopied;
+  const setFailed = setCopyError ?? ownSetError;
+  return (
+    <div className={compact ? "cp-copy cp-copy-compact" : "cp-copy"}>
+      <span>{label}</span>
+      <code>{value}</code>
+      <ChipButton
+        aria-label={`Copy ${label.toLowerCase()}`}
+        onClick={() =>
+          void (navigator.clipboard?.writeText(value) ?? Promise.reject()).then(
+            () => {
+              setDone(true);
+              setFailed(false);
+            },
+            () => setFailed(true),
+          )
+        }
+      >
+        {done ? "Copied" : "Copy"}
+      </ChipButton>
+      {failed ? <p role="status">Copy unavailable — select the ID above.</p> : null}
+    </div>
   );
 }
 

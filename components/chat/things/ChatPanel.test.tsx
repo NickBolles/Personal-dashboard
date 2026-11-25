@@ -205,7 +205,7 @@ describe("ChatPanel: In this chat", () => {
     expect(screen.getByRole("region", { name: "Finished" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "↩ Back to parent chat" }).getAttribute("href")).toBe("/chat/parent");
     expect(screen.getByRole("link", { name: "Open child chat · @devchief" }).getAttribute("href")).toBe("/chat/child");
-    expect(screen.getByText("unknown")).toBeTruthy();
+    expect(screen.getAllByText("unknown").length).toBeGreaterThan(0);
     expect(screen.getAllByRole("progressbar").length).toBe(1);
     fireEvent.click(screen.getByText("Builder"));
     expect(screen.getByText("/host/transcript.jsonl").tagName).toBe("CODE");

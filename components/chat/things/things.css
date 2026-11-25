@@ -722,6 +722,89 @@
   color: var(--t2);
   font: 400 13px/1.4 var(--sans);
 }
+/* Execution rows are dense receipts, not stacked cards: title, state and fresh time occupy one scan line. */
+.cp-run {
+  border-bottom: 1px solid var(--bd);
+}
+.cp-run > details > summary {
+  list-style: none;
+}
+.cp-run > details > summary::-webkit-details-marker {
+  display: none;
+}
+.cp-run-summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.cp-run-main {
+  min-width: 0;
+}
+.cp-run-title {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 500 14px/1.25 var(--sans);
+}
+.cp-run-step,
+.cp-run-time {
+  display: block;
+  overflow: hidden;
+  color: var(--t2);
+  font: 400 12px/1.25 var(--sans);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cp-run-time {
+  max-width: 6.5ch;
+  text-align: right;
+}
+.cp-run-detail {
+  display: grid;
+  gap: 8px;
+  padding: 2px 0 10px 23px;
+  color: var(--t2);
+  font: 400 13px/1.4 var(--sans);
+}
+.cp-run-raw > summary {
+  cursor: pointer;
+  color: var(--t2);
+}
+.cp-copy {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+}
+.cp-copy > code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--t1);
+}
+.cp-copy > p {
+  grid-column: 1 / -1;
+}
+@media (max-width: 599.98px) {
+  .cp-run-summary {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .cp-run-time {
+    display: none;
+  }
+  .cp-run-title {
+    white-space: normal;
+  }
+}
+@media (min-width: 600px) and (pointer: fine) {
+  .cp-run-summary {
+    min-height: 36px;
+  }
+}
+
 /* The sheet is a phone pattern: on a wide screen it is a centred card, not an edge-to-edge strip. */
 @media (min-width: 900px) {
   .k-sheet-body {
