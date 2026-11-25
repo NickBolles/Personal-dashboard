@@ -38,7 +38,7 @@ export function CompassView() {
   });
   const s = q.data?.state;
   return (
-    <div className="mx-auto max-w-3xl px-4 py-5 sm:px-6">
+    <div className="mx-auto max-w-3xl px-3 pt-3 pb-6 sm:px-5 sm:pt-4 dense:px-7 dense:pt-5">
       <PageHeader title="Daily Compass" subtitle={s ? `Today · window ${s.windowStart}–${s.windowEnd}` : undefined} />
       {q.isLoading ? <LoadingState label="Loading…" /> : null}
       {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}

@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import { stubPhase3Settings } from "./fixtures/phase3-gaps";
-import { ensureWorkflowActive, expectNoHorizontalOverflow, mock, openChatPanel, startConversation } from "./helpers";
+import { ensureWorkflowActive, expectNoHorizontalOverflow, mock, openChatPanel, openTaskPane, startConversation } from "./helpers";
 import { forceSourceState, SOURCE_STATES } from "./fixtures/states";
 import { PHOTO_PNG } from "./fixtures/chat-files";
 import teaching from "../lib/workflows/fixtures/teaching-notes.json";
@@ -853,20 +853,20 @@ test("a11y + 200% text: Chief of staff rail, phone tray and sheet with quick act
   await zoom();
   await tray.click();
   const sheet = page.getByRole("dialog", { name: "Chief of staff" });
-  // The tray opens where its sentence points (here: the approvals under Needs you); the chat is one tab away.
+  // The tray opens where its sentence points (here: the approvals under Tasks); the chat is one tab away.
   await sheet.getByRole("tab", { name: "Chat", exact: true }).click();
   await expect(sheet.getByTestId("quick-action-proposal")).toBeVisible();
   await axe("sheet chat");
   await zoom();
-  // Changes live under Activity (with runs); there is no separate tab.
-  await sheet.getByRole("tab", { name: /^Activity/ }).click();
+  // Changes live under Tasks (after the task list); there is no separate tab.
+  await sheet.getByRole("tab", { name: /^Tasks/ }).click();
   await expect(sheet.getByRole("region", { name: "Changes" })).toBeVisible();
-  await axe("sheet activity");
+  await axe("sheet tasks");
   await zoom();
   await page.keyboard.press("Escape");
 });
 
-test("a11y + 200% text: CW v3 Needs you list, risk-flagged decision detail and Running groups", async ({ page }, info) => {
+test("a11y + 200% text: the bot panel's Tasks tab, a question answered from its row and a risk-flagged decision's card", async ({ page }, info) => {
   test.setTimeout(120_000);
   const iso = (minAgo: number) => new Date(Date.now() - minAgo * 60_000).toISOString();
   const decision = (seq: number, question: string, extra: Record<string, unknown> = {}) => ({
@@ -941,6 +941,74 @@ test("a11y + 200% text: CW v3 Needs you list, risk-flagged decision detail and R
   await page.route(/\/api\/coordinator\/looked$/, (route) =>
     route.fulfill({ json: { lastLooked: { chat: null, needs: null, running: null, changes: null, context: null } } }),
   );
+  // The Tasks tab: one row per task. Two wait on a question (one risk-flagged), one failed, one is working.
+  const view = (d: (typeof decisions)[number]) => ({
+    ref: d.ref,
+    itemId: d.itemId,
+    itemTitle: d.itemTitle,
+    areaTitle: d.areaTitle,
+    question: d.question,
+    choices: d.choices,
+    recommended: d.recommended,
+    risk: d.risk,
+    pack: d.pack,
+    defaultChoice: null,
+    expiresAt: null,
+    createdAt: d.createdAt,
+    blocks: null,
+  });
+  const taskRow = (id: string, title: string, state: string, over: Record<string, unknown> = {}) => ({
+    id,
+    title,
+    path: "Portfolio › Quillwort release train",
+    areaId: "portfolio",
+    parentId: "portfolio",
+    project: false,
+    state,
+    since: iso(45),
+    cause: null,
+    line: null,
+    who: "@devchief",
+    assignee: null,
+    tags: [],
+    activity: [],
+    question: null,
+    pr: null,
+    chat: null,
+    can: { steer: state === "working", stop: state === "working", retry: state === "failed" },
+    ...over,
+  });
+  const rows = [
+    taskRow("wk_cw48", "Rotate the tunnel key before the release window, with a fairly long task title", "needs", {
+      question: view(decisions[0]!),
+      line: decisions[0]!.question,
+    }),
+    taskRow("wk_cw49", "Renumber migration 0042", "needs", { question: view(decisions[1]!), line: decisions[1]!.question }),
+    taskRow("wk_cw65", "Lane 65: hotfix chat send while four lanes run with a long title", "failed", {
+      line: "The e2e suite failed on the send test",
+      activity: [{ id: "m1", label: "Failed", tone: "bad", text: "The e2e suite failed on the send test", at: iso(10) }],
+    }),
+    taskRow("wk_cw66", "Lane 66: hotfix chat send while four lanes run with a long title", "working", {
+      activity: [
+        { id: "m2", label: "Progress", tone: "ai", text: "Running the e2e suite", at: iso(3) },
+        { id: "m3", label: "Step done", tone: "ok", text: "Build passed", at: iso(9) },
+      ],
+    }),
+  ];
+  await page.route(/\/api\/work\/tasks(?:\?.*)?$/, (route) =>
+    route.fulfill({
+      json: {
+        view: "flight",
+        scope: "all",
+        groups: [{ id: "portfolio", title: "Portfolio", needs: 2, rows }],
+        needs: 2,
+        review: null,
+        done: null,
+        open: 4,
+        fetchedAt: iso(0),
+      },
+    }),
+  );
   await page.route(/\/api\/coordinator\/decisions\/.+\/(answer|defer)$/, (route) => route.fulfill({ status: 409, json: { error: "Not part of this test" } }));
   await page.route(/\/api\/hermes\/sessions(\/.*)?$/, (route) => (route.request().method() === "GET" ? route.fallback() : route.abort()));
   const axe = async (label: string, include: string) => {
@@ -973,25 +1041,29 @@ test("a11y + 200% text: CW v3 Needs you list, risk-flagged decision detail and R
   const desktop = info.project.name === "desktop";
   const scope = desktop ? page.getByRole("complementary", { name: "Chief of staff" }) : page.getByRole("dialog", { name: "Chief of staff" });
   const sel = desktop ? ".gc-rail" : ".gc-sheet";
-  // The tray is one button; its status sentence says what waits. Needs you is a tab inside.
+  // The tray is one button; its status sentence says what waits. Tasks is a tab inside.
   if (!desktop) await page.locator(".gc-tray").getByRole("button", { name: "Chief of staff", exact: true }).click();
-  await scope.getByRole("tab", { name: /^Needs you/ }).click();
-  await expect(scope.getByRole("button", { name: "D-49: Ship it now (recommended)", exact: true })).toBeVisible();
-  // A risky decision offers no one-tap chips: its row opens the card.
-  await expect(scope.getByRole("button", { name: /^D-48: / })).toHaveCount(0);
-  await axe("needs list", sel);
+  await scope.getByRole("tab", { name: /^Tasks/ }).click();
+  const list = scope.getByTestId("task-list");
+  await expect(list.getByTestId("task-row")).toHaveCount(4);
+  // A question with two short choices is answered from its row; a risk-flagged one offers "Answer" only.
+  const safe = list.getByTestId("task-row").filter({ hasText: "Renumber migration 0042" });
+  await expect(safe.getByRole("button", { name: "Ship it now", exact: true })).toBeVisible();
+  const risky = list.getByTestId("task-row").filter({ hasText: "Rotate the tunnel key" });
+  await expect(risky.getByRole("button", { name: /^Rotate/ })).toHaveCount(0);
+  await expect(list.getByRole("link", { name: /^Lane 65/ })).toBeVisible();
+  // A tray tap can open the top decision's card above the list: close it so the list is checked alone.
+  const back = scope.getByRole("button", { name: /^Back/ });
+  if (await back.count()) await back.first().click();
+  await axe("tasks list", sel);
   await zoom();
-  await scope.getByRole("button", { name: /^Open decision D-48:/ }).click();
+  await risky.getByRole("button", { name: "Answer", exact: true }).click();
   const answers = scope.getByRole("group", { name: "Answers for D-48" });
   await expect(answers).toBeVisible();
   // A risky choice arms first; the in-place Confirm is what would send it.
   await answers.getByRole("button", { name: /^Rotate/ }).click();
   await expect(scope.getByRole("group", { name: "Confirm answer" })).toBeVisible();
   await axe("risk-flagged detail", sel);
-  await zoom();
-  await scope.getByRole("tab", { name: /^Activity/ }).click();
-  await expect(scope.getByText(/Lane 65/)).toBeVisible();
-  await axe("activity", sel);
   await zoom();
 });
 
@@ -1168,4 +1240,76 @@ test("phone width guard: long real-shaped data never widens key pages past the v
     if (r.iw > vw || r.sw > vw) offenders.push(`${path}: innerWidth ${r.iw}, scrollWidth ${r.sw} > ${vw}`);
   }
   expect(offenders, `${testInfo.project.name}: pages wider than the phone viewport`).toEqual([]);
+});
+
+test("task page: Overview and Chat stay inside the viewport with long text, at normal and 200% text, and pass axe", async ({ page }) => {
+  test.setTimeout(180_000);
+  const nonce = Date.now().toString(36);
+  // No "title" in it: other specs find fields by that label, and these rows show in the tree they share.
+  const unbroken = "Supercalifragilisticexpialidocious_task_heading_without_any_spaces_at_all_0123456789";
+  const url = "https://github.com/NickBolles/Personal-dashboard/pull/123456789?diff=split&w=1#discussion_r1234567890abcdef";
+  await page.goto("/home");
+  const post = async (path: string, data: unknown) => {
+    const r = await page.request.post(path, { data, headers: { "x-jarvis-csrf": "1" } });
+    expect(r.ok(), await r.text()).toBeTruthy();
+    return r.json();
+  };
+  const area = ((await post("/api/work/items", { kind: "area", title: `Pane lantern ${nonce}` })) as { item: { id: string } }).item.id;
+  const id = (
+    (await post("/api/work/items", {
+      kind: "thread",
+      parentId: area,
+      title: `${unbroken} ${nonce}`,
+      summary: `Compare the frames at ${url} and keep the current top. ${unbroken}`,
+      nextAction: `Pick a frame once the ceiling is set ${unbroken}`,
+    })) as { item: { id: string } }
+  ).item.id;
+  // An earlier chat linked to the task (it shows under Other chats) and a link (Made and linked).
+  const other = (await post("/api/hermes/sessions", { title: `${unbroken} earlier chat ${nonce}`, backend: "hermes" })) as { id: string };
+  await post(`/api/work/items/${id}/links`, { kind: "chat_session", targetId: other.id });
+  await post(`/api/work/items/${id}/links`, { kind: "url", url, title: `${unbroken} link` });
+  const axe = async (label: string) => {
+    const results = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+    expect.soft(results.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${label} ${v.id}`)).toEqual([]);
+  };
+  const zoom = () => page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+
+  // Before the task has a chat: Overview, then the Chat pane with its first-message composer and Other chats.
+  await page.goto(`/areas?item=${id}`);
+  await expect(page.locator("#work-item-title")).toBeVisible();
+  await expect(page.getByTestId("item-log")).toBeVisible();
+  await page.waitForTimeout(300);
+  await expectNoHorizontalOverflow(page, { soft: true });
+  await axe("overview");
+  let chat = await openTaskPane(page, "Chat");
+  await expect(chat.getByTestId("task-no-chat")).toBeVisible();
+  await chat
+    .getByTestId("task-other-chats")
+    .getByRole("button", { name: /^Other chats/ })
+    .click();
+  await expect(chat.getByRole("button", { name: "Make primary" })).toBeVisible();
+  await expectNoHorizontalOverflow(page, { soft: true });
+  await axe("chat, no chat yet");
+  await zoom();
+  await page.waitForTimeout(300);
+  await expectNoHorizontalOverflow(page, { soft: true });
+
+  // The first message creates the chat: the shared thread with its composer, at normal and at 200% text.
+  await page.goto(`/areas?item=${id}`);
+  chat = await openTaskPane(page, "Chat");
+  await chat.getByTestId("task-first-input").fill(`pane check ${nonce} ${unbroken} ${url}`);
+  await chat.getByTestId("task-first-send").click();
+  await expect(chat.getByText(/Got it: "pane check/)).toBeVisible({ timeout: 20_000 });
+  await page.waitForTimeout(500);
+  await expectNoHorizontalOverflow(page, { soft: true });
+  await axe("chat");
+  await zoom();
+  await page.waitForTimeout(300);
+  await expectNoHorizontalOverflow(page, { soft: true });
+  // Back on Overview with the chat's status bar under it, still at 200% text.
+  await page.goto(`/areas?item=${id}`);
+  await expect(page.locator("#work-item-title")).toBeVisible();
+  await zoom();
+  await page.waitForTimeout(300);
+  await expectNoHorizontalOverflow(page, { soft: true });
 });

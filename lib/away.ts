@@ -38,7 +38,7 @@ export const scheduleSpecSchema = z
   .refine((s) => s.freq !== "weekly" || s.days.length > 0, { message: "Pick at least one day", path: ["days"] });
 export type ScheduleSpec = z.infer<typeof scheduleSpecSchema>;
 
-export const JOB_KINDS = ["brief", "triage", "review", "stalled", "feedback", "custom"] as const;
+export const JOB_KINDS = ["brief", "triage", "review", "stalled", "feedback", "suggest", "custom"] as const;
 export type JobKind = (typeof JOB_KINDS)[number];
 export const JOB_KIND_LABELS: Record<JobKind, string> = {
   brief: "Morning brief",
@@ -46,6 +46,7 @@ export const JOB_KIND_LABELS: Record<JobKind, string> = {
   review: "Weekly review prep",
   stalled: "Check stalled agent runs",
   feedback: "Feedback triage",
+  suggest: "Suggest next steps",
   custom: "Custom prompt",
 };
 
@@ -89,7 +90,18 @@ export const jobPatchSchema = z
   .strict();
 export type JobPatch = z.infer<typeof jobPatchSchema>;
 
-export const JOB_STATUSES = ["never", "running", "ok", "silent", "failed", "skipped_quiet", "skipped_cap", "skipped_policy", "skipped_empty"] as const;
+export const JOB_STATUSES = [
+  "never",
+  "running",
+  "ok",
+  "silent",
+  "failed",
+  "skipped_quiet",
+  "skipped_cap",
+  "skipped_budget",
+  "skipped_policy",
+  "skipped_empty",
+] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];
 export const JOB_STATUS_LABELS: Record<JobStatus, string> = {
   never: "Never ran",
@@ -99,6 +111,7 @@ export const JOB_STATUS_LABELS: Record<JobStatus, string> = {
   failed: "Failed",
   skipped_quiet: "Skipped · quiet hours",
   skipped_cap: "Skipped · daily cap",
+  skipped_budget: "Skipped · AI budget used up",
   skipped_policy: "Skipped · AI off here",
   skipped_empty: "Skipped · no new feedback",
 };
@@ -232,6 +245,29 @@ export const SUGGESTED_TEMPLATES: (Omit<JobInput, "areaId" | "enabled"> & { key:
   },
 ];
 
+/**
+ * "Suggest next steps" (task threads H1, H4): a channel's coordinator reads its own tasks and writes up to a few
+ * suggestions the owner may Start or Send. Seeded disabled per channel; nothing runs until the owner switches it on.
+ */
+export const SUGGEST_TEMPLATE = {
+  key: "suggest-next-steps",
+  title: "Suggest next steps",
+  kind: "suggest" as const,
+  overnight: false,
+  schedule: { freq: "daily" as const, time: "07:30", days: [] as number[] },
+  prompt:
+    "Read this channel's open tasks and what happened on them since your last check-in. Suggest at most three next steps the owner would want, " +
+    'each as a proposal with intent "suggest": title (what Start does, in a few words), why (one line from the owner\'s own work: counts, dates, task names), ' +
+    'evidence (the itemIds of the tasks the reason comes from: at least one), act ("start" a task, or "steer" a task that is working), ' +
+    "itemId (the task to start or steer; leave it out to create a new task titled `title`), text (exactly what the agent will be told), " +
+    'and topic (a short kind such as "review", "next_step", "follow_up", "unblock"). Do not repeat a suggestion that is already open. ' +
+    "If there is nothing worth suggesting, say exactly NOTHING_NEW.",
+};
+/** How often a suggest job may run in a day (H4): its slot, plus once after a task in its channel finishes. */
+export const SUGGEST_RUNS_PER_DAY = 6;
+/** A suggest run started by a finished task waits this long after the job's previous run. */
+export const SUGGEST_MIN_GAP_MS = 60 * MINUTE;
+
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 /** Weekday (0 = Sunday) of a YYYY-MM-DD calendar date. */
@@ -333,6 +369,8 @@ export const PROPOSAL_INTENTS = [
   "create_project",
   "add_link",
   "raise_decision",
+  /** a card the owner may Start or Send (task threads H1): never applied, never a decision */
+  "suggest",
   /** a Home Assistant change: ALWAYS a Needs-you decision (never low-risk, never executed by a job) */
   "device_control",
   "settle",
@@ -360,6 +398,16 @@ export const proposalSchema = z
     text: z.string().trim().max(4000).optional(),
     /** one-line reason shown to the owner */
     why: z.string().trim().max(300).optional(),
+    /** suggest only: the owner's own tasks the reason is drawn from (required for a suggestion) */
+    evidence: z.array(z.string().min(1).max(64)).max(5).optional(),
+    /** suggest only: start a task (itemId: the task, else a new task titled `title`) or steer one (itemId) */
+    act: z.enum(["start", "steer"]).optional(),
+    /** suggest only: what kind of suggestion this is, so the owner can turn that kind off ("review", "next_step") */
+    topic: z
+      .string()
+      .trim()
+      .regex(/^[a-z][a-z_]{1,39}$/)
+      .optional(),
     /** device_control only: what to change (validated against lib/ha-policy when proposed) */
     device: z
       .object({

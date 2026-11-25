@@ -20,6 +20,7 @@ import {
 } from "@/lib/agent-runs";
 import { areaIndex, bucketOf } from "@/lib/map-rollup";
 import { isContainer, type WorkItem } from "@/lib/work";
+import { primarySessionOf } from "@/lib/task-chat";
 import { listItems } from "./store";
 import { linksByItem } from "./decisions";
 import type { ExecutionRecord } from "@/lib/chat-execution";
@@ -144,10 +145,11 @@ export function executionRuns(user: CurrentUser, sessionId: string, childIds: st
   return { jarvis: jarvis.filter((r) => !ownTurns.has(r.id)), registered };
 }
 
-/** Each item's Hermes conversations: conversation children + chat_session links. */
+/** Each item's Hermes conversations: its primary chat, conversation children + chat_session links. */
 function sessionsByItem(items: WorkItem[], links: Map<string, { kind: string; targetId: string | null }[]>) {
   const out = new Map<string, Set<string>>();
   const add = (id: string, s: string) => out.set(id, (out.get(id) ?? new Set()).add(s));
+  for (const i of items) if (i.primarySessionId && !i.archived) add(i.id, i.primarySessionId);
   for (const c of items) if (c.kind === "conversation" && c.sessionId && c.parentId && !c.archived) add(c.parentId, c.sessionId);
   for (const [id, ls] of links) for (const l of ls) if (l.kind === "chat_session" && l.targetId) add(id, l.targetId);
   return out;
@@ -265,6 +267,8 @@ export function agentRuns(user: CurrentUser, items: WorkItem[] = listItems(user.
         hermesSessionId: r.hermesSessionId,
         delegationId: r.delegationId,
         transcriptPath: r.transcriptPath,
+        // Recent activity in its chat keeps it from reading Stalled everywhere it is shown (lib/agent-runs.ts isStalled).
+        ...(r.chatActiveAt ? { chatActiveAt: r.chatActiveAt } : {}),
         children: parseRunChildren(r.childrenJson),
       });
       external.set(r.itemId, list);
@@ -310,6 +314,8 @@ export function agentRuns(user: CurrentUser, items: WorkItem[] = listItems(user.
     const report = reports.get(i.id) ?? null;
     if (!who && !samples.length && !prs.length && !report) continue;
     const agg = aggregateRunState(samples);
+    // A turn in one of its chats, or an AI action on it, is work in flight even with no registered run.
+    const chatTurn = samples.filter((s) => (s.source === "chat" || s.source === "job") && s.live === "running").sort((a, b) => b.at.localeCompare(a.at))[0];
     const kids = kidsOf.get(i.id) ?? [];
     out[i.id] = {
       itemId: i.id,
@@ -319,7 +325,10 @@ export function agentRuns(user: CurrentUser, items: WorkItem[] = listItems(user.
       live: agg.live,
       ...(agg.approval ? { approval: true } : {}),
       liveAt: agg.at,
-      sessionId: agg.sessionId ?? ([...(sessions.get(i.id) ?? [])][0] || null),
+      ...(chatTurn ? { chatRunningAt: chatTurn.at } : {}),
+      // One answer to "the task's chat" (lib/task-chat.ts): the recorded primary, else what the old rule picked.
+      sessionId: primarySessionOf(i) ?? agg.sessionId ?? ([...(sessions.get(i.id) ?? [])][0] || null),
+      ...(agg.sessionId && primarySessionOf(i) && agg.sessionId !== primarySessionOf(i) ? { runSessionId: agg.sessionId } : {}),
       runs: samples.length,
       prs,
       report,

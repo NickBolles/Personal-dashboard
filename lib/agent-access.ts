@@ -5,7 +5,7 @@
  */
 import { z } from "zod";
 
-export const AGENT_SCOPES = ["work.read", "work.write", "decisions.write", "runs.write", "conversations.file"] as const;
+export const AGENT_SCOPES = ["work.read", "work.write", "decisions.write", "runs.write", "conversations.file", "tasks.run"] as const;
 export type AgentScope = (typeof AGENT_SCOPES)[number];
 
 export const AGENT_SCOPE_LABELS: Record<AgentScope, { label: string; hint: string }> = {
@@ -14,9 +14,34 @@ export const AGENT_SCOPE_LABELS: Record<AgentScope, { label: string; hint: strin
   "decisions.write": { label: "Ask you", hint: "Raise a Needs-you decision; destructive changes become a proposal for you" },
   "runs.write": { label: "Record runs", hint: "Register agent runs and their progress on items" },
   "conversations.file": { label: "File conversations", hint: "File the agent's own conversations into an area or item" },
+  "tasks.run": {
+    label: "Start and steer tasks",
+    hint: "Open a task's chat with a brief, steer it when you asked for that, hand it to another agent (undoable, daily cap)",
+  },
 };
 
-/** Defaults offered when minting (everything but filing conversations). */
+/**
+ * Scopes that deserve a second look before granting: starting and steering tasks runs Hermes models (spends budget)
+ * and writes into chats. No scope maps to finance.* or admin, so there is no money scope to flag.
+ */
+export const RISKY_AGENT_SCOPES: Partial<Record<AgentScope, string>> = {
+  "tasks.run": "Starts and steers Hermes runs, which spend model budget",
+};
+
+/** Normalise a scope list: known scopes only, no repeats, in AGENT_SCOPES order. */
+export function normaliseScopes(scopes: readonly string[]): AgentScope[] {
+  const set = new Set(scopes);
+  return AGENT_SCOPES.filter((s) => set.has(s));
+}
+
+/** What changes between two scope lists (both normalised). */
+export function scopeDiff(before: readonly string[], after: readonly string[]): { added: AgentScope[]; removed: AgentScope[] } {
+  const b = new Set(normaliseScopes(before));
+  const a = new Set(normaliseScopes(after));
+  return { added: AGENT_SCOPES.filter((s) => a.has(s) && !b.has(s)), removed: AGENT_SCOPES.filter((s) => b.has(s) && !a.has(s)) };
+}
+
+/** Defaults offered when minting (everything but filing conversations and starting tasks: those are opted into). */
 export const DEFAULT_AGENT_SCOPES: AgentScope[] = ["work.read", "work.write", "decisions.write", "runs.write"];
 
 export const AGENT_TOKEN_PREFIX = "jva_";
@@ -36,6 +61,13 @@ export const mintAgentTokenSchema = z
   })
   .strict();
 
+/** Edit the scopes of an existing token (same secret; no rotation). */
+export const updateAgentScopesSchema = z
+  .object({
+    scopes: z.array(z.enum(AGENT_SCOPES)).min(1, "Pick at least one scope").max(AGENT_SCOPES.length),
+  })
+  .strict();
+
 export type AgentTokenView = {
   id: string;
   name: string;
@@ -47,6 +79,15 @@ export type AgentTokenView = {
   lastUsedAt: string | null;
   revokedAt: string | null;
 };
+
+/** Tokens grouped by Hermes profile (profiles A–Z); inside a group active first, newest first. */
+export function groupByProfile(tokens: AgentTokenView[]): [string, AgentTokenView[]][] {
+  const groups = new Map<string, AgentTokenView[]>();
+  for (const t of tokens) groups.set(t.profile, [...(groups.get(t.profile) ?? []), t]);
+  return [...groups.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([p, rows]) => [p, [...rows].sort((x, y) => Number(!!x.revokedAt) - Number(!!y.revokedAt) || y.createdAt.localeCompare(x.createdAt))]);
+}
 
 export type MintedAgentToken = { token: string; view: AgentTokenView };
 

@@ -13,7 +13,7 @@ type PathResult = { item: WorkItem; created: number };
 /** Kinds offered under a parent (areas only at the top). "Item" is the everyday name for a thread. */
 export function kindOptions(parent: WorkItem | null): { value: CreatableKind; label: string }[] {
   if (!parent) return [{ value: "area", label: "Area" }];
-  return CREATABLE_KINDS.filter((k) => k !== "area").map((k) => ({ value: k, label: k === "thread" ? "Item" : KIND_LABELS[k] }));
+  return CREATABLE_KINDS.filter((k) => k !== "area").map((k) => ({ value: k, label: k === "thread" ? "Task" : KIND_LABELS[k] }));
 }
 
 export function useCreatePath(onCreated?: (r: PathResult) => void) {
@@ -33,7 +33,7 @@ export function useCreatePath(onCreated?: (r: PathResult) => void) {
 const PATH_HINT = "Use “ / ” to nest: V5 evaluator / hydration fix creates the project if it’s missing.";
 
 /**
- * "+ New" / "+ Project" / "+ Item": one dialog for every kind. The title takes
+ * "+ New" / "+ Project" / "+ Task": one dialog for every kind. The title takes
  * a path ("Project / item"); the destination defaults to where you are.
  */
 export function QuickAddDialog({
@@ -194,7 +194,7 @@ export function InlineAdd({
       <input
         ref={input}
         type="text"
-        aria-label={parent ? `New item in ${parent.title}` : "New area name"}
+        aria-label={parent ? `New task in ${parent.title}` : "New area name"}
         className={inputCls}
         autoFocus={autoFocus}
         autoComplete="off"

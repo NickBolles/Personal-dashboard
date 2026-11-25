@@ -13,6 +13,7 @@ import { awayDigest, dismissAway } from "@/server/agents/away";
 import { applyProposals } from "@/server/agents/proposals";
 import { PROPOSAL_INTENTS, LOW_RISK_INTENTS, NEVER_INTENTS, RUN_TIMEOUT_MS, type Proposal, type JobInput } from "@/lib/away";
 import { mintAgentToken } from "@/server/agent-access/tokens";
+import { saveAiSettings } from "@/server/ai/settings";
 import { NextRequest } from "next/server";
 import { POST as mcp } from "@/app/api/mcp/route";
 
@@ -104,9 +105,11 @@ describe("schedule store and claims", () => {
     setSetting("global_coordinator_area_id", areaId);
     const a = listSchedules(owner, now);
     const b = listSchedules(owner, now);
-    expect(a.jobs).toHaveLength(3);
-    expect(b.jobs).toHaveLength(3);
+    // Two suggested templates, feedback triage, and "Suggest next steps" for the one channel with a coordinator.
+    expect(a.jobs).toHaveLength(4);
+    expect(b.jobs).toHaveLength(4);
     expect(a.jobs.map((j) => j.templateKey)).toContain("daily-feedback-triage");
+    expect(a.jobs.find((j) => j.kind === "suggest")).toMatchObject({ templateKey: `suggest-next-steps:${areaId}`, enabled: false });
     expect(a.jobs.every((j) => !j.enabled && j.areaId === areaId && j.nextRunAt === null)).toBe(true);
   });
   it("claims a slot once, including concurrent callers", async () => {
@@ -153,6 +156,57 @@ describe("schedule store and claims", () => {
     expect(jobRow(owner, b.id).lastStatus).toBe("skipped_cap");
     await expect(runJobNow(owner, b.id, now, deps)).rejects.toMatchObject({ code: "daily_cap" });
     await expect(runJobNow(owner, a.id, now, deps)).rejects.toMatchObject({ code: "already_running" });
+  });
+  it("the money gate: no scheduled run while today's AI budget is used up, by schedule or run-now", async () => {
+    saveAiSettings({ billing: { mode: "api", stopAtPct: 48 }, dailyBudgetUsd: 1 });
+    getDb()
+      .insert(schema.aiJobs)
+      .values({
+        id: "aij_spent",
+        userId: owner.id,
+        kind: "investigate",
+        subjectType: "inbox",
+        subjectId: "x",
+        state: "succeeded",
+        lane: "work",
+        tier: "standard",
+        idempotencyKey: "aij:spent",
+        promptVersion: "investigate@1",
+        costUsd: 1.5,
+        finishedAt: now.toISOString(),
+      })
+      .run();
+    const j = job();
+    await runSchedulePass(now, deps);
+    expect(deps.startRun).not.toHaveBeenCalled();
+    expect(jobRow(owner, j.id).lastStatus).toBe("skipped_budget");
+    await expect(runJobNow(owner, j.id, now, deps)).rejects.toMatchObject({ code: "budget" });
+    // Under a subscription nothing is spent per run, so the dollar budget does not hold it back.
+    saveAiSettings({ billing: { mode: "claude", stopAtPct: 48 } });
+    await runJobNow(owner, j.id, now, deps);
+    expect(deps.startRun).toHaveBeenCalledTimes(1);
+  });
+  it("a suggest job also runs once after a task in its channel finishes, and never on Finance", async () => {
+    const j = job({ kind: "suggest", title: "Suggest next steps", schedule: { freq: "daily", time: "05:30", days: [] } });
+    const later = new Date(now.getTime() + 3 * 3600_000);
+    await runSchedulePass(later, deps);
+    expect(deps.startRun).not.toHaveBeenCalled(); // no slot due and nothing finished
+    const t = createItem(owner, { kind: "thread", title: "Fix the gate", parentId: areaId }, "test");
+    updateItem(owner, t.id, { status: "abandoned", reason: "Done another way" }, "test");
+    await runSchedulePass(later, deps);
+    expect(deps.startRun).toHaveBeenCalledTimes(1);
+    expect(rows().at(-1)?.slot).toMatch(/^done:/);
+    // Another pass in the same hour starts nothing more.
+    await runSchedulePass(new Date(later.getTime() + 60_000), deps);
+    expect(deps.startRun).toHaveBeenCalledTimes(1);
+    expect(jobRow(owner, j.id).kind).toBe("suggest");
+
+    const finance = createItem(owner, { kind: "area", title: "Finance" }, "test").id;
+    updateItem(owner, finance, { settings: { agentMode: "finchief" } }, "test");
+    const f = job({ kind: "suggest", title: "Suggest on Finance", areaId: finance });
+    await runSchedulePass(now, deps);
+    expect(jobRow(owner, f.id).lastStatus).toBe("skipped_policy");
+    await expect(runJobNow(owner, f.id, now, deps)).rejects.toMatchObject({ code: "ai_off" });
   });
   it("starts at most two jobs per tick", async () => {
     job();
@@ -306,7 +360,8 @@ describe("reconciliation and digest", () => {
 });
 
 describe("policy end to end", () => {
-  it.each(PROPOSAL_INTENTS)("enforces low-risk and propose for %s without lifecycle changes", (intent) => {
+  // "suggest" is never applied and never a decision: it becomes a card (test/suggestions.test.ts).
+  it.each(PROPOSAL_INTENTS.filter((i) => i !== "suggest"))("enforces low-risk and propose for %s without lifecycle changes", (intent) => {
     const target = createItem(owner, { kind: "thread", title: "Task", parentId: areaId }, "test");
     const p: Proposal = {
       intent,

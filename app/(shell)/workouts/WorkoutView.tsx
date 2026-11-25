@@ -167,7 +167,7 @@ export function WorkoutView() {
 
   if (!can("workouts.use")) return <EmptyState title="You do not have access to workouts." />;
   return (
-    <div className="mx-auto max-w-3xl space-y-4 px-4 pt-4 pb-6 sm:px-6 dense:pt-5">
+    <div className="mx-auto max-w-3xl space-y-4 px-3 pt-3 pb-6 sm:px-5 sm:pt-4 dense:px-7 dense:pt-5">
       <div className="[&>header]:mb-0">
         <PageHeader title="Workouts" subtitle="Your training, simplified." actions={<Pill tone="ac">Private</Pill>} />
       </div>

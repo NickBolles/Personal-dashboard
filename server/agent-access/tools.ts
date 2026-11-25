@@ -26,6 +26,7 @@ import { buildDeviceProposal } from "./ha-proposals";
 import { DECISION_STATES, raiseSchema } from "@/lib/cw-decisions";
 import { findDecision, listDecisionRows, raiseDecision, withdrawDecision } from "@/server/work/decision-store";
 import { RUN_TOOLS } from "./run-tools";
+import { TASK_TOOLS } from "./task-tools";
 import { lockSchema, pipelineSchema, runRef } from "@/lib/cw-runs";
 import { ensureRunSeqs, recordRunTransition, resolveRun, runIdentifier } from "@/server/work/run-events";
 
@@ -250,7 +251,7 @@ export const TOOLS: ToolDef[] = [
           title: r.title,
           profile: r.profile,
           state: r.state,
-          stalled: isStalled({ state: r.state as AgentRunState, updatedAt: r.updatedAt }),
+          stalled: isStalled({ state: r.state as AgentRunState, updatedAt: r.updatedAt, chatActiveAt: r.chatActiveAt }),
           summary: r.summary,
           prUrl: r.prUrl,
           hermesSessionId: r.hermesSessionId,
@@ -629,6 +630,7 @@ export const TOOLS: ToolDef[] = [
     },
   }),
   ...RUN_TOOLS,
+  ...TASK_TOOLS,
 ];
 
 export const TOOL_BY_NAME = new Map(TOOLS.map((t) => [t.name, t]));

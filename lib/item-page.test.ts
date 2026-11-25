@@ -314,7 +314,7 @@ describe("itemTimeline", () => {
   it("says whose step it was once the item has more than one run, and adds each report that came back", () => {
     const timeline = itemTimeline({
       itemId: "a",
-      runs: [tracked("1", "a"), tracked("2", "a")],
+      runs: [tracked("1", "a", { title: "Smoke tests" }), tracked("2", "a", { title: "Coupon retry" })],
       events: [
         event("e1", "1", { summary: "11 of 12 checks passed", at: iso(now - 30 * MIN) }),
         event("e2", "2", { type: "failed", summary: "Timed out", at: iso(now - 5 * MIN) }),
@@ -325,7 +325,12 @@ describe("itemTimeline", () => {
         report("gone", { archivedAt: iso(now) }),
       ],
     });
-    expect(timeline.map((e) => e.summary)).toEqual(["Research report: Three frames compared", "R-2 · Timed out", "R-1 · 11 of 12 checks passed"]);
+    expect(timeline.map((e) => e.summary)).toEqual([
+      "Research report: Three frames compared",
+      // Whose step it was is said by the run's title: a run's number is not shown on the page.
+      "Coupon retry · Timed out",
+      "Smoke tests · 11 of 12 checks passed",
+    ]);
     expect(timeline[0]).toMatchObject({ id: "report:r1", type: "done" });
   });
   it("is empty when nothing has run", () => {

@@ -1547,3 +1547,112 @@ html[data-kb="open"] .gc-tray-qa {
     margin-inline: auto;
   }
 }
+
+/* The thread switcher and the "In this chat" button share one row at the top of the thread. */
+.gc-threadrow {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+.gc-threadrow > :first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* ---- Tasks tab: the task list, with what is not a task above it (an opened decision, approvals) ---- */
+.gc-tasks {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+}
+.gc-resume {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin: 0;
+  color: var(--t2);
+  font: 400 13px/19px var(--sans);
+}
+/* The list lines up with the sections around it. */
+.gc-tasks > .tl {
+  padding-inline: 14px;
+}
+
+/* ---- earlier threads: the top of one continuous chat. Each is a grey divider, then its messages, greyed. ---- */
+.gc-earlier {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.gc-earlier-div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 2px;
+  color: var(--t3);
+  font: 500 0.71875rem/1rem var(--sans);
+}
+.gc-earlier-div:empty::before {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--bd);
+}
+.gc-earlier-div:not(:empty)::before,
+.gc-earlier-div:not(:empty)::after {
+  content: "";
+  flex: 1;
+  min-width: 12px;
+  height: 1px;
+  background: var(--bd);
+}
+.gc-earlier-div > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The divider that loads the thread before: the same line, and the whole row is the target. */
+.k-btn.gc-earlier-more {
+  display: flex;
+  width: 100%;
+  min-height: 32px;
+  justify-content: stretch;
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--t3);
+  font: 500 0.71875rem/1rem var(--sans);
+}
+.k-btn.gc-earlier-more:hover {
+  background: none;
+  color: var(--t2);
+}
+.k-btn.gc-earlier-more:focus-visible {
+  outline: 2px solid var(--ac);
+  outline-offset: 2px;
+  border-radius: var(--r1);
+}
+/* Read-only history: the words in the quieter ink, never faded below contrast. */
+.gc-earlier-thread .co-msg,
+.gc-earlier-thread .co-msg :is(p, li, span, a, strong, em, code) {
+  color: var(--t2);
+}
+.gc-earlier-thread ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.gc-earlier-note {
+  margin: 0;
+  color: var(--t3);
+  font: 400 0.75rem/1rem var(--sans);
+}

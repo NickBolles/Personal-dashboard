@@ -223,6 +223,8 @@ export type WorkItem = {
   validationDefault: ValidationDefault | null;
   /** conversation nodes: the Hermes or Claude-direct session (Hermes owns the content) */
   sessionId: string | null;
+  /** tasks: the session of the task's one primary chat (lib/task-chat.ts); null or absent while it has none */
+  primarySessionId?: string | null;
   /** areas only: agent mode, defaults and settle policy (null = defaults, see DEFAULT_AREA_SETTINGS) */
   settings: AreaSettings | null;
   /** normalised tag names (lib/item-tags.ts) */

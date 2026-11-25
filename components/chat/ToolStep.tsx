@@ -74,7 +74,7 @@ export const ToolStep = memo(function ToolStep({
         <p className="ml-9 text-xs text-muted">
           {outcome.href ? (
             <a href={outcome.href} className="text-accent underline">
-              Open item
+              Open task
             </a>
           ) : null}
           {outcome.status ? ` · ${outcome.status}` : ""}

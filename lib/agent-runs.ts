@@ -105,14 +105,22 @@ export type ExternalRun = {
   hermesSessionId?: string | null;
   delegationId?: string | null;
   transcriptPath?: string | null;
+  /** last activity seen in the run's chat (server/work/session-end.ts): a quiet run with a busy chat is not stalled */
+  chatActiveAt?: string | null;
   children?: RunChild[];
 };
 
-/** A run still "running" with no update for this long is shown as Stalled (badge + Needs you nudge; nothing is changed). */
+/**
+ * A run still "running" with no report AND no activity in its chat for this long is shown as Stalled (nothing is
+ * changed). Chat activity comes from the ended-chat check (server/work/session-end.ts), so it can be a few minutes old.
+ */
 export const STALL_AFTER_MIN = 30;
-export function isStalled(r: Pick<ExternalRun, "state" | "updatedAt">, now: number = Date.now()): boolean {
+export function isStalled(r: Pick<ExternalRun, "state" | "updatedAt" | "chatActiveAt">, now: number = Date.now()): boolean {
   if (r.state !== "running") return false;
   const t = Date.parse(r.updatedAt);
+  // Its chat was active inside the threshold: the agent is working, it just has not reported.
+  const chat = r.chatActiveAt ? Date.parse(r.chatActiveAt) : NaN;
+  if (Number.isFinite(chat) && now - chat <= STALL_AFTER_MIN * 60_000) return false;
   return Number.isFinite(t) && now - t > STALL_AFTER_MIN * 60_000;
 }
 /** The run that decides an item's row (waiting > running > newest), not just the newest one (#251). */
@@ -198,8 +206,12 @@ export type ItemAgentInfo = {
   approval?: boolean;
   /** when the deciding run started/finished */
   liveAt: string | null;
-  /** the Hermes conversation of the deciding run (opens it) */
+  /** A turn is in flight in one of the task's chats right now (a run Jarvis started there), or an AI action on it: since when. */
+  chatRunningAt?: string | null;
+  /** the task's chat: its primary chat, else the conversation of the deciding run, else its first filed or linked one */
   sessionId: string | null;
+  /** the conversation the deciding run is in, when that is not the task's chat (an approval waits there) */
+  runSessionId?: string | null;
   runs: number;
   prs: PrState[];
   report: { title: string; summary: string; at: string; href: string | null } | null;

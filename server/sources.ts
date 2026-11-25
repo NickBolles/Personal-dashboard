@@ -167,6 +167,25 @@ export function sourceVisible(user: Capable, source: ActionSource) {
 }
 
 /**
+ * Whether this person may see one action from `source` today, by the same tests `scopeResult` applies to
+ * live data. For a reference to an action that is no longer in the Home selection (the brief's history):
+ * the selection is already scoped, but a stored reference is not.
+ */
+export function actionVisible(user: Viewer, source: ActionSource, sourceId: string): boolean {
+  if (source === "work") return can(user, "work.use");
+  if (!sourceVisible(user, source) || !can(user, sourceCapability(source))) return false;
+  if (source !== "hermes") return true;
+  // Hermes approvals belong to whoever started the run.
+  return Boolean(
+    getDb()
+      .select({ runId: schema.runs.runId })
+      .from(schema.runs)
+      .where(and(eq(schema.runs.userId, user.id), eq(schema.runs.runId, sourceId)))
+      .get(),
+  );
+}
+
+/**
  * What of a source's data this person may see. Home Assistant splits: the
  * household calendar is for everyone with it; doors, alerts and health need
  * home_assistant.view. Hermes approvals belong to whoever started the run.

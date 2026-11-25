@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAccess } from "@/components/access";
 import { CopyField, useAgentRuns } from "@/components/agents/AgentRuns";
@@ -57,7 +57,7 @@ export function useWorkSignals(enabled = true) {
 }
 
 /** Every run, AI job and report on one item as rows, and its timeline (lib/item-page.ts), kept current. */
-export function useItemWork(itemId: string, enabled = true) {
+export function useItemWork(itemId: string, enabled = true, primarySessionId: string | null = null) {
   const canAi = useAccess().can("work.ai");
   const { agents, runs, events, decisions } = useWorkSignals(enabled);
   const ai = useItemAi(itemId, enabled);
@@ -67,8 +67,8 @@ export function useItemWork(itemId: string, enabled = true) {
   const reports = ai.data?.reports;
   const rows = useMemo(() => itemWorkRows({ info, runs, decisions, jobs, reports, now }), [info, runs, decisions, jobs, reports, now]);
   const timeline = useMemo(() => itemTimeline({ itemId, runs, events, reports }), [itemId, runs, events, reports]);
-  // The conversation behind the newest run (else the item's own linked conversation): where the reasoning is.
-  const sessionId = info?.agentRuns?.find((run) => run.hermesSessionId)?.hermesSessionId ?? info?.sessionId ?? null;
+  // The task's chat (its primary chat: lib/task-chat.ts). Without one, the conversation behind the newest run.
+  const sessionId = primarySessionId ?? info?.agentRuns?.find((run) => run.hermesSessionId)?.hermesSessionId ?? info?.sessionId ?? null;
   return { rows, timeline, sessionId, info, agents, runs, decisions };
 }
 
@@ -80,21 +80,47 @@ const TIMELINE_SHOWN = 4;
  * can see where it is at without opening the chat. The same timeline a run card draws (RunTimeline); the heading
  * links to the conversation for the reasoning.
  */
-export function ItemTimeline({ events, live, sessionId }: { events: readonly RunEvent[]; live?: boolean; sessionId?: string | null }) {
+export function ItemTimeline({
+  events,
+  live,
+  sessionId,
+  onOpenChat,
+  section,
+}: {
+  events: readonly RunEvent[];
+  live?: boolean;
+  sessionId?: string | null;
+  /** The task's chat is a tab of this page: "Open chat" switches to it (instead of a link to the chat page). */
+  onOpenChat?: () => void;
+  /** Drawn as a section of the page of its own (a task's Overview), not under the Work rows. */
+  section?: boolean;
+}) {
   const [all, setAll] = useState(false);
   if (!events.length) return null;
   const earlier = events.length - TIMELINE_SHOWN;
+  const open = onOpenChat ? (
+    <Button variant="ghost" size="sm" className="ip-link" onClick={onOpenChat}>
+      Open chat
+    </Button>
+  ) : sessionId ? (
+    <Link href={`/chat/${encodeURIComponent(sessionId)}`} className="ip-link">
+      Open conversation
+    </Link>
+  ) : null;
   return (
-    <div className="ip-timeline" data-testid="item-timeline">
-      <h4 className="ip-sublabel ip-timeline-h">
-        Timeline
-        {sessionId ? (
-          <Link href={`/chat/${encodeURIComponent(sessionId)}`} className="ip-link">
-            Open conversation
-          </Link>
-        ) : null}
-      </h4>
-      <RunTimeline events={all ? events : events.slice(0, TIMELINE_SHOWN)} runTitle="" label="What the agents on this item did, newest first" live={live} />
+    <div className={section ? "ip-sec ip-timeline" : "ip-timeline"} data-testid="item-timeline">
+      {section ? (
+        <h3 className="ip-label ip-timeline-h">
+          Timeline
+          {open}
+        </h3>
+      ) : (
+        <h4 className="ip-sublabel ip-timeline-h">
+          Timeline
+          {open}
+        </h4>
+      )}
+      <RunTimeline events={all ? events : events.slice(0, TIMELINE_SHOWN)} runTitle="" label="What the agents on this task did, newest first" live={live} />
       {earlier > 0 ? (
         <Button variant="ghost" size="sm" className="ip-more" aria-expanded={all} onClick={() => setAll((value) => !value)}>
           {all ? "Show fewer" : `Show earlier (${earlier})`}
@@ -133,7 +159,6 @@ function RunRow({ row, itemId, now, open, onToggle }: { row: RunWorkRow; itemId:
       data-testid="agent-run"
       data-stalled={row.state === "stalled" || undefined}
       state={row.state}
-      refId={row.refId ?? undefined}
       title={row.title}
       sub={<Line row={row} now={now} stalledId />}
       expanded={open}
@@ -145,13 +170,6 @@ function RunRow({ row, itemId, now, open, onToggle }: { row: RunWorkRow; itemId:
               label="Open conversation"
               icon={<ChatIcon className="h-4 w-4" />}
               onClick={() => router.push(`/chat/${encodeURIComponent(run.hermesSessionId!)}`)}
-            />
-          ) : null}
-          {row.refId ? (
-            <RowAction
-              label={`Log of ${row.refId}`}
-              icon={<LogIcon className="h-4 w-4" />}
-              onClick={() => router.push(coordHref(itemId, "running", row.refId!))}
             />
           ) : null}
         </>
@@ -322,6 +340,8 @@ export function ItemWorkList({
   label = "Work",
   timeline = [],
   sessionId,
+  extra,
+  extraCount = 0,
 }: {
   itemId: string;
   areaId: string | null;
@@ -332,6 +352,9 @@ export function ItemWorkList({
   timeline?: readonly RunEvent[];
   /** The conversation the timeline links to. */
   sessionId?: string | null;
+  /** More of the same section, drawn under the rows (a task's sub-tasks) and counted in the heading. */
+  extra?: ReactNode;
+  extraCount?: number;
   /** Keys of the rows open in place (held by the page, so a "jump to it" chip can open one). */
   open: ReadonlySet<string>;
   onToggle: (key: string) => void;
@@ -344,7 +367,7 @@ export function ItemWorkList({
   const showDone = doneOpen ?? unread;
   // A report link (?report=<id>, from a notification) opens that report.
   const [report, setReport] = useState<string | null>(() => (typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("report")));
-  if (!rows.length && !report) return null;
+  if (!rows.length && !report && !extra) return null;
   const draw = (row: ItemWorkRow) =>
     row.kind === "run" ? (
       <RunRow key={row.key} row={row} itemId={itemId} now={now} open={open.has(row.key)} onToggle={() => onToggle(row.key)} />
@@ -357,10 +380,10 @@ export function ItemWorkList({
     );
   return (
     <section className="ip-sec" aria-label={label} data-testid="item-agent-panel" id="work-reports">
-      {rows.length ? (
+      {rows.length || extra ? (
         <>
           <h3 className="ip-label">
-            {label} <span className="ip-count">· {rows.length}</span>
+            {label} <span className="ip-count">· {rows.length + extraCount}</span>
           </h3>
           <div className="ip-rows" data-testid="agent-runs-list">
             {groups.needs.map(draw)}
@@ -379,6 +402,7 @@ export function ItemWorkList({
             ) : null}
             {groups.done.length === 1 || showDone ? groups.done.map(draw) : null}
           </div>
+          {extra}
           <ItemTimeline events={timeline} live={groups.working.length > 0} sessionId={sessionId} />
         </>
       ) : null}

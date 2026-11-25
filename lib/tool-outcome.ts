@@ -30,7 +30,7 @@ export function toolOutcome(name: string, output?: string, depth = 0): ToolOutco
   if (body.proposed === true) return { label: "Proposed · awaiting owner" };
   const item = record(body.item);
   if (item && typeof item.id === "string" && /^wk_[\w-]+$/.test(item.id)) {
-    const verb = /update_item/.test(name) ? "Updated item" : /create_item|add_note/.test(name) ? "Created item" : "Item";
+    const verb = /update_item/.test(name) ? "Updated task" : /create_item|add_note/.test(name) ? "Created task" : "Task";
     return {
       label: `${verb}${short(item.title) ? ` · ${short(item.title)}` : ""}`,
       href: `/areas?item=${encodeURIComponent(item.id)}`,

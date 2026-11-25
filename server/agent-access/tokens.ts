@@ -5,7 +5,8 @@ import { newId, randomToken, sha256 } from "@/server/crypto";
 import { audit } from "@/server/audit";
 import { HttpError } from "@/server/http/errors";
 import { getOwner, userById, type CurrentUser } from "@/server/auth";
-import { AGENT_TOKEN_PREFIX, parseScopes, type AgentScope, type AgentTokenView, type MintedAgentToken } from "@/lib/agent-access";
+import { currentVia } from "@/server/work/actor";
+import { AGENT_TOKEN_PREFIX, normaliseScopes, parseScopes, scopeDiff, type AgentScope, type AgentTokenView, type MintedAgentToken } from "@/lib/agent-access";
 
 /**
  * Scoped agent tokens (docs/agent-tools.md). Only sha256(token) is stored; the token is returned
@@ -73,11 +74,49 @@ export function revokeAgentToken(user: CurrentUser, id: string, correlationId: s
   return view(db.select().from(schema.agentTokens).where(eq(schema.agentTokens.id, id)).get()!);
 }
 
+/**
+ * Change the scopes of an existing, unrevoked token. Same secret (no rotation, the agent's config keeps working).
+ * There is no token/scope cache: agentFromToken reads the row on every MCP request, so the next call (and the next
+ * tools/list) uses the new scopes. Owner only, never from inside an agent call; audited with the diff.
+ */
+export function updateAgentTokenScopes(user: CurrentUser, id: string, scopes: AgentScope[], correlationId: string): AgentTokenView {
+  if (user.id !== getOwner()?.id) throw new HttpError(403, "forbidden", "Only the owner can change agent access");
+  if (currentVia()?.startsWith("agent:")) throw new HttpError(403, "forbidden", "Agents can't change agent access");
+  const next = normaliseScopes(scopes);
+  if (!next.length) throw new HttpError(400, "invalid", "Pick at least one scope");
+  const db = getDb();
+  const row = db
+    .select()
+    .from(schema.agentTokens)
+    .where(and(eq(schema.agentTokens.id, id), eq(schema.agentTokens.userId, user.id)))
+    .get();
+  if (!row) throw new HttpError(404, "not_found", "That token isn't here");
+  if (row.revokedAt) throw new HttpError(409, "revoked", "That token is revoked; create a new one");
+  const before = parseScopes(row.scopes);
+  const { added, removed } = scopeDiff(before, next);
+  if (!added.length && !removed.length) return view(row);
+  db.update(schema.agentTokens)
+    .set({ scopes: JSON.stringify(next) })
+    .where(and(eq(schema.agentTokens.id, id), isNull(schema.agentTokens.revokedAt)))
+    .run();
+  audit({
+    actor: user.id,
+    action: "agent_token.scopes",
+    source: "agents",
+    sourceRecord: id,
+    result: "ok",
+    correlationId,
+    detail: { profile: row.profile, before, after: next, added, removed },
+  });
+  return view(db.select().from(schema.agentTokens).where(eq(schema.agentTokens.id, id)).get()!);
+}
+
 /** Capabilities intersect the owner's own; no scope maps to finance.* module capabilities or admin. */
 export function capabilitiesForScopes(scopes: AgentScope[], ownerCaps: Set<string>): Set<string> {
   const want = new Set<string>();
   if (scopes.length) want.add("work.use");
-  if (scopes.includes("conversations.file")) want.add("hermes.chat");
+  // Filing a conversation and starting or steering a task both open or write to a chat.
+  if (scopes.includes("conversations.file") || scopes.includes("tasks.run")) want.add("hermes.chat");
   return new Set([...want].filter((c) => ownerCaps.has(c) && !c.startsWith("finance") && c !== "admin"));
 }
 

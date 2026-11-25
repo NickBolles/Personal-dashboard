@@ -10,6 +10,7 @@ import { fireHook } from "@/server/hooks";
 import { event, recordOp, type OpOut } from "./store";
 import { appendDecisionToSummary, decisionLogText, parseDecision, serialiseDecision, type DecisionAction } from "@/lib/decisions";
 import {
+  DELIVERY_DELAY_MS,
   PENDING_STATES,
   decisionRef,
   dedupe,
@@ -23,6 +24,7 @@ import {
   type AnswerVia,
   type Decision,
   type DecisionState,
+  type DeliveryState,
   type RaiseInput,
   type RiskFlag,
 } from "@/lib/cw-decisions";
@@ -100,6 +102,13 @@ export function toDecision(r: Row): Decision {
     deferredUntil: r.deferredUntil,
     supersededBy: r.supersededBy,
     raisedBy: r.raisedBy,
+    delivery: r.deliveryState
+      ? {
+          state: r.deliveryState as DeliveryState,
+          at: r.deliveryState === "delivered" ? r.deliveredAt : r.deliverAfter,
+          ...(r.deliveryError ? { error: r.deliveryError } : {}),
+        }
+      : null,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };
@@ -320,7 +329,25 @@ function closeWithAnswer(tx: Tx, userId: string, r: Row, answer: string, state: 
   const item = itemRow(tx, userId, r.itemId);
   const at = nowIso();
   const summary = appendDecisionToSummary(item.summary, r.question, state === "defaulted" ? `${answer} (default)` : answer, at);
-  tx.update(D).set({ state, answeredChoice: answer, answeredAt: at, answeredVia: via, deferredUntil: null, updatedAt: at }).where(eq(D.id, r.id)).run();
+  // The answer goes back to the agent in its chat after the Undo window (unless it was given in that chat).
+  const target = via === "chat" ? null : deliveryTarget(tx, userId, r);
+  tx.update(D)
+    .set({
+      state,
+      answeredChoice: answer,
+      answeredAt: at,
+      answeredVia: via,
+      deferredUntil: null,
+      updatedAt: at,
+      deliveryState: target ? "pending" : null,
+      deliverySession: target,
+      deliverAfter: target ? new Date(Date.parse(at) + DELIVERY_DELAY_MS).toISOString() : null,
+      deliveredAt: null,
+      deliveryError: null,
+      deliveryRun: null,
+    })
+    .where(eq(D.id, r.id))
+    .run();
   const cur = parseDecision(item.decision);
   const isHead = cur?.ref === decisionRef(r.seq);
   const promoted = isHead ? (openRows(tx, userId, r.itemId, r.id)[0] ?? null) : null;
@@ -500,6 +527,12 @@ export function undoDecisionOp(tx: Tx, userId: string, op: DecisionOp) {
         defaultChoice: null,
         expiresAt: null,
         updatedAt: at,
+        // Undone inside the window: nothing is posted. (Once posted, the agent has it; the reopened question shows.)
+        deliveryState: null,
+        deliverySession: null,
+        deliverAfter: null,
+        deliveryError: null,
+        deliveryRun: null,
       })
       .where(and(eq(D.id, op.closed), eq(D.userId, userId)))
       .run();
@@ -603,4 +636,24 @@ export function listDecisionRows(userId: string, opts: { states?: DecisionState[
     .filter((r) => (!opts.itemIds || opts.itemIds.includes(r.itemId)) && (!opts.since || r.updatedAt >= opts.since))
     .sort((a, b) => b.seq - a.seq);
   return rows.slice(0, opts.limit ?? 500).map(toDecision);
+}
+
+/**
+ * Where an answer goes (task threads E3): the task's primary chat, else the chat of the run that asked. Null when
+ * there is no chat to post in (the agent reads the answer from Jarvis as before).
+ */
+function deliveryTarget(tx: Tx, userId: string, r: Row): string | null {
+  const item = tx
+    .select({ primary: T.primarySessionId })
+    .from(T)
+    .where(and(eq(T.id, r.itemId), eq(T.userId, userId)))
+    .get();
+  if (item?.primary) return item.primary;
+  if (!r.runId) return null;
+  const run = tx
+    .select({ session: schema.agentRuns.hermesSessionId })
+    .from(schema.agentRuns)
+    .where(and(eq(schema.agentRuns.id, r.runId), eq(schema.agentRuns.userId, userId)))
+    .get();
+  return run?.session ?? null;
 }

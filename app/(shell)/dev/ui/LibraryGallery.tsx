@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { ChevronIcon, LogIcon, RetryIcon, SteerIcon, StopIcon } from "@/components/icons";
 import {
+  AgentSurface,
   AnchoredMenu,
   MenuButton,
   useAnchoredMenu,
@@ -38,6 +39,11 @@ import {
   Textarea,
   Toast,
   CoordinatorGlyph,
+  Disclosure,
+  Sheet,
+  SideDock,
+  SplitPane,
+  useSplitWidth,
 } from "@/components/ui";
 
 const STATUS = [
@@ -94,6 +100,7 @@ function MenuDemo() {
 /** The one row for a decision, a piece of work or an item; lists run Needs you, Working, Done. */
 function ThingRowDemo() {
   const [open, setOpen] = useState(true);
+  const [peekOpen, setPeekOpen] = useState(false);
   const ic = "h-4 w-4";
   return (
     <Block id="thing-rows" title="ThingRow (decision, work, item) with state words and icon actions">
@@ -147,6 +154,29 @@ function ThingRowDemo() {
           </p>
         </ThingRow>
         <ThingRow state="idle" title="Renew car registration" sub="Next · upload the insurance card · due Mon" href="/dev/ui" />
+        {/* A task row: state, title, then the latest activity fading into the one before (it opens the row in place). */}
+        <ThingRow
+          state="working"
+          title="Reconcile the inventory export"
+          status={
+            <>
+              <StateWord state="working" live />
+              <span> · 6m · @devchief</span>
+            </>
+          }
+          href="/dev/ui"
+          peek={
+            <>
+              <span>40 mismatches so far, all in one category</span>
+              <span>Matched 172 of 212 rows</span>
+            </>
+          }
+          expanded={peekOpen}
+          onToggle={() => setPeekOpen((v) => !v)}
+          toggleLabel="Timeline for Reconcile the inventory export"
+        >
+          <p className="text-xs">Started from your message in Chat</p>
+        </ThingRow>
         <ThingRow
           state="done"
           refId="R-36"
@@ -162,6 +192,82 @@ function ThingRowDemo() {
 }
 
 /** Bottom-sheet grab bar: drag up for full height, down for half, further down to close (here it reopens). */
+/** The agent surface (G1-G5): what a bot proposes (dashed) and what it did by itself (solid, with Undo). Still. */
+function AgentSurfaceDemo() {
+  const [started, setStarted] = useState(false);
+  return (
+    <Block id="agent-surface" title="AgentSurface (proposed, done; wash and glow tokens, never moves)">
+      <div className="grid gap-3 sm:grid-cols-2">
+        {started ? (
+          <AgentSurface
+            variant="done"
+            who="Home coordinator · just now"
+            title="Started “Schedule the furnace service visit”"
+            actions={
+              <>
+                <Button size="sm" variant="secondary">
+                  Open task
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setStarted(false)}>
+                  Undo
+                </Button>
+              </>
+            }
+          />
+        ) : (
+          <AgentSurface
+            variant="proposed"
+            who="Home coordinator suggests"
+            title="Schedule the furnace service visit"
+            why="Two of three steps are done and the filter arrived Tuesday. The visit is the one left before the cold week."
+            primary={{ label: "Start", onClick: () => setStarted(true) }}
+            actions={
+              <Button size="sm" variant="ghost">
+                Not now
+              </Button>
+            }
+            more={
+              <>
+                <span>From: Furnace filter · Book a service slot</span>
+                <span>Creates “Schedule the furnace service visit” in Home and starts it.</span>
+              </>
+            }
+          />
+        )}
+        <AgentSurface
+          variant="done"
+          who="Chief of staff · just now"
+          title="Created “Trace the three old links”"
+          why="Filed under Portfolio › Preview audit and handed to the Ops bot."
+          actions={
+            <>
+              <Button size="sm" variant="secondary">
+                Open task
+              </Button>
+              <Button size="sm" variant="ghost">
+                Undo
+              </Button>
+            </>
+          }
+        />
+        <AgentSurface
+          variant="proposed"
+          quiet
+          who="Suggests steering"
+          title="Tell “Price lumber” to use last month's list"
+          why="It has waited 5 days on the store. Last month's prices are in the project files."
+          primary={{ label: "Send", onClick: () => undefined }}
+          actions={
+            <Button size="sm" variant="ghost">
+              Not now
+            </Button>
+          }
+        />
+      </div>
+    </Block>
+  );
+}
+
 function SheetDemo() {
   const panel = useRef<HTMLDivElement>(null);
   const [full, setFull] = useState(false);
@@ -189,6 +295,65 @@ function SheetDemo() {
             </p>
           </div>
         </div>
+      </div>
+    </Block>
+  );
+}
+
+/** Layout pieces: a section that opens in place, a bottom sheet, and two panes (side by side with room, swipe without). */
+function LayoutDemo() {
+  const [sheet, setSheet] = useState(false);
+  const [pane, setPane] = useState("overview");
+  const frame = useRef<HTMLDivElement>(null);
+  const split = useSplitWidth(frame, 600);
+  return (
+    <Block id="layout" title="Layout (Disclosure, Sheet, SplitPane with a SideDock)">
+      <Disclosure summary="Log" meta="Status set to In progress · 2h ago">
+        <p className="text-sm text-muted">Captured by you on 18 Nov, filed under Office by the Home coordinator.</p>
+      </Disclosure>
+      <div>
+        <Button size="sm" onClick={() => setSheet(true)}>
+          Open sheet
+        </Button>
+        {sheet ? (
+          <Sheet title="In this chat" onClose={() => setSheet(false)} closeLabel="Collapse">
+            <p className="p-3 text-sm text-muted">Drag the bar up for full height, down to close.</p>
+          </Sheet>
+        ) : null}
+      </div>
+      <div ref={frame} className="overflow-hidden rounded-lg border border-[var(--bd)]" data-testid="ui-split">
+        {split ? null : (
+          <div className="px-3">
+            <Tabs
+              label="Panes"
+              value={pane}
+              onChange={setPane}
+              tabs={[
+                { id: "overview", label: "Overview" },
+                { id: "chat", label: "Chat" },
+              ]}
+            />
+          </div>
+        )}
+        <SplitPane
+          split={split}
+          value={pane}
+          onChange={setPane}
+          panes={[
+            { id: "overview", label: "Overview", content: <p className="p-3 text-sm">Overview: the details of the task. Swipe left for Chat.</p> },
+            { id: "chat", label: "Chat", content: <p className="p-3 text-sm">Chat: the task&apos;s conversation. Swipe right for Overview.</p> },
+          ]}
+        />
+      </div>
+      <div className="overflow-hidden rounded-lg border border-[var(--bd)]">
+        <SideDock
+          label="Example dock"
+          className="h-32"
+          header={<p className="p-2 text-xs text-muted">Header</p>}
+          footer={<p className="p-2 text-xs text-muted">Footer</p>}
+        >
+          <p className="p-2 text-sm">A docked column: header, a body that scrolls, footer.</p>
+        </SideDock>
       </div>
     </Block>
   );
@@ -291,7 +456,7 @@ export function LibraryGallery() {
           </div>
         </Block>
         <Block id="states" title="States (loading, empty, error, banner, toast)">
-          <SectionHeader label="Open items" count={0} />
+          <SectionHeader label="Open tasks" count={0} />
           <EmptyState title="Nothing open" action={<Button size="sm">Add item</Button>}>
             New items land here.
           </EmptyState>
@@ -308,7 +473,9 @@ export function LibraryGallery() {
         </Block>
         <MenuDemo />
         <SheetDemo />
+        <LayoutDemo />
         <ThingRowDemo />
+        <AgentSurfaceDemo />
         <Block id="sleek" title="Sleek density (small boxes, 44px / 40px tap areas)">
           <div data-density="sleek" className="flex flex-wrap items-center gap-2">
             <Button size="sm">Answer</Button>

@@ -17,7 +17,7 @@ async function makeItem(page: Page, nonce: string) {
   return { areaId, id: ((await r.json()) as { item: { id: string } }).item.id };
 }
 
-test("item header: one ⋯ menu and one primary action; Chat here lives in the menu", async ({ page }) => {
+test("item header: one ⋯ menu and one primary action; the chat is a pane of the page, opened from its tab or the menu", async ({ page }) => {
   const nonce = Date.now().toString(36);
   await page.goto("/home");
   const { id } = await makeItem(page, nonce);
@@ -25,13 +25,14 @@ test("item header: one ⋯ menu and one primary action; Chat here lives in the m
   const header = page.locator("article section").first();
   await expect(page.locator("#work-item-title")).toHaveText(`Tamarisk plan ${nonce}`);
   // The page's one primary action sits in the Next section; there is no second or third header button.
-  const focus = header.getByRole("button", { name: "Start focused work" });
+  const focus = page.getByTestId("item-next").getByRole("button", { name: "Start focused work" });
   await expect(focus).toHaveCount(1);
-  await expect(header.getByRole("button", { name: "Chat here" })).toHaveCount(0);
-  const more = header.getByRole("button", { name: "More item actions" });
+  // The header holds the breadcrumb, the title and the one menu: no chat button, no second action.
+  await expect(header.getByRole("button", { name: /chat|focused work/i })).toHaveCount(0);
+  const more = header.getByRole("button", { name: "More actions" });
   await expect(more).toBeVisible();
   await more.click();
-  await expect(page.getByRole("menuitem", { name: "Chat here", exact: true })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Open chat", exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("menu")).toHaveCount(0);
   await expectNoHorizontalOverflow(page);

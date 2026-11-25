@@ -33,7 +33,7 @@ export function NotificationSettingsView() {
   // Local, synchronous toggle state so the checkbox responds instantly; the server copy catches up.
   const [local, setLocal] = useState<Record<string, boolean>>({});
   return (
-    <div className="mx-auto w-full max-w-220 space-y-4 px-4 pt-4 pb-6 sm:px-6 dense:px-7 dense:pt-5">
+    <div className="mx-auto w-full max-w-220 space-y-4">
       <PageHeader title="Notifications" subtitle="Every alert lands in the Alerts inbox. Push is an extra delivery channel." />
       {prefs.isPending ? <LoadingState label="Loading notification preferences…" /> : null}
       {prefs.error ? <ErrorNote error={prefs.error} retry={() => prefs.refetch()} /> : null}

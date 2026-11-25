@@ -3,7 +3,8 @@ import { appPost, expectNoHorizontalOverflow } from "./helpers";
 
 /**
  * PR A — one pinned Chief of staff thread. The coordinator rail (desktop 1280) and tray sheet (phone 412) show the
- * whole thread through "Load earlier" (no 6-message cap), open earlier threads in the panel (never /chat), start a new
+ * whole thread through "Load earlier" (no 6-message cap), then earlier threads above it behind one grey "Earlier"
+ * divider, greyed (one continuous chat, never /chat), start a new
  * thread only behind a confirm with Undo, draw a D-n decision a reply carries as the live decision block (F1) and
  * send a questionnaire form's answers as the owner's reply (F2). A smoke-style chat never becomes the thread.
  * The file name matches the desktop project's `global-coordinator.spec.ts` pattern. Words ("Bramble", "Loosestrife")
@@ -21,7 +22,7 @@ function longThread(n: number) {
   }));
 }
 
-test("pinned thread: whole conversation via Load earlier, earlier threads open in the panel, New thread asks and undoes", async ({ page }, info) => {
+test("pinned thread: whole conversation via Load earlier, earlier threads above it as dividers, New thread asks and undoes", async ({ page }, info) => {
   const desktop = info.project.name === "desktop";
   const state = await stubCoordinator(
     page,
@@ -40,19 +41,16 @@ test("pinned thread: whole conversation via Load earlier, earlier threads open i
   await expect(scope.getByTestId("gc-load-earlier")).toHaveCount(0);
   expect(new URL(page.url()).pathname).toBe("/more");
 
-  // Earlier threads open here; smoke chats are never offered.
-  await scope.getByText("Earlier threads", { exact: true }).click();
-  const earlier = scope.getByRole("list", { name: "Earlier threads" });
-  await expect(earlier.getByRole("button", { name: "Older bramble thread" })).toBeVisible();
-  await expect(earlier.getByText(/zz-smoke/)).toHaveCount(0);
-  await earlier.getByRole("button", { name: "Older bramble thread" }).click();
-  await expect(scope.getByText("Loosestrife plan from last week")).toBeVisible();
-  expect(new URL(page.url()).pathname).toBe("/more");
-  const banner = scope.getByRole("group", { name: "Earlier thread" });
-  await expect(banner).toBeVisible();
-  await banner.getByRole("button", { name: "Back to current" }).click();
+  // Above the whole thread, one grey "Earlier" divider: no list folds open. It loads the thread before, greyed,
+  // in the same chat. Smoke chats are never offered.
+  await expect(scope.getByText("Earlier threads", { exact: true })).toHaveCount(0);
+  await scope.getByRole("button", { name: "Earlier", exact: true }).click();
+  const older = scope.getByRole("region", { name: "Earlier thread: Older bramble thread" });
+  await expect(older.getByText("Loosestrife plan from last week")).toBeVisible();
+  await expect(scope.getByTestId("gc-earlier").getByText(/zz-smoke/)).toHaveCount(0);
   await expect(list.getByText("Bramble message 30", { exact: true })).toBeVisible();
-
+  expect(new URL(page.url()).pathname).toBe("/more");
+  await expectNoHorizontalOverflow(page);
   // New thread asks first; Undo brings the thread back. Nothing is created or pinned until a message is sent.
   await scope.getByRole("button", { name: "New thread", exact: true }).click();
   const confirm = scope.getByRole("group", { name: "Start a new thread?" });
@@ -63,15 +61,6 @@ test("pinned thread: whole conversation via Load earlier, earlier threads open i
   await expect(scope.getByRole("list", { name: "Latest messages" }).getByText("Bramble message 30", { exact: true })).toBeVisible();
   expect(state.pins).toEqual([]);
 
-  // "Use this thread" pins an earlier thread. (The Earlier threads list is still open from before.)
-  if (!(await scope.getByRole("list", { name: "Earlier threads" }).isVisible())) await scope.getByText("Earlier threads", { exact: true }).click();
-  await scope.getByRole("list", { name: "Earlier threads" }).getByRole("button", { name: "Older bramble thread" }).click();
-  await scope.getByRole("group", { name: "Earlier thread" }).getByRole("button", { name: "Use this thread" }).click();
-  // The pin change asks first.
-  expect(state.pins).toEqual([]);
-  await scope.getByRole("group", { name: "Make this the Chief of staff thread?" }).getByRole("button", { name: "Use this thread" }).click();
-  await expect.poll(() => state.pins).toEqual(["cw-old"]);
-  await expect(scope.getByRole("group", { name: "Earlier thread" })).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
 });
 
@@ -122,7 +111,7 @@ test("questionnaire form in a coordinator reply: Submit sends the answers as the
   expect(state.runs).toHaveLength(0);
   const sent = page.waitForRequest((r: Request) => r.method() === "POST" && /\/api\/hermes\/sessions\/cw-pin\/runs$/.test(new URL(r.url()).pathname));
   await card.getByRole("button", { name: "Submit choices" }).click();
-  await card.getByRole("button", { name: "Confirm send reply" }).click();
+
   const body = (await sent).postDataJSON() as { input: string };
   expect(body.input).toContain("Bramble check-in");
   expect(body.input).toContain("Pruned the bramble hedge");
@@ -201,7 +190,7 @@ test("a D-n decision card replies conversationally without answering the owner d
   await expect(batch).toBeVisible();
   await batch.getByRole("button", { name: /Ship it/ }).click();
   await batch.getByRole("button", { name: "Submit choices" }).click();
-  await batch.getByRole("button", { name: "Confirm send reply" }).click();
+
   await expect(batch.getByRole("status")).toHaveText("Sent as one reply to this conversation.");
   const res = await page.request.get("/api/coordinator/decisions?state=all");
   expect(((await res.json()) as { decisions: { ref: string; state: string }[] }).decisions.find((d) => d.ref === ref)?.state).toBe("open");

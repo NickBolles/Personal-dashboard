@@ -4,6 +4,9 @@ import { decisionRefOf, isQuestionnaire } from "./live";
 export type AnswerQuestion = {
   id: string;
   title: string;
+  /** Display-only grouping; title and IDs in the transport remain stable. */
+  group?: string;
+  label?: string;
   context?: string;
   ref?: string;
   required: boolean;
@@ -50,6 +53,8 @@ export function answerQuestions(spec: JarvisSpec, block: number): AnswerQuestion
         result.push({
           id: `${block}:${key}:${f.id}`,
           title: `${p.title} · ${f.label}`,
+          group: p.title,
+          label: f.label,
           context: sections.get(key)?.join(" · ") || undefined,
           required: !!f.required,
           proposed:
@@ -82,7 +87,7 @@ export function answerComplete(q: AnswerQuestion, v?: AnswerValue): boolean {
 }
 export function answerPayload(questions: AnswerQuestion[], values: AnswerValues): string {
   return [
-    "My reviewed selections (conversation reply only; not authorization for money, devices, credentials, settlement or other actions):",
+    "My selections (conversation reply only; not authorization for money, devices, credentials, settlement or other actions):",
     ...questions.map((q) => {
       const v = values[q.id];
       const option = q.options.find((o) => o.id === v?.choice);

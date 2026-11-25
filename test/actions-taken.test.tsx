@@ -335,6 +335,10 @@ describe("coordinator parity controls", () => {
       record({ key: "other", id: "sa_2", title: "Draft the email", state: "failed", error: "(no summary — status=failed: vendor portal timed out)" }),
     ];
     render(<CoordinatorThread info={info} />, { wrapper });
+    await screen.findByRole("button", { name: "1 stalled run" });
+    expect(cards()).toHaveLength(1);
+    expect(screen.getByRole("article", { name: "Draft the email" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "1 stalled run" }));
     await waitFor(() => expect(cards()).toHaveLength(2));
     expect(screen.queryByText("No report yet")).toBeNull();
     const failed = screen.getByRole("article", { name: "Draft the email" });
@@ -492,27 +496,27 @@ describe("coordinator parity controls", () => {
     await waitFor(() => expect(screen.getAllByTestId("actions-taken")).toHaveLength(2));
     expect(screen.getByText("Current state:").tagName).toBe("STRONG");
   });
-  it("lists only direct earlier discussions and New forces creation instead of reusing the old session", async () => {
+  it("draws only this area's own earlier threads above the chat, as dividers; New forces creation instead of reusing the old session", async () => {
     conversations = [
       { id: "s1", title: "Current", placement: { parentId: "wk_area" } },
       { id: "nested", title: "Nested conversation", placement: { parentId: "wk_project" } },
       ...Array.from({ length: 7 }, (_, i) => ({ id: `old${i}`, title: `Earlier ${i}`, placement: { parentId: "wk_area" } })),
     ];
     render(<CoordinatorThread info={info} />, { wrapper });
-    const disclosure = screen.getByText("Earlier threads", { exact: true }).closest("details")!;
-    expect(disclosure.open).toBe(false);
-    expect(api.get).not.toHaveBeenCalledWith(expect.stringContaining("/api/work/conversations?"));
-    disclosure.open = true;
-    fireEvent(disclosure, new Event("toggle"));
-    await screen.findByRole("button", { name: "Earlier 0" });
+    // No fold-out list: the newest earlier thread is a divider at the top of the chat that loads it in place.
+    expect(screen.queryByText("Earlier threads", { exact: true })).toBeNull();
+    await screen.findByRole("button", { name: "Earlier" });
     expect(api.get).toHaveBeenCalledWith("/api/work/conversations?view=all&areaId=wk_area");
-    // PR A: earlier threads open in the panel (buttons, never /chat links); direct children only, never the current one.
-    expect(within(within(disclosure).getByRole("list", { name: "Earlier threads" })).getAllByRole("button")).toHaveLength(7);
-    expect(within(disclosure).queryAllByRole("link")).toHaveLength(0);
-    expect(screen.queryByRole("button", { name: "Nested conversation" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Current" })).toBeNull();
+    expect(screen.queryByRole("list", { name: "Earlier threads" })).toBeNull();
+    // One divider at a time; never a /chat link; direct children only, never the current one.
+    expect(screen.getAllByRole("button", { name: "Earlier" })).toHaveLength(1);
+    expect(within(screen.getByTestId("gc-earlier")).queryAllByRole("link")).toHaveLength(0);
+    expect(screen.queryByText(/Nested conversation/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Earlier" }));
+    expect(await screen.findByRole("region", { name: "Earlier thread: Earlier 0" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Earlier thread: Current" })).toBeNull();
     // New thread asks first; nothing is created until the first message.
-    fireEvent.click(within(disclosure).getByRole("button", { name: "New thread" }));
+    fireEvent.click(screen.getByRole("button", { name: "New thread" }));
     expect(screen.getByTestId("coordinator-input")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Start new thread" }));
     expect(api.post).not.toHaveBeenCalled();

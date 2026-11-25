@@ -585,7 +585,7 @@ it("right-click or long-press opens a menu with every action for that run's stat
   // working: steer, ask, log, item, copy, stop. The menu is headed by the run and its state.
   let m = items("R-1");
   expect(m.menu.querySelector(".k-menu-h")?.textContent).toBe("R-1 · Working");
-  expect(m.labels).toEqual(["Steer…", "Ask in chat", "Open log", "Open item", "Copy R-1", "Stop…"]);
+  expect(m.labels).toEqual(["Steer…", "Ask in chat", "Open log", "Open task", "Copy R-1", "Stop…"]);
   fireEvent.click(within(m.menu).getByRole("menuitem", { name: "Steer…" }));
   // it handed the run to the composer; no field opened in the row
   expect(onCompose).toHaveBeenLastCalledWith({ kind: "steer", ref: "R-1", title: "Work 1" });
@@ -598,13 +598,13 @@ it("right-click or long-press opens a menu with every action for that run's stat
   fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
   // failed: retry, its pull request, no steer and no stop
   m = items("R-2");
-  expect(m.labels).toEqual(["Retry", "Ask in chat", "Open log", "Open item", "Open pull request", "Copy R-2"]);
+  expect(m.labels).toEqual(["Retry", "Ask in chat", "Open log", "Open task", "Open pull request", "Copy R-2"]);
   fireEvent.click(within(m.menu).getByRole("menuitem", { name: "Retry" }));
   expect(onCompose).toHaveBeenLastCalledWith({ kind: "retry", ref: "R-2", title: "Work 2", verb: "Retry" });
   // waiting: Reply leads; resuming without an answer is still possible, and says what it is
   m = items("R-3");
   expect(m.menu.querySelector(".k-menu-h")?.textContent).toBe("R-3 · Needs you");
-  expect(m.labels).toEqual(["Reply…", "Resume without replying", "Ask in chat", "Close log", "Open item", "Copy R-3", "Stop…"]);
+  expect(m.labels).toEqual(["Reply…", "Resume without replying", "Ask in chat", "Close log", "Open task", "Copy R-3", "Stop…"]);
   fireEvent.click(within(m.menu).getByRole("menuitem", { name: "Resume without replying" }));
   expect(onCompose).toHaveBeenLastCalledWith({ kind: "retry", ref: "R-3", title: "Work 3", verb: "Resume" });
   m = items("R-3");

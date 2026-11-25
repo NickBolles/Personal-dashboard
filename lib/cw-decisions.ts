@@ -172,9 +172,22 @@ export type Decision = {
   deferredUntil: string | null;
   supersededBy: string | null;
   raisedBy: string;
+  /** The answer's way back to the agent (task threads E3/E4); null when there is no chat to post it in. */
+  delivery?: DecisionDelivery | null;
   createdAt: string;
   updatedAt: string;
 };
+
+export const DELIVERY_STATES = ["pending", "sent", "delivered", "failed"] as const;
+export type DeliveryState = (typeof DELIVERY_STATES)[number];
+export type DecisionDelivery = { state: DeliveryState; at: string | null; error?: string };
+/** The answer waits this long (the Undo window) before it is posted to the agent. */
+export const DELIVERY_DELAY_MS = 10_000;
+/** A posted answer that is not read back in the chat within this long is reported as not delivered. */
+export const DELIVERY_CONFIRM_MS = 3 * 60_000;
+/** The words the agent receives: which question, then the answer. */
+export const deliveryText = (ref: string, question: string, answer: string) =>
+  `Answer to ${ref} (${question.replace(/\s+/g, " ").trim().slice(0, 200)}): ${answer.trim()}`;
 
 export const AGEING_MS = 24 * 3_600_000;
 

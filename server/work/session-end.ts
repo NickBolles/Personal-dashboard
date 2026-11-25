@@ -9,7 +9,9 @@ import { recordRunTransition } from "./run-events";
  * CW-2/CW-5: a run whose coordinator session ended is `interrupted` (not failed): it can be resumed.
  * The reconcile tick asks Hermes for each open run's session (one GET per session, never the list) and
  * marks the run interrupted when the session has an end reason that really stops the conversation and
- * the run sent no heartbeat after that. Bounded: at most SESSIONS_PER_PASS sessions every CHECK_EVERY_MS.
+ * the run sent no heartbeat after that. A session that is still going has its last activity recorded on its runs
+ * (`chat_active_at`), which is what keeps a quiet but busy run reading Working. Bounded: at most SESSIONS_PER_PASS
+ * sessions every CHECK_EVERY_MS.
  * Automatic sub-agent mirrors (`sub:` delegations) are left to the mirror reconcile.
  */
 export const CHECK_EVERY_MS = 5 * 60_000;
@@ -99,7 +101,22 @@ async function pass(now: Date, lookup: SessionLookup) {
       continue; // Hermes down / profile not routed: unknown, never guessed
     }
     checked++;
-    if (!sessionEnded(session)) continue;
+    // A chat that is still going: remember when it was last active. A run that reports little is Working for as
+    // long as its chat is (lib/agent-runs.ts isStalled), never Stalled on silence alone.
+    if (!sessionEnded(session)) {
+      const active = session?.lastActiveAt && Number.isFinite(Date.parse(session.lastActiveAt)) ? new Date(session.lastActiveAt).toISOString() : null;
+      if (active)
+        db.update(T)
+          .set({ chatActiveAt: active })
+          .where(
+            inArray(
+              T.id,
+              runs.map((r) => r.id),
+            ),
+          )
+          .run();
+      continue;
+    }
     const endedAt = Date.parse(session.lastActiveAt ?? "");
     if (Number.isFinite(endedAt) && now.getTime() - endedAt < QUIET_MS) continue;
     for (const run of runs) {

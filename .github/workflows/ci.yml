@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       e2e_shards:
-        description: "E2E runners (shards); default 5"
+        description: "E2E runners (shards); default 7"
         required: false
       e2e_workers:
         description: "Isolated Playwright workers per runner; default 3"
@@ -27,12 +27,14 @@ permissions:
 
 env:
   # E2E layout (measured in docs/ci.md): shards = runners, workers = isolated app+mock stacks per runner.
-  E2E_SHARDS: ${{ inputs.e2e_shards || 5 }}
+  E2E_SHARDS: ${{ inputs.e2e_shards || 7 }}
   E2E_WORKERS: ${{ inputs.e2e_workers || 3 }}
 
 jobs:
+  # The static checks and the unit tests are two jobs so neither waits for the other: one after the other they
+  # took about five minutes, which with the e2e shards down to about six was about to become the longest path.
   verify:
-    name: Typecheck, lint, unit, scans
+    name: Typecheck, lint, format, scans
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,12 +48,23 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run format:check
-      - run: npm test -- --coverage
       - name: docker compose config validation
         run: |
           docker compose config -q
           docker compose -f docker-compose.yml -f docker-compose.local.yml config -q
           docker compose -f docker-compose.demo.yml config -q
+
+  unit:
+    name: Unit tests (coverage)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test -- --coverage
 
   # Build once: the e2e shards download this instead of each running `next build`.
   build:
@@ -66,6 +79,21 @@ jobs:
       # Same install as the e2e container (no install scripts, see there): better-sqlite3's bundled prebuild is
       # what the standalone server traces and ships, so the artifact runs unchanged in the Playwright image.
       - run: npm ci --ignore-scripts
+      # Turbopack keeps its build cache in .next/cache (on by default since Next 16.3): restored, the build starts
+      # warm (30 s against 94 s cold on a laptop). Every e2e shard waits for this job, so a pull request only
+      # restores (the newest cache main saved this week for this lockfile) and never spends time saving one; main
+      # saves after each build, at the end of the job. The cache grows with every build it is carried through, so
+      # the ISO week is part of the key: each week starts cold once and the cache stays a few hundred MB. Only
+      # .next/BUILD_ID and .next/standalone are packed below, so the cache never ships.
+      - name: Build cache key
+        id: cache-key
+        run: echo "prefix=next-cache-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-$(date -u +%G-%V)-" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v4
+        with:
+          path: .next/cache
+          key: ${{ steps.cache-key.outputs.prefix }}${{ github.sha }}
+          restore-keys: |
+            ${{ steps.cache-key.outputs.prefix }}
       - run: npm run build
       - name: Secret-pattern scan (client bundles + tracked files)
         run: npm run secrets:scan
@@ -81,6 +109,12 @@ jobs:
           path: next-build.tar
           retention-days: 1
           compression-level: 1
+      - name: Save the build cache (main only)
+        if: github.event_name != 'pull_request'
+        uses: actions/cache/save@v4
+        with:
+          path: .next/cache
+          key: ${{ steps.cache-key.outputs.prefix }}${{ github.sha }}
 
   # Which e2e tests this PR needs (scripts/e2e-select.mjs); push/schedule/dispatch → full suite.
   select:
@@ -155,13 +189,27 @@ jobs:
         env:
           CI: "1"
           E2E_BLOB: "1"
+          # Playwright names the blob report after --shard; with a --test-list every shard would write
+          # report.zip, and the report job (merge-multiple) would keep only one of them.
+          PLAYWRIGHT_BLOB_OUTPUT_NAME: report-${{ matrix.shard }}.zip
           MODE: ${{ needs.select.outputs.mode }}
           GREP: ${{ needs.select.outputs.grep }}
           SHARD: ${{ matrix.shard }}/${{ needs.select.outputs.total }}
+        # Shards are planned by recorded test time (scripts/e2e-shards.mjs, e2e/timings.json): Playwright's own
+        # --shard splits by count, which left the slowest shard about a minute and a half behind the rest. Every
+        # shard computes the same plan, and runs its part as a --test-list. If the planner cannot plan (a test the
+        # list format cannot name, say), the run falls back to --shard with a warning: nothing is skipped.
         run: |
-          args=(--shard "$SHARD" --workers "$E2E_WORKERS" --pass-with-no-tests)
-          if [ "$MODE" = subset ] && [ -n "$GREP" ]; then args+=(--grep "$GREP"); fi
-          npx playwright test "${args[@]}"
+          args=(--workers "$E2E_WORKERS" --pass-with-no-tests)
+          grep=()
+          if [ "$MODE" = subset ] && [ -n "$GREP" ]; then grep=(--grep "$GREP"); fi
+          if node scripts/e2e-shards.mjs --shard "$SHARD" --out "$RUNNER_TEMP/tests.txt" "${grep[@]}"; then
+            args+=(--test-list "$RUNNER_TEMP/tests.txt")
+          else
+            echo "::warning title=e2e shards::Could not plan shards by recorded time; using Playwright's --shard (split by count)."
+            args+=(--shard "$SHARD")
+          fi
+          npx playwright test "${args[@]}" "${grep[@]}"
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
@@ -206,6 +254,17 @@ jobs:
           name: playwright-report
           path: playwright-report
           retention-days: 14
+      # This run's test times, in the shape e2e/timings.json has: refreshing the shard plan is downloading this
+      # artifact over that file (docs/ci.md). Only a full run has every test.
+      - name: Record test times
+        if: needs.select.outputs.mode == 'full'
+        run: node scripts/e2e-shards.mjs --record results.json --out e2e-timings.json --source "CI run $GITHUB_RUN_ID"
+      - uses: actions/upload-artifact@v4
+        if: needs.select.outputs.mode == 'full'
+        with:
+          name: e2e-timings
+          path: e2e-timings.json
+          retention-days: 14
       - name: Summary
         id: summary
         env:
@@ -242,10 +301,11 @@ jobs:
           test "$SHARDS" = success
           test "$OK" = true
 
+  # Runs alongside the checks instead of after them: waiting for them put it seven minutes into the run. It
+  # spends two runner minutes on a push whose checks then fail.
   docker:
     name: Docker image build + smoke
     runs-on: ubuntu-latest
-    needs: verify
     steps:
       - uses: actions/checkout@v4
       - name: Build demo stack

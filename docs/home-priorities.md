@@ -95,6 +95,12 @@ source you can see.
 Jarvis doesn't claim it has "learned" anything. The only effects are the ones in
 this table, and every one shows up in `why`.
 
+The daily brief (`/brief`, docs/brief.md) is separate: an AI-written read on top
+of this ranking, with its own feedback and visible notes. It never changes
+Home's order, and Home feedback never goes to it. Home shows one line linking
+to the brief once a person turns the AI brief on; that read is local, so "Home
+never waits on a model" still holds.
+
 ## Suggestions
 
 At most two, after Now. They're built only from:
@@ -112,7 +118,49 @@ At most two, after Now. They're built only from:
 "Help me triage" / "Brainstorm ideas" opens a new chat with a draft and a
 bounded context block (≤ 1500 characters; Finance eligible, credentials blocked and account numbers masked). The draft says it's
 read-only planning. Nothing runs until you press send. Home never waits on a
-model, and there's no background inference or schedule.
+model: these cards are rules, computed on read.
+
+### Suggestions from the coordinators (task threads H1–H8)
+
+These rules replace "suggestions never call a model" (owner decisions, 21 Nov 2026).
+
+- **H1** Every channel's coordinator may write suggestions for its channel in the
+  background; the Chief of staff across channels. They come from a scheduled
+  run of kind `suggest` ("Suggest next steps", seeded disabled per channel with a
+  coordinator; docs/scheduled-jobs.md) or from `jarvis_suggest` in a chat
+  (docs/agent-tools.md). Jarvis never acts on one: Start (a task) and Send (a
+  steer to a working task) are the owner's tap.
+- **H2** Each states its evidence from the owner's own work (`evidence`: the
+  tasks the reason comes from, at least one, all in the channel) and exactly
+  what Start does ("Why this?" shows both, and the text the agent is told).
+- **H3** At most five open per channel (a sixth replaces the weakest: the kind
+  lowered most, then the oldest); one shown per channel in In flight and in a
+  Tasks tab, one at a time in a chat.
+- **H4** Written up to six times a day per channel: the job's slot, plus once
+  after a task in the channel finishes (at least an hour after its last run).
+  Never on page load: reading `/api/work/suggestions` never calls a model.
+  Suggest runs, like every scheduled run, wait while the day's AI budget is used
+  up (`skipped_budget`).
+- **H5** Not now hides it for a week and lowers that kind (`topic`) for you
+  only; Undo shows it again. "Don't suggest this" stops the kind in that
+  channel; Undo allows it again.
+- **H6** A suggestion goes (state `stale`) when its evidence stops being true:
+  an evidence task or the target is archived, closed or moved out of the
+  channel, the target started working (for Start) or stopped (for Send), the
+  channel was closed to AI, or 14 days passed.
+- **H7** Finance and any channel closed to AI are never read for suggestions: a
+  suggest job there does not run, and a suggestion with a channel, target or
+  evidence there is refused. Suggestions send no notifications.
+- **H8** The rule-based cards above stay, cost nothing and use the same card
+  (`AgentSurface`, docs/ui-library.md).
+
+Start creates the task when the suggestion names none and starts it in its chat
+with the suggestion's text, both attributed to the coordinator (so Undo has the
+agent window, a week); the card becomes the done card with Open task and Undo
+(the turn is stopped; a task Start made is removed if untouched, else archived).
+Send posts the text into the working task's chat; a sent message has nothing to
+undo. Not now and "Don't suggest this" leave a line with Undo where the card was,
+in a list or a chat.
 
 ## For Hermes: reading and tuning feedback
 

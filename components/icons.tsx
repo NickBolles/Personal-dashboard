@@ -319,6 +319,25 @@ export const ClockIcon = ({ className }: P) =>
     </>,
     className,
   );
+/** A wand: hand a change to an agent. */
+export const WandIcon = ({ className }: P) =>
+  base(
+    <>
+      <path d="m4 20 10.5-10.5" />
+      <path d="m13 8 3 3" />
+      <path d="M17.5 3v3M16 4.5h3M20 9.5v2M19 10.5h2M9.5 3.5v2M8.5 4.5h2" />
+    </>,
+    className,
+  );
+/** A sparkle: have an agent look into this one. */
+export const SparkleIcon = ({ className }: P) =>
+  base(
+    <>
+      <path d="M11 4c.5 4 2.5 6 6.5 6.5-4 .5-6 2.5-6.5 6.5-.5-4-2.5-6-6.5-6.5 4-.5 6-2.5 6.5-6.5Z" />
+      <path d="M18.5 15.5v4M16.5 17.5h4" />
+    </>,
+    className,
+  );
 export const RetryIcon = ({ className }: P) =>
   base(
     <>

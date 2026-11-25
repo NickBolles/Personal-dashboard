@@ -43,6 +43,13 @@ export function reconcileCandidates(now = new Date(), limit = RECONCILE_MAX_PER_
     .all();
   const byUser = new Map<string, Set<string>>();
   for (const r of filed) if (r.sessionId) byUser.set(r.userId, (byUser.get(r.userId) ?? new Set()).add(r.sessionId));
+  // A task's primary chat is watched too, even one that was only linked or recorded (never filed as a conversation).
+  for (const r of db
+    .select({ userId: W.userId, sessionId: W.primarySessionId })
+    .from(W)
+    .where(and(eq(W.archived, false), isNotNull(W.primarySessionId)))
+    .all())
+    if (r.sessionId) byUser.set(r.userId, (byUser.get(r.userId) ?? new Set()).add(r.sessionId));
   const seen = state().seen;
   const out: Candidate[] = [];
   for (const [userId, sessions] of byUser) {

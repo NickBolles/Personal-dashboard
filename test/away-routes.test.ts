@@ -84,7 +84,8 @@ beforeEach(() => {
 });
 it("CRUD, seeds disabled, validates and audits mutations", async () => {
   const listed = await (await call(root.GET)).json();
-  expect(listed.jobs).toHaveLength(3);
+  // Two suggested templates, feedback triage, and "Suggest next steps" for the channel with a coordinator.
+  expect(listed.jobs).toHaveLength(4);
   expect(listed.jobs.every((j: { enabled: boolean }) => !j.enabled)).toBe(true);
   expect(listed).toMatchObject({ tz: "America/Chicago", caps: { maxJobs: MAX_JOBS, runsToday: 0 } });
   const created = await call(root.POST, "POST", input());

@@ -34,7 +34,7 @@ const ctx: PaletteContext = {
 
 describe("palette: action parsing", () => {
   it("matches a typed phrase and keeps the rest as argument text", () => {
-    const [m] = matchActions("New item in Ho");
+    const [m] = matchActions("New task in Ho");
     expect(m!.def.id).toBe("new-item");
     expect(m!.exact).toBe(true);
     expect(m!.rest).toBe("Ho");
@@ -105,9 +105,9 @@ describe("palette: suggestions", () => {
     expect(s.slice(0, 2).map((x) => x.action)).toEqual(["status", "move"]);
     expect(s.find((x) => x.action === "ask")!.label).toBe("Ask Home");
   });
-  it("on an area: New item in <area> first", () => {
+  it("on an area: New task in <area> first", () => {
     const s = rankSuggestions({ kind: "area", path: "/areas", nodeTitle: "Home", isContainer: true }, [], { area: true });
-    expect(s[0]).toMatchObject({ action: "new-item", label: "New item in Home" });
+    expect(s[0]).toMatchObject({ action: "new-item", label: "New task in Home" });
   });
   it("in chat: start chat with @agent; inbox: move first", () => {
     expect(rankSuggestions({ kind: "chat", path: "/chat/x" })[0]!.action).toBe("chat-agent");

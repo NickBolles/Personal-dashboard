@@ -26,14 +26,20 @@ import { AssistantText, useSmartSettings } from "@/components/smart/AssistantTex
 import { MessageAttachments, useChatAttachments, useConversationFiles } from "@/components/chat/Attachments";
 import { ContextSheet, type ContextChip } from "@/components/chat/ContextSheet";
 import { parseFileMarkers } from "@/lib/chat-files";
-import { AlertIcon, BellIcon, BoltIcon, CheckIcon, ClockIcon, InboxIcon } from "@/components/icons";
+import { AlertIcon, BellIcon, BoltIcon, CheckIcon, ClockIcon, InboxIcon, PanelIcon } from "@/components/icons";
 import { RateMessage } from "@/components/feedback/RateMessage";
-import { Button, ChipButton, Dot, RefPill, useOnline, useToast } from "@/components/ui";
+import { Button, ChipButton, Dot, IconButton, RefPill, useNow, useOnline, useToast } from "@/components/ui";
+import { ChatTray } from "@/components/chat/things/ChatTray";
+import { ChatPanel } from "@/components/chat/things/ChatPanel";
+import { useChatThings } from "@/components/chat/things/useChatThings";
+import { usePanelLinks } from "@/components/chat/LinksPanel";
+import { ModelSelectDialog } from "@/components/areas/ModelPicker";
+import type { ThingsTab } from "@/lib/chat/things";
 import { Composer, type ComposerHandle } from "@/components/chat/Composer";
-import { AssistantName, LiveRun, liveRunVisible } from "@/components/chat/Timeline";
+import { AssistantName, LiveRun, ToolGroup, liveRunVisible, toolRunsByReply } from "@/components/chat/Timeline";
 import { useRunStream, type RunState } from "@/components/chat/useRunStream";
 import { useRunAnswers } from "@/components/chat/useRunAnswers";
-import { kvDel, kvSet } from "@/lib/client/idb";
+import { kvDel, kvGet, kvSet } from "@/lib/client/idb";
 import { scopeChip, scopeIsCommand, scopeLabel, scopeMessage, scopePlaceholder, scopeSendsEmpty, type ComposeScope } from "@/lib/coordinator/compose";
 import { parseNotice } from "@/lib/chat-notices";
 import { refChips, sinceDivider } from "@/lib/coordinator/runs-view";
@@ -48,13 +54,24 @@ import { ToolStep } from "@/components/chat/ToolStep";
 import { isDelegateTool } from "@/lib/delegate-presentation";
 import { actionsByReply } from "@/lib/chat/actions";
 import { isActiveExec, type ChatExecutionResponse, type ExecutionRecord } from "@/lib/chat-execution";
-import { mergeBackgroundWork, placeWork, sinceChips, workKey, type BackgroundWork, type SinceChip, type SinceCounts } from "@/lib/coordinator/run-card";
+import {
+  mergeBackgroundWork,
+  placeWork,
+  quietChatWork,
+  sinceChips,
+  workKey,
+  type BackgroundWork,
+  type SinceChip,
+  type SinceCounts,
+} from "@/lib/coordinator/run-card";
 import { ExecCard, LiveLine } from "@/components/coordinator/running/RunCard";
 import { useCoordinatorRuns } from "@/components/coordinator/running/useCoordinatorRuns";
 import type { ConversationListResponse } from "@/lib/work";
 import { parseUserMessage, splitAttachedContext } from "@/lib/chat/display";
 // PR A (pinned Chief of staff thread): thread switcher, paging, live decisions and questionnaire replies.
 import { ThreadBar, usePinThread } from "@/components/coordinator/thread/ThreadBar";
+import { EarlierThreads } from "@/components/coordinator/thread/EarlierThreads";
+import { isOpsConversation } from "@/lib/coordinator/thread";
 import { CHIEF_THREAD, THREAD_FIRST_PAGE, THREAD_PAGE, visibleGroupCount, type ThreadSelection } from "@/lib/coordinator/thread";
 import { SmartScope } from "@/components/smart/SmartScope";
 import { smartDecisionRefs } from "@/lib/jarvis-ui/live";
@@ -164,7 +181,8 @@ export function CoordinatorThread({
   const select = onSelection ?? setOwnSelection;
   const setSessionId = (id: string | null) => select((now) => ({ ...now, sessionId: id }));
   const setFresh = (value: boolean) => select((now) => ({ ...now, fresh: value }));
-  const [earlier, setEarlier] = useState(false);
+  /** How many earlier threads are drawn above this one (greyed, behind their dividers). */
+  const [back, setBack] = useState<{ sid: string | null; n: number }>({ sid: null, n: 0 });
   const [shown, setShown] = useState<{ sid: string | null; n: number }>({ sid: null, n: THREAD_FIRST_PAGE });
   const composer = useRef<ComposerHandle>(null);
   useEffect(() => {
@@ -280,10 +298,54 @@ export function CoordinatorThread({
     }
   }, [sid, activeRun, startRun, clearLive, sessionFresh, liveRunId, qc]);
   const { answerApproval, answerClarify } = useRunAnswers(run.state);
+  // The model for this conversation, kept on this device as the chat page keeps it.
+  const [model, setModel] = useState<{ sid: string | null; model?: string; provider?: string }>({ sid: null });
+  const [modelOpen, setModelOpen] = useState(false);
+  useEffect(() => {
+    if (!sid) return;
+    let live = true;
+    void kvGet<{ model?: string; provider?: string }>(`model:${sid}`).then((saved) => {
+      if (live) setModel({ sid, ...(saved ?? {}) });
+    });
+    return () => {
+      live = false;
+    };
+  }, [sid]);
+  const chosen = model.sid === sid ? { model: model.model, provider: model.provider } : {};
+  // "In this chat": the same status bar and sheet as any chat, fed by the background-work read this thread already keeps.
+  const panel = usePanelLinks(d.excluded ? "" : (sid ?? ""), detail.data?.timeline ?? NO_ITEMS, d.excluded || !sid);
+  const waitingOn = run.state.approval
+    ? run.state.approval.description || run.state.approval.command
+    : run.state.clarify && run.active
+      ? run.state.clarify.question
+      : undefined;
+  // The bar says what is happening now. Work that has ended is not news here: the thread draws it under the reply
+  // that started it, Activity keeps the rest, and the sheet still lists everything.
+  const known = execution.data && Array.isArray(execution.data.records) && Array.isArray(execution.data.sources) ? execution.data : undefined;
+  const happening = useMemo(() => (known ? { ...known, records: known.records.filter(isActiveExec) } : execution.data), [known, execution.data]);
+  const chat = useChatThings(
+    sid ?? "",
+    {
+      links: panel.links,
+      pending: { approval: !!run.state.approval, clarify: !!run.state.clarify && run.active, detail: waitingOn, runId: run.state.runId },
+      parentRunning: !!activeRun || run.active,
+      parentFailed: run.state.phase === "failed" || run.state.phase === "interrupted",
+      expectsBackground: !!execution.data?.records?.length,
+      filesCount: null,
+      contextPercent: null,
+    },
+    { data: happening, isError: execution.isError, isPending: execution.isPending, refetch: () => execution.refetch() },
+  );
+  const [things, setThings] = useState<ThingsTab | null>(null);
+  const openThings = (tab: ThingsTab) => {
+    setThings(tab);
+    chat.markSeen(tab);
+  };
   const discussions = useQuery({
     queryKey: ["work", "conversations", "coordinator-earlier", d.area.id],
     queryFn: () => api.get<ConversationListResponse>(`/api/work/conversations?view=all&areaId=${encodeURIComponent(d.area.id)}`),
-    enabled: earlier && !d.excluded,
+    enabled: !d.excluded,
+    staleTime: 60_000,
   });
   const postInput = (
     target: string,
@@ -299,6 +361,7 @@ export function CoordinatorThread({
       idempotencyKey: key ?? newIdempotencyKey(control ? "ctl" : "coord"),
       capabilities: [SMART_CAPABILITY],
       ...extra,
+      ...(chosen.model ? chosen : {}),
     });
   };
   // One conversation per thread: the first attachment and Send can both ask for it before it exists, so they
@@ -498,6 +561,8 @@ export function CoordinatorThread({
     return running ? sendControl(said) : sendMessage(said, key);
   };
   const timeline = detail.data?.timeline ?? [];
+  // The tool work behind each reply, as the one folded row every chat draws (it opens to the steps).
+  const toolRuns = useMemo(() => toolRunsByReply(detail.data?.timeline ?? NO_ITEMS), [detail.data?.timeline]);
   const replyActions = useMemo(
     () => new Map(actionsByReply(detail.data?.timeline ?? []).map((group) => [group.replyId, group.actions])),
     [detail.data?.timeline],
@@ -526,10 +591,13 @@ export function CoordinatorThread({
     />
   );
   const sourceDown = !!execution.error || !!execution.data?.sources?.some((source) => source.state === "unavailable");
-  const previous = (discussions.data?.conversations?.filter((c) => c.placement?.parentId === d.area.id && c.id !== sid) ?? []).map((c) => ({
-    id: c.id,
-    title: c.title,
-  }));
+  // This bot's other threads, newest first: the top of the chat, above the one on screen.
+  const previous = (discussions.data?.conversations ?? [])
+    .filter((c) => c.placement?.parentId === d.area.id && c.id !== sid && !isOpsConversation(c))
+    .sort((a, b) => (b.lastActiveAt ?? "").localeCompare(a.lastActiveAt ?? ""))
+    .slice(0, 20)
+    .map((c) => ({ id: c.id, title: c.title, lastActiveAt: c.lastActiveAt }));
+  const backShown = back.sid === sid ? back.n : 0;
   // "Load earlier" pages through the thread already loaded (no extra Hermes requests); the first page always reaches
   // back to the "Since …" divider.
   const allGroups = groupMessages(timeline);
@@ -650,6 +718,29 @@ export function CoordinatorThread({
     target.querySelector<HTMLElement>(".k-thing-title, [data-thing-toggle]")?.focus({ preventScroll: true });
   };
   const refChip = onRef ? (ref: string) => <RefPill id={ref} onClick={() => jumpTo(ref)} className="gc-inline-ref" /> : null;
+  /** One more earlier thread above the ones drawn, keeping what the owner was reading where it was. */
+  const loadEarlierThread = () => {
+    const body = bodyRef.current;
+    const before = body ? body.scrollHeight - body.scrollTop : 0;
+    setBack({ sid, n: backShown + 1 });
+    requestAnimationFrame(() => {
+      if (body) body.scrollTop = body.scrollHeight - before;
+    });
+  };
+  const earlierMessage = (m: Extract<TimelineItem, { kind: "user" | "assistant" }>) =>
+    m.kind === "assistant" ? (
+      <>
+        <p className="text-xs font-semibold text-muted">{name}</p>
+        <AssistantText text={m.text} messageId={m.id} />
+      </>
+    ) : (
+      <UserMessage text={m.text} />
+    );
+  // On an earlier thread the bar says so and leads back: the history is drawn above the current thread only.
+  const earlierThreads =
+    previous.length && !viewingEarlier && (!sid || hiddenGroups === 0) ? (
+      <EarlierThreads threads={previous} shown={backShown} onMore={loadEarlierThread} render={earlierMessage} />
+    ) : null;
   const loadEarlier = () => {
     const body = bodyRef.current;
     const before = body ? body.scrollHeight - body.scrollTop : 0;
@@ -694,32 +785,45 @@ export function CoordinatorThread({
           </p>
         ) : (
           <>
-            <ThreadBar
-              areaId={d.area.id}
-              current={d.sessionId}
-              viewing={sid}
-              viewingTitle={detail.data?.session?.title ?? null}
-              fresh={fresh}
-              busy={send.isPending || control.isPending}
-              earlier={previous}
-              earlierState={discussions.isLoading ? "loading" : discussions.error ? "error" : discussions.isSuccess ? "ready" : "idle"}
-              onEarlierOpen={setEarlier}
-              pinned={!!d.pinned}
-              onOpen={openThread}
-              onNew={() => {
-                if (attachments.drafts.length) attachments.clear();
-                setChips([]);
-                dropScope();
-                setSessionId(null);
-                setFresh(true);
-                requestAnimationFrame(() => composer.current?.focus());
-              }}
-              onUndoNew={() => {
-                dropScope();
-                setFresh(false);
-                setSessionId(null);
-              }}
-            />
+            <div className="gc-threadrow">
+              <ThreadBar
+                areaId={d.area.id}
+                current={d.sessionId}
+                viewing={sid}
+                viewingTitle={detail.data?.session?.title ?? null}
+                fresh={fresh}
+                busy={send.isPending || control.isPending}
+                pinned={!!d.pinned}
+                onOpen={openThread}
+                onNew={() => {
+                  if (attachments.drafts.length) attachments.clear();
+                  setChips([]);
+                  dropScope();
+                  setSessionId(null);
+                  setFresh(true);
+                  requestAnimationFrame(() => composer.current?.focus());
+                }}
+                onUndoNew={() => {
+                  dropScope();
+                  setFresh(false);
+                  setSessionId(null);
+                }}
+              />
+              {sid ? (
+                <span className="relative inline-flex shrink-0">
+                  <IconButton
+                    label="In this chat"
+                    icon={<PanelIcon className="h-4 w-4" />}
+                    onClick={() => openThings(chat.things.line.state !== "quiet" ? chat.things.line.tab : "Running")}
+                    data-testid="gc-things"
+                  />
+                  {chat.things.line.dot ? (
+                    <span aria-hidden="true" className="chat-attention-dot absolute top-1 right-1" data-dot={chat.things.line.dot} />
+                  ) : null}
+                </span>
+              ) : null}
+            </div>
+            {!sid ? earlierThreads : null}
             {!sid ? (
               <div>
                 <p className="text-sm text-muted" data-testid={compact ? "gc-empty" : "coordinator-empty"}>
@@ -744,7 +848,9 @@ export function CoordinatorThread({
                   <Button size="sm" variant="ghost" className="gc-load-earlier" data-testid="gc-load-earlier" onClick={loadEarlier}>
                     Load earlier ({hiddenGroups})
                   </Button>
-                ) : null}
+                ) : (
+                  earlierThreads
+                )}
                 <ol aria-label="Latest messages">
                   {msgs.map((m, index) => (
                     <Fragment key={m.id}>
@@ -779,6 +885,11 @@ export function CoordinatorThread({
                         </li>
                       ) : m.kind === "assistant" ? (
                         <li key={m.id} className="co-msg" data-who="assistant" data-msg={m.id}>
+                          {toolRuns.has(m.id) ? (
+                            <div className="gc-toolwork" data-testid="gc-toolwork">
+                              <ToolGroup group={toolRuns.get(m.id)!} />
+                            </div>
+                          ) : null}
                           <div className="co-msg-head flex items-center justify-between gap-1">
                             <p className="text-xs font-semibold text-muted">{name}</p>
                             {sid ? (
@@ -807,7 +918,7 @@ export function CoordinatorThread({
                           <ActionsTaken actions={actionsFor(m.id)} sessionId={sid ?? undefined} areaHint={d.area.title} compact />
                           {placed.get(m.id)?.length ? (
                             <section aria-label="Work started by this reply" className="gc-bgwork">
-                              {placed.get(m.id)!.map(row)}
+                              <ChatWork work={placed.get(m.id)!} render={row} onActivity={onJump ? () => onJump("running") : undefined} />
                             </section>
                           ) : null}
                           {mentions ? <MentionRows refs={mentionRows(m.id)} render={mentions.render} /> : null}
@@ -864,7 +975,7 @@ export function CoordinatorThread({
             ) : null}
             {liveWork.length ? (
               <section aria-label="Work in progress" className="gc-bgwork">
-                {liveWork.map(row)}
+                <ChatWork work={liveWork} render={row} onActivity={onJump ? () => onJump("running") : undefined} />
               </section>
             ) : null}
             {sid && !compact ? (
@@ -908,6 +1019,20 @@ export function CoordinatorThread({
             phase={!running ? undefined : run.state.phase === "waiting_for_approval" || run.state.phase === "stopping" ? run.state.phase : "running"}
             clarifying={run.active && !!run.state.clarify}
             online={online}
+            // The status bar every chat has: one line for what is happening, then counts. A tap opens "In this chat".
+            tray={
+              sid ? (
+                <ChatTray
+                  things={chat.things}
+                  onOpen={openThings}
+                  onRetry={chat.retry}
+                  compact={run.state.phase === "waiting_for_approval" || (run.active && !!run.state.clarify)}
+                />
+              ) : undefined
+            }
+            onStop={() => stop.mutate()}
+            modelLabel={chosen.model ?? "Default"}
+            onModel={sid ? () => setModelOpen(true) : undefined}
             accessory={
               compact && (text.trim() || scope) ? null : (
                 <QuickActionChips variant="row" context={quickContext ?? { areaId: d.area.id, areaTitle: d.area.title, path: pathname }} onPrompt={fill} />
@@ -1006,7 +1131,7 @@ export function CoordinatorThread({
             onSend={deliver}
             onSteer={deliver}
             // Commands that act on a conversation page (fork, file, share…) have nothing to act on here.
-            onCommand={(id) => (id === "context" ? setSheet(true) : undefined)}
+            onCommand={(id) => (id === "context" ? setSheet(true) : id === "model" && sid ? setModelOpen(true) : undefined)}
             commands={PANEL_COMMANDS}
             repo={null}
             sendsEmpty={!!scope && scopeSendsEmpty(scope)}
@@ -1025,6 +1150,43 @@ export function CoordinatorThread({
             }}
           />
         </div>
+      ) : null}
+      {sid && things ? (
+        <ChatPanel
+          sessionId={sid}
+          open
+          wide={false}
+          tab={things}
+          onTab={openThings}
+          onClose={() => setThings(null)}
+          things={chat.things}
+          links={panel.links}
+          context={chips}
+          readOnly={false}
+          onPatch={panel.patch}
+          onRemoveContext={(ref) => setChips((all) => all.filter((x) => x.ref !== ref))}
+          execution={known}
+          executionError={chat.error}
+          executionLoading={chat.loading}
+          retry={chat.retry}
+          onAddContext={() => {
+            setThings(null);
+            setSheet(true);
+          }}
+        />
+      ) : null}
+      {sid && modelOpen ? (
+        <ModelSelectDialog
+          open
+          onClose={() => setModelOpen(false)}
+          backend={detail.data?.session?.source === "claude" ? "claude" : "hermes"}
+          value={chosen}
+          onChange={(m) => {
+            setModel({ sid, ...m });
+            void kvSet(`model:${sid}`, m);
+          }}
+          area={null}
+        />
       ) : null}
       {sheet ? (
         <ContextSheet
@@ -1103,6 +1265,32 @@ function SentFiles({ sessionId, ids }: { sessionId: string; ids: string[] }) {
   return <MessageAttachments sessionId={sessionId} ids={ids} files={files.data ?? []} />;
 }
 
+/** Do not repeat the full stalled inventory beneath the conversation. No records are changed or removed. */
+export function ChatWork({ work, render, onActivity }: { work: BackgroundWork[]; render: (w: BackgroundWork) => ReactNode; onActivity?: () => void }) {
+  const [open, setOpen] = useState(false);
+  const now = useNow();
+  const quiet = [...new Map(work.filter((w) => quietChatWork(w, now)).map((w) => [workKey(w), w])).values()];
+  const visible = work.filter((w) => !quietChatWork(w, now));
+  return (
+    <>
+      {visible.map(render)}
+      {quiet.length ? (
+        <div className="gc-quiet-work" data-testid="quiet-chat-work">
+          <Button size="sm" variant="ghost" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+            {quiet.length} stalled {quiet.length === 1 ? "run" : "runs"}
+          </Button>
+          {onActivity ? (
+            <Button size="sm" variant="ghost" onClick={onActivity}>
+              Tasks
+            </Button>
+          ) : null}
+          {open ? <div aria-label="Stalled run history">{quiet.map(render)}</div> : null}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 type ThreadMessage = Extract<TimelineItem, { kind: "user" | "assistant" | "system" }>;
 function isBackgroundNotice(text: string) {
   const notice = parseNotice(text);
@@ -1153,7 +1341,8 @@ function withRefs(text: string, onRef: (ref: string) => void): ReactNode[] {
 }
 /** How many of a reply's mentioned things are drawn as rows before "N more". */
 /** The `/` commands that make sense in the panel: the rest act on a conversation page. */
-const PANEL_COMMANDS = ["context"] as const;
+const PANEL_COMMANDS = ["context", "model"] as const;
+const NO_ITEMS: TimelineItem[] = [];
 const MENTIONS_SHOWN = 3;
 /**
  * What a reply mentions, as rich rows right under it: three at most, the rest behind one line that names them.

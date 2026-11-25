@@ -396,7 +396,127 @@ export const compassEntries = sqliteTable("compass_entries", {
   completedAt: text("completed_at"),
   sessionId: text("session_id"),
   note: text("note"),
+  /** Check-in journal (docs/brief.md): what the check-in recorded that day, kept so the brief can look back. */
+  summary: text("summary"),
+  /** JSON string[] (≤ 5) */
+  priorities: text("priorities"),
+  /** the one thing the check-in named for the next day */
+  tomorrow: text("tomorrow"),
+  journaledAt: text("journaled_at"),
 });
+
+/**
+ * Daily brief (docs/brief.md): one row per AI build. `doc_json` is the VALIDATED, resolved
+ * document (no prompt, no raw model text). The rules brief is computed on read and never stored.
+ */
+export const briefs = sqliteTable(
+  "briefs",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** local day YYYY-MM-DD */
+    date: text("date").notNull(),
+    jobId: text("job_id"),
+    model: text("model"),
+    docJson: text("doc_json").notNull(),
+    /** JSON string[]: labels of what the model was given */
+    basedOn: text("based_on").notNull().default("[]"),
+    /** JSON {actionId: ISO} — picks seen completed later that day (what the person actually did) */
+    outcomes: text("outcomes").notNull().default("{}"),
+    /** JSON {"<blockId>:<stepIndex>": ISO} — small steps on a card the person ticked off */
+    ticks: text("ticks").notNull().default("{}"),
+    createdAt: text("created_at").notNull().default(now),
+  },
+  (t) => [index("briefs_user_date_idx").on(t.userId, t.date, t.createdAt)],
+);
+
+/** A person's reaction to a brief, a pick or a card. One per target; changing it replaces the row. */
+export const briefFeedback = sqliteTable(
+  "brief_feedback",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    briefId: text("brief_id").notNull(),
+    date: text("date").notNull(),
+    /** brief | pick:<actionId> | block:<blockId> */
+    targetKey: text("target_key").notNull(),
+    /** first | then | <block kind> | brief */
+    targetKind: text("target_kind").notNull(),
+    /** up | down */
+    verdict: text("verdict").notNull(),
+    note: text("note").notNull().default(""),
+    /** what the target said when the person reacted (title or card text, ≤ 200) */
+    excerpt: text("excerpt").notNull().default(""),
+    createdAt: text("created_at").notNull().default(now),
+  },
+  (t) => [uniqueIndex("brief_feedback_target_idx").on(t.userId, t.briefId, t.targetKey), index("brief_feedback_user_idx").on(t.userId, t.createdAt)],
+);
+
+/**
+ * What the brief knows about a person: notes they wrote (`you`) and notes the model proposed from
+ * their feedback and check-ins (`learned`). A proposed note is not used until the person keeps it.
+ */
+export const briefNotes = sqliteTable(
+  "brief_notes",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** value | principle | driver | pattern */
+    kind: text("kind").notNull().default("pattern"),
+    text: text("text").notNull(),
+    /** lower-case, no punctuation: dedupe key */
+    norm: text("norm").notNull(),
+    /** you | learned */
+    origin: text("origin").notNull(),
+    /** active | proposed | dismissed */
+    state: text("state").notNull(),
+    evidence: text("evidence").notNull().default(""),
+    briefId: text("brief_id"),
+    createdAt: text("created_at").notNull().default(now),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [uniqueIndex("brief_notes_norm_idx").on(t.userId, t.norm), index("brief_notes_user_state_idx").on(t.userId, t.state)],
+);
+
+/**
+ * A change the person asked an agent for from the brief ("Improve"): the item
+ * that tracks it and the conversation the agent works in. The request text
+ * lives on the item; state is read from Jarvis' own run records, never stored here.
+ */
+export const briefImprovements = sqliteTable(
+  "brief_improvements",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** the browser's key for this request: a retry returns the same one */
+    clientKey: text("client_key").notNull(),
+    itemId: text("item_id").notNull(),
+    sessionId: text("session_id").notNull(),
+    runId: text("run_id"),
+    /** "improve" (change the app) | "assist" (look into one row of the brief) */
+    kind: text("kind").notNull().default("improve"),
+    /** assist: the row it is about, `action:<id>` or `item:<id>` */
+    targetKey: text("target_key"),
+    /** assist: what was asked (lib/brief.ts BRIEF_ASSIST_INTENTS) */
+    intent: text("intent"),
+    /** false when the conversation was filed under an item that already existed: Undo leaves that item alone */
+    ownsItem: integer("owns_item", { mode: "boolean" }).notNull().default(true),
+    createdAt: text("created_at").notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex("brief_improvements_key_idx").on(t.userId, t.clientKey),
+    index("brief_improvements_user_idx").on(t.userId, t.createdAt),
+    index("brief_improvements_target_idx").on(t.userId, t.targetKey),
+  ],
+);
 
 export const idempotency = sqliteTable("idempotency", {
   key: text("key").primaryKey(),
@@ -909,6 +1029,11 @@ export const workItems = sqliteTable(
     validationDefault: text("validation_default"),
     /** conversation nodes: the Hermes/Claude session id (one node per session per owner) */
     sessionId: text("session_id"),
+    /**
+     * Tasks (items that are not areas or conversations): the session id of the task's ONE primary chat, or null
+     * while it has none (server/work/primary-chat.ts). A session is primary for at most one task.
+     */
+    primarySessionId: text("primary_session_id"),
     /** areas only: JSON AreaSettings (lib/work.ts parseAreaSettings); null = defaults */
     settings: text("settings"),
     /** JSON array of normalised tag names (lib/item-tags.ts); colours live in work_tags */
@@ -928,6 +1053,7 @@ export const workItems = sqliteTable(
     index("work_items_owner_idx").on(t.userId, t.parentId),
     uniqueIndex("work_items_system_idx").on(t.userId, t.systemKey),
     uniqueIndex("work_items_session_idx").on(t.userId, t.sessionId),
+    uniqueIndex("work_items_primary_session_idx").on(t.userId, t.primarySessionId),
   ],
 );
 
@@ -1802,6 +1928,63 @@ export const agentTokens = sqliteTable(
   (t) => [uniqueIndex("agent_tokens_hash_idx").on(t.tokenHash), index("agent_tokens_user_idx").on(t.userId)],
 );
 
+/**
+ * Suggestions a coordinator wrote for its channel (task threads H1-H7): a card the owner may Start or Send.
+ * Never applied by Jarvis; Start and Send are the owner's tap. Evidence is the owner's own tasks the reason comes
+ * from, and a suggestion goes stale once any of it stops being true.
+ */
+export const suggestions = sqliteTable(
+  "suggestions",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** the channel (area) it is for */
+    channelId: text("channel_id").notNull(),
+    /** the coordinator profile that wrote it */
+    profile: text("profile").notNull(),
+    /** "review", "next_step"…: the owner can lower or stop a kind */
+    topic: text("topic").notNull(),
+    /** start | steer */
+    act: text("act").notNull(),
+    /** the task to start or steer; null: Start creates a task titled `title` in the channel */
+    itemId: text("item_id"),
+    title: text("title").notNull(),
+    why: text("why").notNull(),
+    /** what the agent is told */
+    brief: text("brief").notNull(),
+    evidenceJson: text("evidence_json").notNull().default("[]"),
+    /** the scheduled run that wrote it (null: written in a chat with jarvis_suggest) */
+    runId: text("run_id"),
+    /** open | starting (Start in flight) | started | dismissed | stale | replaced */
+    state: text("state").notNull().default("open"),
+    hiddenUntil: text("hidden_until"),
+    /** after Start/Send: the task it worked on and the op that undoes it */
+    resultItemId: text("result_item_id"),
+    resultJson: text("result_json"),
+    createdAt: text("created_at").notNull().default(now),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [index("suggestions_user_state_idx").on(t.userId, t.state), index("suggestions_channel_idx").on(t.channelId, t.state)],
+);
+
+/** The owner's say on a kind of suggestion in a channel (H5): Not now lowers it, "Don't suggest this" stops it. */
+export const suggestionTopics = sqliteTable(
+  "suggestion_topics",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    channelId: text("channel_id").notNull(),
+    topic: text("topic").notNull(),
+    weight: integer("weight").notNull().default(0),
+    blocked: integer("blocked", { mode: "boolean" }).notNull().default(false),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.channelId, t.topic] })],
+);
+
 /** Owner-managed coordinator schedules. New rows always start disabled. */
 export const scheduledJobs = sqliteTable(
   "scheduled_jobs",
@@ -1889,6 +2072,8 @@ export const agentRuns = sqliteTable(
     startedAt: text("started_at").notNull().default(now),
     updatedAt: text("updated_at").notNull().default(now),
     finishedAt: text("finished_at"),
+    /** When the run's chat was last active, as the ended-chat check last read it (server/work/session-end.ts). */
+    chatActiveAt: text("chat_active_at"),
     /** CW-2: per-owner display number (R-n), never reused; assigned on insert (server/work/registered-runs.ts) */
     seq: integer("seq"),
     /** CW-2: the run that delegated this one (sub-agent tree); same owner */
@@ -1949,11 +2134,24 @@ export const decisions = sqliteTable(
     raisedBy: text("raised_by").notNull(),
     /** legacy askedAt of the work_items.decision JSON this row mirrors (pairs restores on undo) */
     askedAt: text("asked_at").notNull().default(now),
+    /**
+     * Task threads E3/E4: the answer is posted into the agent's chat once the Undo window has passed.
+     * pending (waits for deliver_after) | sent (posted, read-back due) | delivered (read back) | failed | null (nowhere to post).
+     */
+    deliveryState: text("delivery_state"),
+    /** the chat the answer goes to: the task's primary chat, else the raising run's */
+    deliverySession: text("delivery_session"),
+    deliverAfter: text("deliver_after"),
+    deliveredAt: text("delivered_at"),
+    deliveryError: text("delivery_error"),
+    /** a steer: the turn it was queued on. Delivered once that turn ends without handing it back as pending_steer. */
+    deliveryRun: text("delivery_run"),
     createdAt: text("created_at").notNull().default(now),
     updatedAt: text("updated_at").notNull().default(now),
   },
   (t) => [
     uniqueIndex("decisions_seq_idx").on(t.userId, t.seq),
+    index("decisions_delivery_idx").on(t.deliveryState, t.deliverAfter),
     index("decisions_item_idx").on(t.userId, t.itemId, t.state),
     index("decisions_state_idx").on(t.userId, t.state, t.expiresAt),
   ],

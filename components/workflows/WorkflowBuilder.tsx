@@ -207,13 +207,20 @@ function BuilderView({ detail, intro }: { detail: Detail | null; intro?: React.R
       />
       {intro}
       <div className="grid grid-cols-1 gap-4 @min-[872px]:grid-cols-[180px_minmax(0,1fr)_minmax(0,360px)]">
-        <nav aria-label="Builder sections" className="flex min-w-0 flex-wrap gap-1 @min-[872px]:flex-col">
+        {/* Sleek tier: a small visual box, the 44px tap area kept by hit-slop. The strip's own padding (cancelled by the
+            negative margin) is the room that slop needs, since a scrolling strip clips what leaves it. */}
+        <nav
+          aria-label="Builder sections"
+          data-scroll-x
+          data-density="sleek"
+          className="-my-2 flex min-w-0 gap-1 overflow-x-auto py-2 @min-[872px]:my-0 @min-[872px]:flex-col @min-[872px]:overflow-visible @min-[872px]:py-0"
+        >
           {BUILDER_SECTIONS.map((s) => (
             <Button
               key={s}
               type="button"
               variant="ghost"
-              className={`min-w-0 justify-start whitespace-normal text-left ${state.section === s ? "bg-surface-2 font-semibold" : ""}`}
+              className={`shrink-0 justify-start text-left @min-[872px]:min-w-0 @min-[872px]:shrink @min-[872px]:whitespace-normal ${state.section === s ? "bg-surface-2 font-semibold" : ""}`}
               aria-current={state.section === s ? "step" : undefined}
               onClick={() => dispatch({ type: "section", section: s })}
             >

@@ -3,6 +3,7 @@
 A mobile-first, self-hosted PWA whose primary interface is **Hermes** and whose home screen answers one question: _what needs my attention, and what should I do next?_
 
 - **Home** — up to three ranked next actions (deterministic, with source + freshness), quick capture, Later groups, household glance.
+- **Brief** — one page that says what matters most today and what to start with: built by rules, or written by AI once you turn that on, from your items, calendar, check-ins and what you taught it. Learns only from visible notes and feedback. See [docs/brief.md](docs/brief.md).
 - **Hermes** — conversations with live streaming, tool activity, inline approvals, steering, stop, reconnect-safe runs, drafts, fork (latest or from a message) with lineage, rename/archive/pin, model override, context attachments, "Track in Paperclip".
 - **Alerts** — canonical inbox (dedupe, read/dismissed/acted), Web Push with quiet hours and per-category settings, deep links.
 - **More** — Initiatives (Paperclip), Todos (Google Tasks / HA / built-in), Skylight, Daily Compass, Home controls (lights, switches, fans, climate, media, scenes, vacuums, covers/garage, locks and alarm; every write confirmed, read back and undoable; locks, alarm and opening a garage are high-risk; see [docs/home-control.md](docs/home-control.md)), Brain (Hermes status, skills, toolsets, cron jobs), Settings.

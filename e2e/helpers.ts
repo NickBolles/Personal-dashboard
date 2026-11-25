@@ -93,7 +93,22 @@ export async function openChatContext(page: Page) {
   await page.getByRole("menuitem", { name: /^Context/ }).click();
 }
 
-/** Same tabs on the container-sized desktop panel and the narrow-screen sheet. */
+/** A workflow's own tabs in "In this chat"; everything of the chat itself is a fixed section, not a tab. */
+const WORKFLOW_TABS = ["Outline", "Form", "Notes", "Outputs"];
+/** The heading of each fixed section, by the name the tray's chips use. */
+const CHAT_SECTIONS: Record<string, string> = {
+  Running: "Running",
+  PRs: "Pull requests",
+  Artifacts: "Artifacts",
+  Files: "Files",
+  Links: "Links",
+  Context: "Context",
+};
+
+/**
+ * Opens "In this chat" (the container-sized desktop panel, or the sheet on narrow screens) at `tab`: one of a
+ * workflow's tabs, or one of the chat's fixed sections, which is brought into view.
+ */
 export async function openChatPanel(page: Page, tab = "Links") {
   const panel = page.getByTestId("chat-panel-content");
   const opener = page.getByRole("button", { name: "Open chat panel", exact: true });
@@ -101,8 +116,45 @@ export async function openChatPanel(page: Page, tab = "Links") {
   await expect(panel.or(opener).first()).toBeVisible();
   if (!(await panel.isVisible())) await opener.click();
   await expect(panel).toBeVisible();
-  await panel.getByRole("tab", { name: new RegExp(`^${tab}(?:\\s|$)`) }).click();
+  if (WORKFLOW_TABS.includes(tab)) {
+    await panel.getByRole("tab", { name: new RegExp(`^${tab}(?:\\s|$)`) }).click();
+    return panel;
+  }
+  // A workflow chat keeps the chat's sections behind one more tab.
+  const inChat = panel.getByRole("tab", { name: "In this chat", exact: true });
+  if (await inChat.count()) await inChat.click();
+  await panel
+    .getByRole("heading", { level: 3, name: new RegExp(`^${CHAT_SECTIONS[tab] ?? tab}`) })
+    .first()
+    .scrollIntoViewIfNeeded();
   return panel;
+}
+/**
+ * The log of the node that is open. A task's log opens in place on its Overview (one "Log" line); an area or
+ * project has an Activity tab. Returns the element that holds it.
+ */
+export async function openItemLog(page: Page) {
+  const line = page.getByTestId("item-log").getByRole("button", { name: /^Log/ });
+  await expect(line.or(page.getByRole("tab", { name: "Activity", exact: true })).first()).toBeVisible();
+  if (!(await line.isVisible())) {
+    await page.getByRole("tab", { name: "Activity", exact: true }).click();
+    return page.getByRole("tabpanel");
+  }
+  if ((await line.getAttribute("aria-expanded")) !== "true") await line.click();
+  const body = page.getByTestId("item-log-body");
+  await expect(body).toBeVisible();
+  return body;
+}
+/**
+ * A task page shows Overview and Chat side by side with room, and one at a time (a tab bar) without.
+ * Brings the named pane on screen and returns it.
+ */
+export async function openTaskPane(page: Page, pane: "Overview" | "Chat") {
+  const tab = page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: pane, exact: true });
+  const panes = page.getByTestId("task-panes");
+  await expect(panes).toBeVisible();
+  if ((await panes.getAttribute("data-split")) === null) await tab.click();
+  return pane === "Chat" ? panes.locator('[data-pane="chat"], .k-panes-dock').first() : panes.locator('[data-pane="overview"], .k-panes-main').first();
 }
 export async function closeChatPanel(page: Page) {
   const sheet = page.getByRole("dialog", { name: "In this chat", exact: true });

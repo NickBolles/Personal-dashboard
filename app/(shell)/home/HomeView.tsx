@@ -20,6 +20,7 @@ import { NeedsYouSection } from "@/components/map/Decisions";
 import { AgentsRail } from "@/components/agents/AgentRuns";
 import { WhileAwayCard } from "@/components/agents/WhileAwayCard";
 import { PickUpStrip } from "@/components/resume/PickUpStrip";
+import { HomeBriefCard } from "@/components/brief/HomeBriefCard";
 import { useAccess } from "@/components/access";
 import { sparkPoints, sum, type HomePulse, type PulseTrend } from "@/lib/pulse";
 import { useSource } from "@/components/useSource";
@@ -378,6 +379,7 @@ export function HomeView() {
           ]}
         />
       </header>
+      <HomeBriefCard />
       {att ? <KpiStrip a={att} pulse={pulse.data} /> : null}
 
       {data ? <FreshnessStrip sources={data.sources} refreshing={live.isFetching && !live.data} online={online} generatedAt={data.generatedAt} /> : null}

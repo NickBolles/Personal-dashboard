@@ -605,15 +605,21 @@ function PhotoViewer({ name, src, onClose, details, download }: { name: string; 
 }
 
 /** Links panel → Files. */
-export function FilesSection({ sessionId }: { sessionId: string }) {
+export function FilesSection({ sessionId, bare = false }: { sessionId: string; /** the surrounding section already has the heading */ bare?: boolean }) {
   const q = useConversationFiles(sessionId);
   const [open, setOpen] = useState<ChatFileView | null>(null);
   const files = (q.data ?? []).filter((f) => f.sentAt);
   return (
     <section aria-labelledby="lp-files">
-      <h3 id="lp-files" className="mb-1 text-[11px] font-semibold tracking-wide text-muted uppercase">
-        Files{files.length ? ` (${files.length})` : ""}
-      </h3>
+      {bare ? (
+        <span id="lp-files" className="sr-only">
+          Files
+        </span>
+      ) : (
+        <h3 id="lp-files" className="mb-1 text-[11px] font-semibold tracking-wide text-muted uppercase">
+          Files{files.length ? ` (${files.length})` : ""}
+        </h3>
+      )}
       {files.length ? (
         <ul className="space-y-1.5" data-testid="files-panel">
           {files.map((f) => (
@@ -644,7 +650,7 @@ export function FilesSection({ sessionId }: { sessionId: string }) {
           ))}
         </ul>
       ) : (
-        <p className="text-xs text-muted">Files and pictures you attach will show here.</p>
+        <p className="text-xs text-muted">{bare ? "None yet" : "Files and pictures you attach will show here."}</p>
       )}
       {open ? <Lightbox sessionId={sessionId} file={open} onClose={() => setOpen(null)} /> : null}
     </section>

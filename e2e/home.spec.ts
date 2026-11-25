@@ -115,7 +115,7 @@ test("suggestion feedback is reversible from Settings → Home priorities", asyn
   await page.reload();
   const card = page.locator("section[aria-labelledby=assist-h] article", { hasText: "Overdue tasks are piling up" });
   await expect(card).toBeVisible({ timeout: 15_000 });
-  await card.getByText("Why am I seeing this?").click();
+  await card.getByRole("button", { name: "Why this?" }).click();
   await expect(card).toContainText("Counted from your Todos");
   await card.getByRole("button", { name: "Not now" }).click();
   await card.getByRole("button", { name: "Until tomorrow" }).click();

@@ -6,14 +6,18 @@
 import { z } from "zod";
 import { CONTEXT_SOURCES } from "@/lib/work";
 import { captureActionSettingsSchema, DEFAULT_CAPTURE_ACTIONS, triageActionSchema, type CaptureActionSettings } from "@/lib/capture-triage";
+import { briefOutput } from "@/lib/brief";
 
 /** Capture action settings with defaults (older stored settings have none). */
 export const captureActions = (s: { capture: { actions?: CaptureActionSettings } }) => s.capture.actions ?? DEFAULT_CAPTURE_ACTIONS;
 
 export const AI_ACTION_KINDS = ["research", "plan", "schedule", "draft", "summarize"] as const;
 export type AiActionKind = (typeof AI_ACTION_KINDS)[number];
-/** `file`: on-demand filing suggestions for unfiled conversations (triage tier, hidden, no report). */
-export const AI_JOB_KINDS = [...AI_ACTION_KINDS, "triage", "investigate", "file"] as const;
+/**
+ * `file`: on-demand filing suggestions for unfiled conversations (triage tier, hidden, no report).
+ * `brief`: the daily brief (standard tier, hidden, no report; docs/brief.md).
+ */
+export const AI_JOB_KINDS = [...AI_ACTION_KINDS, "triage", "investigate", "file", "brief"] as const;
 export type AiJobKind = (typeof AI_JOB_KINDS)[number];
 
 export const JOB_STATES = ["queued", "running", "waiting_approval", "cancelling", "succeeded", "failed", "cancelled", "budget_blocked", "skipped"] as const;
@@ -57,7 +61,7 @@ export const AI_ACTIONS: Record<AiActionKind, { label: string; verb: string; ico
     verb: "Summarizing",
     icon: "≡",
     tier: "standard",
-    description: "A review-only summary of this item. Nothing is saved as a note until you choose Save as note.",
+    description: "A review-only summary of this task. Nothing is saved as a note until you choose Save as note.",
   },
 };
 
@@ -70,6 +74,7 @@ export const KIND_VERB: Record<AiJobKind, string> = {
   triage: "Triaging",
   investigate: "Investigating",
   file: "Suggesting where to file",
+  brief: "Writing your brief",
 };
 
 export const AI_KIND_LABEL: Record<AiJobKind, string> = {
@@ -81,6 +86,7 @@ export const AI_KIND_LABEL: Record<AiJobKind, string> = {
   triage: "Triage",
   investigate: "Investigation",
   file: "Filing suggestions",
+  brief: "Daily brief",
 };
 
 const clientKey = z
@@ -280,6 +286,7 @@ export const OUTPUT_SCHEMAS = {
   summarize: summarizeOutput,
   triage: triageOutput,
   file: fileOutput,
+  brief: briefOutput,
 } as const;
 
 /** One AI filing suggestion (stored per person; read by the Areas unfiled list). `itemId` null = no good home. */
@@ -295,7 +302,7 @@ export type ScheduleSlot = { start: string; end: string; score: number; why: str
 export type JobView = {
   id: string;
   kind: AiJobKind;
-  subjectType: "work_item" | "inbox" | "conversations";
+  subjectType: "work_item" | "inbox" | "conversations" | "brief";
   subjectId: string;
   state: JobState;
   tier: AiTier;

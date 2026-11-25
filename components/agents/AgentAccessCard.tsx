@@ -3,15 +3,47 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Button, Card, Checkbox, ErrorNote, Field, Input, KSpinner, Pill, useToast, SectionHeader } from "@/components/ui";
-import { AGENT_SCOPES, AGENT_SCOPE_LABELS, DEFAULT_AGENT_SCOPES, type AgentScope, type AgentTokenView, type MintedAgentToken } from "@/lib/agent-access";
+import {
+  AnchoredMenu,
+  Button,
+  Card,
+  Checkbox,
+  ErrorNote,
+  Field,
+  Input,
+  KSpinner,
+  MenuButton,
+  Pill,
+  useAnchoredMenu,
+  useToast,
+  SectionHeader,
+} from "@/components/ui";
+import {
+  AGENT_SCOPES,
+  AGENT_SCOPE_LABELS,
+  DEFAULT_AGENT_SCOPES,
+  RISKY_AGENT_SCOPES,
+  groupByProfile,
+  normaliseScopes,
+  type AgentScope,
+  type AgentTokenView,
+  type MintedAgentToken,
+} from "@/lib/agent-access";
 import { relativeTime } from "@/lib/time";
+import { EditScopesDialog } from "./EditScopesDialog";
 
 const KEY = ["settings", "agent-tokens"] as const;
 
+function activeLabel(rows: AgentTokenView[]): string {
+  const active = rows.filter((t) => !t.revokedAt).length;
+  const revoked = rows.length - active;
+  return [active ? `${active} active` : null, revoked ? `${revoked} revoked` : null].filter(Boolean).join(" · ");
+}
+
 /**
  * Settings → Agents → Agent access (docs/agent-tools.md): mint a scoped token for a Hermes profile
- * (shown once), list tokens with last use, revoke (confirmed). No scope maps to finance.* module capabilities.
+ * (shown once), list tokens grouped by profile with last use, edit scopes (same token, confirmed diff) or revoke
+ * (confirmed) from the row's ⋯ menu. No scope maps to finance.* module capabilities.
  */
 export function AgentAccessCard() {
   const qc = useQueryClient();
@@ -23,7 +55,36 @@ export function AgentAccessCard() {
   const [busy, setBusy] = useState(false);
   const [minted, setMinted] = useState<MintedAgentToken | null>(null);
   const [confirm, setConfirm] = useState<string | null>(null);
+  const [editing, setEditing] = useState<AgentTokenView | null>(null);
+  /** The last saved scope edit, kept so it can be undone (restores the previous scopes on the same token). */
+  const [lastEdit, setLastEdit] = useState<{ id: string; name: string; before: AgentScope[]; undone?: boolean } | null>(null);
 
+  const putScopes = async (id: string, next: AgentScope[]) => {
+    await api.patch(`/api/settings/agents/tokens/${encodeURIComponent(id)}`, { scopes: next });
+    await qc.invalidateQueries({ queryKey: KEY });
+    await qc.invalidateQueries({ queryKey: ["settings", "agents", "coordinators"] });
+  };
+  const saveScopes = async (t: AgentTokenView, next: AgentScope[]) => {
+    try {
+      await putScopes(t.id, next);
+      setEditing(null);
+      setLastEdit({ id: t.id, name: t.name, before: normaliseScopes(t.scopes) });
+    } catch (err) {
+      toast((err as Error).message, "danger");
+    }
+  };
+  const undoScopes = async () => {
+    if (!lastEdit || lastEdit.undone) return;
+    setBusy(true);
+    try {
+      await putScopes(lastEdit.id, lastEdit.before);
+      setLastEdit({ ...lastEdit, undone: true });
+    } catch (err) {
+      toast((err as Error).message, "danger");
+    } finally {
+      setBusy(false);
+    }
+  };
   const mint = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
@@ -96,6 +157,21 @@ export function AgentAccessCard() {
             </div>
           </div>
         ) : null}
+        {lastEdit ? (
+          <div className="mb-3 flex min-w-0 flex-wrap items-center gap-2 rounded-lg border border-line p-2 text-sm" data-testid="agent-scopes-saved">
+            <span role="status" className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+              {lastEdit.undone ? `Scopes for ${lastEdit.name} restored.` : `Scopes saved for ${lastEdit.name}.`}
+            </span>
+            {lastEdit.undone ? null : (
+              <Button type="button" size="sm" variant="ghost" loading={busy} onClick={() => void undoScopes()}>
+                Undo
+              </Button>
+            )}
+            <Button type="button" size="sm" variant="ghost" onClick={() => setLastEdit(null)}>
+              Dismiss
+            </Button>
+          </div>
+        ) : null}
         {q.isPending ? (
           <span role="status">
             <KSpinner />
@@ -104,38 +180,27 @@ export function AgentAccessCard() {
         ) : q.error ? (
           <ErrorNote error={q.error} retry={() => q.refetch()} />
         ) : tokens.length ? (
-          <ul className="mb-3 space-y-2" aria-label="Agent tokens">
-            {tokens.map((t) => (
-              <li key={t.id} className="min-w-0 rounded-lg border border-line p-2.5 text-sm" data-testid="agent-token-row">
-                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                  <span className="min-w-0 font-semibold [overflow-wrap:anywhere]">{t.name}</span>
-                  <span className="jv-agent-chip">@{t.profile}</span>
-                  {t.revokedAt ? <Pill tone="neutral">Revoked</Pill> : null}
-                  <span className="font-mono text-xs text-muted">…{t.hint}</span>
-                </div>
-                <p className="mt-0.5 text-xs text-muted [overflow-wrap:anywhere]">{t.scopes.map((s) => AGENT_SCOPE_LABELS[s].label).join(" · ")}</p>
-                <p className="mt-0.5 text-xs text-muted" data-dynamic>
-                  Created {relativeTime(t.createdAt)} · {t.lastUsedAt ? `last used ${relativeTime(t.lastUsedAt)}` : "never used"}
-                </p>
-                {!t.revokedAt ? (
-                  confirm === t.id ? (
-                    <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                      <span>Revoke {t.name}? The agent loses access at once.</span>
-                      <Button type="button" size="sm" variant="danger" loading={busy} onClick={() => void revoke(t)}>
-                        Revoke
-                      </Button>
-                      <Button type="button" size="sm" variant="ghost" onClick={() => setConfirm(null)}>
-                        Cancel
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="mt-1.5">
-                      <Button type="button" size="sm" variant="ghost" onClick={() => setConfirm(t.id)} aria-label={`Revoke ${t.name}`}>
-                        Revoke…
-                      </Button>
-                    </div>
-                  )
-                ) : null}
+          <ul className="mb-3 space-y-3" aria-label="Agent tokens">
+            {groupByProfile(tokens).map(([profile, rows]) => (
+              <li key={profile} className="min-w-0" data-testid="agent-token-group">
+                <h3 className="mb-1 flex min-w-0 flex-wrap items-baseline gap-x-2 text-xs text-muted">
+                  <span className="jv-agent-chip text-sm">@{profile}</span>
+                  <span>{activeLabel(rows)}</span>
+                </h3>
+                <ul className="divide-y divide-line rounded-lg border border-line" aria-label={`Tokens for @${profile}`}>
+                  {rows.map((t) => (
+                    <TokenRow
+                      key={t.id}
+                      t={t}
+                      busy={busy}
+                      confirming={confirm === t.id}
+                      onAskRevoke={() => setConfirm(t.id)}
+                      onCancelRevoke={() => setConfirm(null)}
+                      onRevoke={() => void revoke(t)}
+                      onEdit={() => setEditing(t)}
+                    />
+                  ))}
+                </ul>
               </li>
             ))}
           </ul>
@@ -160,6 +225,12 @@ export function AgentAccessCard() {
                   label={
                     <span className="min-w-0">
                       <span className="font-semibold">{AGENT_SCOPE_LABELS[s].label}</span>
+                      {RISKY_AGENT_SCOPES[s] ? (
+                        <>
+                          {" "}
+                          <Pill tone="wn">Spends budget</Pill>
+                        </>
+                      ) : null}
                       <span className="block text-sm text-muted">{AGENT_SCOPE_LABELS[s].hint}</span>
                     </span>
                   }
@@ -173,7 +244,81 @@ export function AgentAccessCard() {
             </Button>
           </div>
         </form>
+        {editing ? <EditScopesDialog token={editing} onClose={() => setEditing(null)} onSave={(next) => saveScopes(editing, next)} /> : null}
       </section>
     </Card>
+  );
+}
+
+/**
+ * One token: name · …last4 · state on the first line, scopes as chips (risky ones amber), created / last used.
+ * Actions live in the row's ⋯ menu (Edit scopes…, Revoke…); revoking still asks inline.
+ */
+function TokenRow({
+  t,
+  busy,
+  confirming,
+  onAskRevoke,
+  onCancelRevoke,
+  onRevoke,
+  onEdit,
+}: {
+  t: AgentTokenView;
+  busy: boolean;
+  confirming: boolean;
+  onAskRevoke: () => void;
+  onCancelRevoke: () => void;
+  onRevoke: () => void;
+  onEdit: () => void;
+}) {
+  const live = !t.revokedAt;
+  const menu = useAnchoredMenu({ enabled: live });
+  const { surfaceProps } = menu;
+  const scopes = normaliseScopes(t.scopes);
+  return (
+    <li className={`min-w-0 p-2.5 text-sm ${live ? "" : "opacity-70"}`} data-testid="agent-token-row" {...surfaceProps}>
+      <div className="flex min-w-0 items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <span className="min-w-0 font-semibold [overflow-wrap:anywhere]">{t.name}</span>
+            <span className="font-mono text-xs text-muted">…{t.hint}</span>
+            {live ? null : <Pill tone="neutral">Revoked</Pill>}
+          </div>
+          <ul className="mt-1 flex min-w-0 flex-wrap gap-1" aria-label={`Scopes for ${t.name}`}>
+            {scopes.map((s) => (
+              <li key={s} className="min-w-0">
+                <Pill tone={RISKY_AGENT_SCOPES[s] ? "wn" : "neutral"}>{AGENT_SCOPE_LABELS[s].label}</Pill>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1 text-xs text-muted" data-dynamic>
+            Created {relativeTime(t.createdAt)} · {t.lastUsedAt ? `last used ${relativeTime(t.lastUsedAt)}` : "never used"}
+            {t.revokedAt ? ` · revoked ${relativeTime(t.revokedAt)}` : ""}
+          </p>
+        </div>
+        {live ? <MenuButton menu={menu} label={`Actions for ${t.name}`} className="shrink-0" /> : null}
+      </div>
+      {live && confirming ? (
+        <div className="mt-1.5 flex flex-wrap items-center gap-2">
+          <span>Revoke {t.name}? The agent loses access at once.</span>
+          <Button type="button" size="sm" variant="danger" loading={busy} onClick={onRevoke}>
+            Revoke
+          </Button>
+          <Button type="button" size="sm" variant="ghost" onClick={onCancelRevoke}>
+            Cancel
+          </Button>
+        </div>
+      ) : null}
+      {live ? (
+        <AnchoredMenu
+          menu={menu}
+          label={`Actions for ${t.name}`}
+          items={[
+            { label: "Edit scopes…", onSelect: onEdit },
+            { label: "Revoke…", onSelect: onAskRevoke, danger: true },
+          ]}
+        />
+      ) : null}
+    </li>
   );
 }

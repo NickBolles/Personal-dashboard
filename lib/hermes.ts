@@ -115,6 +115,8 @@ export type RunView = {
   pendingSteer?: string;
   pendingApproval?: ApprovalRequest;
   pendingClarify?: ClarifyRequest;
+  /** Hermes no longer has this run: what is shown is Jarvis's own record, so nothing about how it ended is known. */
+  forgotten?: true;
   /** Secrets Jarvis removed from this message before it reached AI (hints like "password: …", never the value). */
   masked?: string[];
 };

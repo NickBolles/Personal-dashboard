@@ -5,16 +5,28 @@ import { api } from "@/lib/client/api";
 import { isActiveExec, type ChatExecutionResponse } from "@/lib/chat-execution";
 import { chatThings, executionAttentionKey, linkAttentionKey, type ChatThingsInput, type ThingsTab } from "@/lib/chat/things";
 
-export function useChatThings(sessionId: string, input: Omit<ChatThingsInput, "execution" | "executionUnavailable" | "now" | "previous">) {
-  const execution = useQuery({
+/** A background-work read the host already keeps current (the Chief of staff thread polls the same endpoint). */
+export type ExecutionSource = { data: ChatExecutionResponse | undefined; isError: boolean; isPending: boolean; refetch: () => unknown };
+
+export function useChatThings(
+  sessionId: string,
+  input: Omit<ChatThingsInput, "execution" | "executionUnavailable" | "now" | "previous">,
+  /** Given, this hook reads background work from it and asks for nothing itself. */
+  source?: ExecutionSource,
+) {
+  const own = useQuery({
     queryKey: ["chat-execution", sessionId],
     queryFn: async () => {
       const result = await api.get<ChatExecutionResponse>(`/api/hermes/sessions/${encodeURIComponent(sessionId)}/execution`);
       if (!Array.isArray(result.records) || !Array.isArray(result.sources)) throw new Error("Couldn't check background work");
       return result;
     },
+    enabled: !source && !!sessionId,
     refetchInterval: (q) => (q.state.data?.records.some(isActiveExec) ? 20_000 : 60_000),
   });
+  // A host's read is taken as it comes: an answer without its lists is "couldn't check", never a crash or a claim.
+  const well = (data: ChatExecutionResponse | undefined) => (data && Array.isArray(data.records) && Array.isArray(data.sources) ? data : undefined);
+  const execution: ExecutionSource = source ? { ...source, data: well(source.data), isError: source.isError || (!!source.data && !well(source.data)) } : own;
   const [seen, setSeen] = useState<{ sessionId: string; keys: string[] }>({ sessionId, keys: [] });
   const [clock, setClock] = useState(0);
   const [history, setHistory] = useState<{ sessionId: string; line: ReturnType<typeof chatThings>["line"]; transition?: number }>();

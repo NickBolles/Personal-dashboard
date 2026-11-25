@@ -255,7 +255,9 @@ export function areaDefaultsFor(user: CurrentUser, sessionId: string) {
   if (!can(user as Viewer, "work.use")) return null;
   const items = listItems(user.id);
   const byId = new Map(items.map((i) => [i.id, i]));
-  let start: WorkItem | undefined = items.find((i) => i.kind === "conversation" && i.sessionId === sessionId);
+  // A task's primary chat works for that task, wherever the conversation itself is filed (lib/task-chat.ts).
+  let start: WorkItem | undefined =
+    items.find((i) => i.primarySessionId === sessionId && !i.archived) ?? items.find((i) => i.kind === "conversation" && i.sessionId === sessionId);
   if (!start) {
     const link = getDb()
       .select({ itemId: schema.workLinks.itemId })

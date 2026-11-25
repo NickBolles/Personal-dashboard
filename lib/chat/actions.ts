@@ -23,6 +23,10 @@ export type ActionKind =
   | "filed" // jarvis_file_conversation
   | "device_proposal" // jarvis_propose_device_change
   | "quick_action" // jarvis_add_quick_action (proposal)
+  | "task_started" // jarvis_start_task: the work happens in the task's own chat
+  | "task_steered" // jarvis_steer_task
+  | "handed_off" // jarvis_hand_off
+  | "suggested" // jarvis_suggest: a card the owner may Start or Send
   | "delegated"; // delegate_task spawn (N sub-agents)
 
 export type ChatAction = {
@@ -43,6 +47,8 @@ export type ChatAction = {
   undoOpId: string | null;
   /** internal jump link (/areas?item=…) or the https URL that was linked */
   href: string | null;
+  /** jarvis_suggest: the suggestion the card reads back */
+  suggestionId?: string | null;
   /** delegate_task: id + sub-agent count */
   delegationId?: string | null;
   count?: number;
@@ -64,6 +70,10 @@ export const ACTION_LABEL: Record<ActionKind, string> = {
   filed: "Filed chat",
   device_proposal: "Device proposal",
   quick_action: "Quick action proposed",
+  task_started: "Started",
+  task_steered: "Steered",
+  handed_off: "Handed off",
+  suggested: "Suggested",
   delegated: "Sub-agents",
 };
 
@@ -79,11 +89,16 @@ const TOOL_KIND: Record<string, ActionKind> = {
   jarvis_file_conversation: "filed",
   jarvis_propose_device_change: "device_proposal",
   jarvis_add_quick_action: "quick_action",
+  jarvis_start_task: "task_started",
+  jarvis_steer_task: "task_steered",
+  jarvis_hand_off: "handed_off",
+  jarvis_suggest: "suggested",
 };
 
 const ITEM_ID = /^wk_[A-Za-z0-9-]{1,80}$/;
 const OP_ID = /^op_[A-Za-z0-9-]{1,80}$/;
 const RUN_ID = /^arun_[A-Za-z0-9-]{1,80}$/;
+const SUGGESTION_ID = /^sug_[A-Za-z0-9-]{1,80}$/;
 
 type Obj = Record<string, unknown>;
 const obj = (x: unknown): Obj => (x && typeof x === "object" && !Array.isArray(x) ? (x as Obj) : {});
@@ -146,7 +161,11 @@ function parseArgs(input: string | undefined): Obj {
 /** The item a "Focus" chat starts on for this chip (notes focus their parent item), or null. */
 export const focusTarget = (a: Pick<ChatAction, "itemId" | "focusId">): string | null => (a.focusId === undefined ? a.itemId : a.focusId);
 
-const itemHref = (id: string | null) => (id ? `/areas?item=${encodeURIComponent(id)}` : null);
+/**
+ * A task link inside a chat lands on the task's Chat tab (an area or project has none and opens on Overview).
+ * This is the one line a channel chat keeps for work that happens in a task's own chat.
+ */
+const itemHref = (id: string | null) => (id ? `/areas?item=${encodeURIComponent(id)}&tab=chat` : null);
 
 /** One tool step → zero or one action. Errors and unknown tools give null. */
 export function actionFromTool(step: Extract<TimelineItem, { kind: "tool" }>): ChatAction | null {
@@ -198,6 +217,7 @@ export function actionFromTool(step: Extract<TimelineItem, { kind: "tool" }>): C
   const href = kind === "linked" && linkUrl && /^https:\/\//.test(linkUrl) ? linkUrl : itemHref(itemId);
   const title =
     str(item.title) ??
+    (kind === "task_started" || kind === "task_steered" || kind === "handed_off" || kind === "suggested" ? str(res.title) : null) ??
     (kind === "linked" ? (str(link.title) ?? str(args.title) ?? linkUrl) : null) ??
     str(args.title) ??
     str(args.question) ??
@@ -213,8 +233,37 @@ export function actionFromTool(step: Extract<TimelineItem, { kind: "tool" }>): C
     runId: run && RUN_ID.test(run) ? run : null,
     undoOpId: undo && OP_ID.test(undo) ? undo : null,
     href,
+    ...(kind === "suggested" ? { suggestionId: SUGGESTION_ID.test(str(res.suggestionId) ?? "") ? str(res.suggestionId) : null } : {}),
     at: step.at ?? null,
   };
+}
+
+/** What a coordinator did with a task, or proposes (F2, M6): drawn as a card on the agent surface, not a chip. */
+export const CARD_KINDS: readonly ActionKind[] = ["task_started", "handed_off", "task_steered", "suggested"];
+
+/**
+ * One card per task a reply started, handed off or steered, and one per suggestion. A task the same reply created
+ * and then started is one card ("Created a task"), and its Undo undoes both. Everything else stays a chip.
+ */
+export type TaskCard = { id: string; kind: ActionKind; created: boolean; action: ChatAction; undoOpIds: string[] };
+export function taskCards(actions: readonly ChatAction[]): { cards: TaskCard[]; rest: ChatAction[] } {
+  const cards: TaskCard[] = [];
+  const used = new Set<string>();
+  for (const a of actions) {
+    if (!CARD_KINDS.includes(a.kind)) continue;
+    if (a.kind === "suggested" && !a.suggestionId) continue;
+    const made = a.kind !== "suggested" && a.itemId ? actions.find((c) => c.kind === "created" && c.itemId === a.itemId) : undefined;
+    if (made) used.add(made.id);
+    used.add(a.id);
+    cards.push({
+      id: a.id,
+      kind: a.kind,
+      created: !!made,
+      action: a,
+      undoOpIds: [a.undoOpId, made?.undoOpId].filter((x): x is string => !!x),
+    });
+  }
+  return { cards, rest: actions.filter((a) => !used.has(a.id)) };
 }
 
 /**
@@ -258,6 +307,10 @@ const PLAIN: Record<ActionKind, { one: string; many: (n: number) => string }> = 
   filed: { one: "Filed this chat", many: () => "filed this chat" },
   device_proposal: { one: "Proposed a device change", many: (n) => `proposed ${n} device ${n === 1 ? "change" : "changes"}` },
   quick_action: { one: "Proposed a quick action", many: (n) => `proposed ${n} quick ${n === 1 ? "action" : "actions"}` },
+  task_started: { one: "Started a task", many: (n) => `started ${n} ${n === 1 ? "task" : "tasks"}` },
+  task_steered: { one: "Steered a task", many: (n) => `steered ${n} ${n === 1 ? "task" : "tasks"}` },
+  handed_off: { one: "Handed off a task", many: (n) => `handed off ${n} ${n === 1 ? "task" : "tasks"}` },
+  suggested: { one: "Suggested", many: (n) => `suggested ${n} ${n === 1 ? "step" : "steps"}` },
   delegated: { one: "Handed off", many: (n) => `handed off to ${n} ${n === 1 ? "agent" : "agents"}` },
 };
 

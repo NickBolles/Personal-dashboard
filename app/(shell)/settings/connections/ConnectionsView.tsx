@@ -18,7 +18,7 @@ export function ConnectionsView() {
     typeof window !== "undefined" ? window.location.hash.slice(1) || (new URLSearchParams(window.location.search).has("github_app") ? "github" : null) : null,
   );
   return (
-    <div className="mx-auto w-full max-w-220 px-4 pt-4 pb-6 sm:px-6 dense:px-7 dense:pt-5">
+    <div className="mx-auto w-full max-w-220">
       <PageHeader title="Connections" subtitle="Credentials stay on the Jarvis server, encrypted at rest." />
       {q.isPending ? <LoadingState label="Loading connections…" /> : null}
       {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
