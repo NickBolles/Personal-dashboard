@@ -1182,6 +1182,7 @@ it.each(["compact", "area"])("uses shared delegate details in the %s coordinator
         detail: '{"error":"No live subagent known"}',
         error: true,
       },
+      { kind: "system", id: "delegate-notice", text: "[ASYNC DELEGATION COMPLETE] Background work reported." },
       { kind: "assistant", id: "history-reply", text: "Guidance was not delivered." },
     ],
   });

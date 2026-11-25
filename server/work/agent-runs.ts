@@ -51,6 +51,8 @@ export function executionRuns(user: CurrentUser, sessionId: string, childIds: st
     id: r.runId,
     title: executionText(r.inputPreview, 300) ?? "Chat run",
     state: executionState(r.status),
+    approval: r.status === "waiting_for_approval",
+    sourceChat: { id: r.sessionId, href: `/chat/${encodeURIComponent(r.sessionId)}` },
     startedAt: r.startedAt,
     endedAt: r.completedAt,
     updatedAt: r.lastCheckedAt ?? r.startedAt,
@@ -89,6 +91,8 @@ export function executionRuns(user: CurrentUser, sessionId: string, childIds: st
         ...run,
         title: executionText(item?.title, 300) ?? run.title,
         state,
+        approval: j.state === "waiting_approval",
+        task: item ? { id: item.id, title: executionText(item.title, 300) ?? "Untitled task", href: `/areas?item=${encodeURIComponent(item.id)}` } : null,
         endedAt: j.finishedAt ?? run.endedAt,
         updatedAt: j.updatedAt,
         error: executionText(j.errorMessage, 2048) ?? run.error,
@@ -102,6 +106,9 @@ export function executionRuns(user: CurrentUser, sessionId: string, childIds: st
       id: j.id,
       title: executionText(item?.title, 300) ?? `${j.kind} job`,
       state,
+      approval: j.state === "waiting_approval",
+      task: item ? { id: item.id, title: executionText(item.title, 300) ?? "Untitled task", href: `/areas?item=${encodeURIComponent(item.id)}` } : null,
+      sourceChat: j.hermesSessionId ? { id: j.hermesSessionId, href: `/chat/${encodeURIComponent(j.hermesSessionId)}` } : null,
       startedAt: j.startedAt,
       endedAt: j.finishedAt,
       updatedAt: j.updatedAt,
@@ -130,9 +137,9 @@ export function executionRuns(user: CurrentUser, sessionId: string, childIds: st
           key: `registered_run:${r.id}`,
           source: "registered_run" as const,
           id: r.id,
-          title: executionText(r.title, 300) ?? "Registered run",
+          title: executionText(r.title) ?? "Registered run",
           state: r.state === "done" ? ("completed" as const) : r.state === "interrupted" ? ("waiting" as const) : executionState(r.state),
-          approval: r.state === "waiting" && /approval/i.test(r.summary ?? ""),
+
           task: { id: item.id, title: executionText(item.title, 300) ?? "Untitled task", href: `/areas?item=${encodeURIComponent(item.id)}` },
           run: {
             id: r.id,
@@ -147,7 +154,9 @@ export function executionRuns(user: CurrentUser, sessionId: string, childIds: st
           delegationId: r.delegationId,
           transcriptPath: executionText(r.transcriptPath, 1024),
           href: `/areas?item=${encodeURIComponent(r.itemId)}`,
-          links: executionLinks(`${r.prUrl ?? ""}\n${r.summary ?? ""}`),
+          links: executionLinks(
+            `${r.prUrl ?? ""}\n${r.summary ?? ""}\n${(linksByItem([item.id]).get(item.id) ?? []).map((link) => link.url ?? "").join("\n")}`,
+          ),
         },
       ];
     });

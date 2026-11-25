@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useEffect, useId, useRef, useState, type ReactNode, type CSSProperties } from "react";
 import { Button, ChipButton, KSpinner, Pill, ProgressBar } from "@/components/ui";
-import { BrainIcon, ForkIcon, ToolIcon } from "@/components/icons";
+import { BrainIcon, ForkIcon, ToolIcon, ChevronIcon } from "@/components/icons";
 import { safeHref } from "@/components/markdown/Markdown";
 import { isActiveExec, type ChatExecutionResponse, type ExecutionRecord } from "@/lib/chat-execution";
 import { executionTitle, presentExecutions } from "@/lib/chat/execution-presentation";
@@ -15,6 +15,9 @@ import type { ContextChip } from "../ContextSheet";
 import { RunPanel, type RunPanelView, type AgentCaptureState } from "@/components/workflows/RunPanel";
 import { SummaryChip } from "./SummaryChip";
 import { ChatSheet } from "./ChatSheet";
+import { ChatInlineLink } from "./ChatLinkProvider";
+import { classifyUrl } from "@/lib/chat-links";
+import { redactToolText } from "@/lib/tool-presentation";
 
 export function ParentChatLink({ parent }: { parent?: ChatExecutionResponse["parent"] }) {
   return parent && internalHref(parent.href) ? (
@@ -32,12 +35,14 @@ export function RunningSection({
   loading,
   retry,
   pending,
+  links = [],
 }: {
   execution?: ChatExecutionResponse;
   error?: boolean;
   loading?: boolean;
   retry: () => void;
   pending?: ReactNode;
+  links?: PanelLink[];
 }) {
   const allOk = !error && !!execution?.sources.length && execution.sources.every((s) => s.state === "ok");
   const records = execution?.records ?? [];
@@ -72,13 +77,14 @@ export function RunningSection({
         .filter((g) => g.records.length)
         .map((g) => (
           <section key={g.title} aria-label={g.title}>
-            <h4 className="mb-1 text-xs font-semibold text-muted">{g.title}</h4>
+            <h4 className={g.title === "Running" ? "sr-only" : "mb-1 text-xs font-semibold text-muted"}>{g.title}</h4>
             <ul className="space-y-2">
               {g.records.map(({ key, members }) => (
                 <li key={key} className="cp-run-group">
+                  {members.length > 1 ? <p className="cp-run-relation">Same delegation · {members.length} records</p> : null}
                   <ul className="space-y-1">
                     {members.map((record) => (
-                      <ExecutionRow key={record.key} record={record} />
+                      <ExecutionRow key={record.key} record={record} links={links} />
                     ))}
                   </ul>
                 </li>
@@ -92,24 +98,31 @@ export function RunningSection({
     </div>
   );
 }
-function ExecutionRow({ record: r }: { record: ExecutionRecord }) {
-  const [copied, setCopied] = useState(false);
-  const [copyError, setCopyError] = useState(false);
+function ExecutionRow({ record: r, links = [] }: { record: ExecutionRecord; links?: PanelLink[] }) {
   const Icon = r.source === "process" ? ToolIcon : r.source === "fork" ? ForkIcon : BrainIcon;
-  const when = r.updatedAt ?? r.startedAt ?? r.endedAt;
+  const when = r.updatedAt ?? r.endedAt ?? r.startedAt;
   const tone = r.state === "failed" ? "bad" : r.state === "completed" ? "ok" : r.state === "waiting" ? "wn" : r.state === "running" ? "ai" : "neutral";
   const label = executionTitle(r);
-  const ids = [r.subagentId, r.delegationId, r.id].filter((id): id is string => !!id);
+  const brief = redactToolText(typeof r.title === "string" ? r.title : "");
+  const outputs = [
+    ...new Map(
+      (r.links ?? []).flatMap((link) => {
+        const classified = classifyUrl(link.url);
+        return classified ? [[classified.url, { ...classified, label: link.label }] as const] : [];
+      }),
+    ).values(),
+  ];
   return (
-    <li className="cp-run" data-state={r.state}>
+    <li className="cp-run" data-state={r.state} data-execution-key={r.key} data-density="sleek">
       <details>
         <summary className="cp-run-summary">
+          <ChevronIcon className="cp-run-chevron h-3 w-3 shrink-0" />
           <Icon className="h-4 w-4 shrink-0" />
           <span className="cp-run-main">
             <span className="cp-run-title">{label}</span>
-            {r.step ? <span className="cp-run-step">{r.step}</span> : null}
+            {r.step ? <span className="cp-run-step">{redactToolText(r.step)}</span> : null}
           </span>
-          <Pill tone={tone}>{r.state}</Pill>
+          <Pill tone={tone}>{r.approval ? "Approval" : r.state}</Pill>
           {when ? (
             <time className="cp-run-time" dateTime={when} title={when}>
               {relativeTime(when)}
@@ -117,125 +130,100 @@ function ExecutionRow({ record: r }: { record: ExecutionRecord }) {
           ) : null}
         </summary>
         <div className="cp-run-detail">
-          {r.summary ? <p className="whitespace-pre-wrap">{r.summary}</p> : null}
-          {r.error ? <p className="whitespace-pre-wrap text-danger">{r.error}</p> : null}
+          {r.summary ? <p className="whitespace-pre-wrap">{redactToolText(r.summary)}</p> : null}
           {r.progress != null && Number.isFinite(r.progress) ? (
             <ProgressBar value={Math.min(100, Math.max(0, r.progress * 100))} tone="ai" label={`${label} progress`} />
           ) : null}
-          {r.href && internalHref(r.href) ? (
-            <Link className="text-accent underline" href={r.href}>
-              {r.childSessionId ? `Open child chat · @${r.childProfile ?? "default"}` : "Open work item"}
-            </Link>
+          {r.task && internalHref(r.task.href) ? (
+            <div className="cp-provenance">
+              <ChatInlineLink href={r.task.href} label={r.task.title} links={links} />
+              <CopyValue key={r.task.id} label="Task ID" value={r.task.id} />
+            </div>
           ) : (
-            <p className="text-muted">No linked task or source chat is available.</p>
+            <p className="text-muted">No linked task yet.</p>
           )}
-          {r.task ? (
-            <div className="cp-provenance">
-              <Link className="text-accent underline" href={r.task.href}>
-                {r.task.title}
-              </Link>
-              <CopyValue label="Task ID" value={r.task.id} />
-            </div>
+          {!r.task && r.href && internalHref(r.href) ? (
+            <Link className="text-accent underline" href={r.href}>
+              {r.childSessionId ? `Open child chat · @${r.childProfile ?? "default"}` : r.href.startsWith("/chat/") ? "Open source chat" : "Open work item"}
+            </Link>
           ) : null}
-          {r.run ? (
-            <div className="cp-provenance">
-              <span>Run {r.run.ref}</span>
-              <CopyValue label="Run ID" value={r.run.id} />
-              {r.run.events?.length ? (
-                <ul>
-                  {r.run.events.map((event) => (
-                    <li key={`${event.at}-${event.summary}`}>
-                      {event.type}: {event.summary}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
-          ) : null}
-          {r.sourceChat ? (
+          {r.sourceChat && internalHref(r.sourceChat.href) && (r.task || r.sourceChat.href !== r.href) ? (
             <Link className="text-accent underline" href={r.sourceChat.href}>
               Open source chat
             </Link>
           ) : null}
+          <div className="cp-run-outputs" aria-label="Linked outputs">
+            {outputs.map((link) => (
+              <ChatInlineLink
+                key={link.url}
+                href={link.url}
+                label={
+                  link.label ??
+                  (link.kind === "artifact" ? link.slug : link.number ? `${link.ghType === "pull" ? "PR" : "Issue"} #${link.number}` : link.domain)
+                }
+                links={links}
+              />
+            ))}
+            {!outputs.length ? <span className="text-muted">No linked artifacts or PRs yet.</span> : null}
+          </div>
+          {r.run ? (
+            <div className="cp-provenance">
+              <CopyValue key={r.run.ref} label="Run reference" value={r.run.ref} />
+              {r.run.events?.length ? (
+                <ol className="cp-run-history" aria-label="Run history">
+                  {r.run.events.map((event, index) => (
+                    <li key={`${event.at}-${index}`}>
+                      <time dateTime={event.at}>{relativeTime(event.at)}</time> · {event.type}: {redactToolText(event.summary)}
+                    </li>
+                  ))}
+                </ol>
+              ) : null}
+            </div>
+          ) : null}
           <details className="cp-run-raw">
             <summary>Details and copy{r.titleTruncated ? " · stored source truncated" : ""}</summary>
-            <p className="whitespace-pre-wrap break-words">{typeof r.title === "string" && r.title ? r.title : "No stored title or goal."}</p>
-            <CopyValue label="Full available brief" value={typeof r.title === "string" ? r.title : ""} />
-            {ids.map((id) => (
-              <CopyValue key={id} value={id} />
-            ))}
-            {r.links?.map((l) =>
-              safeHref(l.url) ? (
-                <a
-                  key={l.url}
-                  className="block text-accent underline"
-                  href={safeHref(l.url)!}
-                  target={l.url.startsWith("/") ? undefined : "_blank"}
-                  rel="noopener noreferrer"
-                >
-                  {l.label ?? l.url}
-                </a>
-              ) : null,
-            )}
+            <p className="text-muted">Available stored text; older source records may be truncated.</p>
+            {brief ? <CopyValue key={brief} label="Stored brief" value={brief} /> : <p>No stored title or goal.</p>}
+            {r.subagentId ? <CopyValue key={r.subagentId} label="Subagent ID" value={r.subagentId} /> : null}
+            {r.delegationId ? <CopyValue key={r.delegationId} label="Delegation ID" value={r.delegationId} /> : null}
+            <CopyValue key={r.id} label={r.run ? "Run ID" : "Execution ID"} value={r.id} />
+            {r.transcriptPath ? <CopyValue key={r.transcriptPath} label="Transcript path" value={r.transcriptPath} /> : null}
           </details>
-          {r.transcriptPath ? (
-            <CopyValue
-              label="Transcript path"
-              value={r.transcriptPath}
-              compact
-              copied={copied}
-              setCopied={setCopied}
-              copyError={copyError}
-              setCopyError={setCopyError}
-            />
-          ) : null}
         </div>
       </details>
+      {r.error ? (
+        <p className="cp-run-error text-danger" role="status">
+          {redactToolText(r.error)}
+        </p>
+      ) : null}
     </li>
   );
 }
-function CopyValue({
-  label = "Run ID",
-  value,
-  compact,
-  copied,
-  setCopied,
-  copyError,
-  setCopyError,
-}: {
-  label?: string;
-  value: string;
-  compact?: boolean;
-  copied?: boolean;
-  setCopied?: (value: boolean) => void;
-  copyError?: boolean;
-  setCopyError?: (value: boolean) => void;
-}) {
-  const [ownCopied, ownSetCopied] = useState(false);
-  const [ownError, ownSetError] = useState(false);
-  const done = copied ?? ownCopied;
-  const failed = copyError ?? ownError;
-  const setDone = setCopied ?? ownSetCopied;
-  const setFailed = setCopyError ?? ownSetError;
+function CopyValue({ label, value }: { label: string; value: string }) {
+  const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
   return (
-    <div className={compact ? "cp-copy cp-copy-compact" : "cp-copy"}>
+    <div className="cp-copy">
       <span>{label}</span>
-      <code>{value}</code>
+      <code tabIndex={0}>{value}</code>
       <ChipButton
         aria-label={`Copy ${label.toLowerCase()}`}
-        onClick={() =>
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
           void (navigator.clipboard?.writeText(value) ?? Promise.reject()).then(
-            () => {
-              setDone(true);
-              setFailed(false);
-            },
-            () => setFailed(true),
-          )
-        }
+            () => setState("copied"),
+            () => setState("failed"),
+          );
+        }}
       >
-        {done ? "Copied" : "Copy"}
+        {state === "copied" ? "Copied" : "Copy"}
       </ChipButton>
-      {failed ? <p role="status">Copy unavailable — select the ID above.</p> : null}
+      {state === "copied" ? (
+        <span className="sr-only" role="status">
+          {label} copied.
+        </span>
+      ) : null}
+      {state === "failed" ? <p role="status">Copy unavailable — select the text above.</p> : null}
     </div>
   );
 }
@@ -374,9 +362,13 @@ function ChatSections(p: Props) {
     root.current?.querySelector<HTMLElement>(`[data-section="${wanted}"]`)?.scrollIntoView?.({ block: "start" });
   }, [wanted]);
   const records = p.execution?.records ?? [];
-  const waiting = records.filter((r) => r.state === "waiting");
+  const relationships = presentExecutions(records);
+  const waitingGroups = relationships.filter((g) => g.members.some((r) => r.state === "waiting"));
+  const waiting = waitingGroups.flatMap((g) => g.members);
   // The link back to a parent chat is drawn once, at the top of the panel.
-  const running = p.execution ? { ...p.execution, parent: null, records: records.filter((r) => r.state !== "waiting") } : undefined;
+  const running = p.execution
+    ? { ...p.execution, parent: null, records: relationships.filter((g) => !g.members.some((r) => r.state === "waiting")).flatMap((g) => g.members) }
+    : undefined;
   const prs = p.links.filter((l) => l.kind === "github" && l.ghType === "pull");
   const artifacts = p.links.filter((l) => l.kind === "artifact");
   const others = p.links.filter((l) => l.kind !== "artifact" && !(l.kind === "github" && l.ghType === "pull"));
@@ -385,14 +377,21 @@ function ChatSections(p: Props) {
   return (
     <div ref={root} className="cp-sections">
       <PanelSection id="Running" uid={uid} count={c.running}>
-        <RunningSection execution={running} error={p.executionError} loading={p.executionLoading} retry={p.retry} />
+        <RunningSection execution={running} error={p.executionError} loading={p.executionLoading} retry={p.retry} links={p.links} />
       </PanelSection>
       <PanelSection id="Waiting" uid={uid} count={waiting.length + (p.pending ? 1 : 0)}>
         {p.pending}
         {waiting.length ? (
           <ul className="space-y-2">
-            {waiting.map((record) => (
-              <ExecutionRow key={record.key} record={record} />
+            {waitingGroups.map((group) => (
+              <li key={group.key}>
+                {group.members.length > 1 ? <p className="cp-run-relation">Same delegation · {group.members.length} records</p> : null}
+                <ul>
+                  {group.members.map((record) => (
+                    <ExecutionRow key={record.key} record={record} links={p.links} />
+                  ))}
+                </ul>
+              </li>
             ))}
           </ul>
         ) : null}

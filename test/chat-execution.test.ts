@@ -318,6 +318,10 @@ describe("execution endpoint", () => {
         { runId: "crun", sessionId: "child-1", userId: owner, idempotencyKey: "crun", status: "running" },
       ])
       .run();
+    getDb()
+      .insert(schema.runEvents)
+      .values({ id: "receipt-event", userId: owner, runId: "reg-1", type: "progress", summary: "Checked passkey support", createdAt: at })
+      .run();
     const res = await call(executionRoute.GET);
     expect(res.status).toBe(200);
     const out: ChatExecutionResponse = await res.json();
@@ -327,7 +331,12 @@ describe("execution endpoint", () => {
       state: "completed",
       href: `/areas?item=${item.id}`,
       links: [{ url: "https://github.com/o/r/pull/2", kind: "github" }],
+      task: { id: item.id, title: "Task", href: `/areas?item=${item.id}` },
+      sourceChat: { id: "child-1", href: "/chat/child-1" },
+      run: { id: "reg-1", ref: expect.stringMatching(/^R-\d+$/), events: [{ type: "progress", summary: "Checked passkey support", at }] },
     });
+    const reloaded: ChatExecutionResponse = await (await call(executionRoute.GET)).json();
+    expect(reloaded.records.find((r) => r.id === "reg-1")?.run).toEqual(out.records.find((r) => r.id === "reg-1")?.run);
     const child = out.records.find((r) => r.id === "sa-1")!;
     expect(Buffer.byteLength(child.summary!)).toBeLessThanOrEqual(4096);
     expect(Buffer.byteLength(child.error!)).toBeLessThanOrEqual(2048);
