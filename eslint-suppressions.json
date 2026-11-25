@@ -549,13 +549,13 @@
   },
   "components/search/SearchDialog.tsx": {
     "jarvis-ui/no-arbitrary-values": {
-      "count": 9
+      "count": 7
     },
     "jarvis-ui/no-legacy-imports": {
       "count": 1
     },
     "jarvis-ui/no-native-controls": {
-      "count": 4
+      "count": 2
     }
   },
   "components/skylight/EventForm.tsx": {

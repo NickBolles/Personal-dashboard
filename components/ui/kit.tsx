@@ -494,7 +494,12 @@ export function Tabs({
   );
 }
 
-export function Input({ icon, invalid, className, ...rest }: InputHTMLAttributes<HTMLInputElement> & { icon?: ReactNode; invalid?: boolean }) {
+export function Input({
+  icon,
+  invalid,
+  className,
+  ...rest
+}: InputHTMLAttributes<HTMLInputElement> & { icon?: ReactNode; invalid?: boolean; ref?: Ref<HTMLInputElement> }) {
   return (
     <span className={cx("k-input", invalid && "k-input-bad", className)}>
       {icon ? (

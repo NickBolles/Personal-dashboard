@@ -7,7 +7,7 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { COORDINATOR_PINNED_THREAD, OPEN_PALETTE_EVENT, OVERLAY_CLOSED_EVENT } from "@/components/navigation/commands";
-import { QUICK_ACTION_MANAGE } from "@/lib/quick-actions";
+import { COORDINATOR_PROMPT, QUICK_ACTION_MANAGE } from "@/lib/quick-actions";
 import { CHIEF_PATH, GlobalCoordinator } from "./GlobalCoordinator";
 
 const nav = { path: "/more", search: "", push: vi.fn(), back: vi.fn(), replace: vi.fn() };
@@ -44,6 +44,8 @@ vi.mock("./CoordinatorThread", async () => {
   return {
     CoordinatorThread: (p: {
       standalone?: boolean;
+      draft?: string;
+      onDraft?: (value: string) => void;
       context?: unknown;
       selection?: { sessionId: string | null; fresh: boolean };
       onSelection?: (next: { sessionId: string | null; fresh: boolean }) => void;
@@ -54,6 +56,8 @@ vi.mock("./CoordinatorThread", async () => {
       return (
         <div data-testid="thread" data-standalone={String(!!p.standalone)} data-context={String(!!p.context)} data-on={p.selection?.sessionId ?? "chief"}>
           The conversation
+          <output data-testid="thread-draft">{p.draft}</output>
+          <button type="button" onClick={() => p.onDraft?.("Existing draft")}>Keep a draft</button>
           <button type="button" onClick={() => p.onSelection?.({ sessionId: "earlier-thread", fresh: false })}>
             Open an earlier thread
           </button>
@@ -123,6 +127,24 @@ function mount() {
   return { rerender: () => view.rerender(ui()) };
 }
 const rail = () => screen.getByRole("complementary", { name: "Chief of staff" });
+
+it("explicit Chief Ask keeps the pinned destination, page context and draft even with an area pane open", async () => {
+  mount();
+  await screen.findByTestId("thread");
+  fireEvent.click(screen.getByRole("button", { name: "Keep a draft" }));
+  fireEvent.click(screen.getByRole("button", { name: "Open an earlier thread" }));
+  expect(screen.getByTestId("thread").getAttribute("data-on")).toBe("earlier-thread");
+  const pane = document.createElement("div");
+  pane.dataset.testid = "coordinator-pane";
+  document.body.append(pane);
+  try {
+    act(() => void window.dispatchEvent(new CustomEvent(COORDINATOR_PROMPT, { detail: { text: "New question", target: "chief" } })));
+    expect(screen.getByTestId("thread").getAttribute("data-on")).toBe("chief");
+    expect(screen.getByTestId("thread-draft").textContent).toBe("Existing draft\n\nNew question");
+    expect(screen.getByTestId("thread").getAttribute("data-context")).toBe("true");
+    expect(nav.push).not.toHaveBeenCalled();
+  } finally { pane.remove(); }
+});
 
 it("the rail offers Expand, which goes to the Chief of staff's own address", async () => {
   mount();

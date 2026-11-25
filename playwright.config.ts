@@ -96,7 +96,7 @@ export default defineConfig({
     {
       name: "mobile-320",
       dependencies: ["setup"],
-      testMatch: /(a11y|visual)\.spec\.ts/,
+      testMatch: /(a11y|visual|palette-dismiss)\.spec\.ts/,
       use: {
         viewport: { width: 320, height: 640 },
         isMobile: true,
@@ -110,7 +110,7 @@ export default defineConfig({
       name: "desktop",
       dependencies: ["setup"],
       testMatch:
-        /(a11y|visual|chat|chat-panel|chat-files|keyboard|sidebar|palette-raycast|inline-edits|global-coordinator|pickers|icon-actions|areas-v2|portfolio)\.spec\.ts/,
+        /(a11y|visual|chat|chat-panel|chat-files|keyboard|sidebar|palette-raycast|palette-dismiss|inline-edits|global-coordinator|pickers|icon-actions|areas-v2|portfolio)\.spec\.ts/,
       use: { viewport: { width: 1280, height: 800 }, browserName: "chromium", storageState: authState() },
     },
   ],

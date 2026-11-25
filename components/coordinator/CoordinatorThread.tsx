@@ -252,7 +252,9 @@ export function CoordinatorThread({
     // The area pane takes ⌘K quick actions while it is open; the global rail/sheet handles them otherwise.
     if (compact || d.excluded) return;
     const onPrompt = (e: Event) => {
-      const value = (e as CustomEvent<{ text?: string }>).detail?.text;
+      const detail = (e as CustomEvent<{ text?: string; target?: "chief" }>).detail;
+      if (detail?.target === "chief") return;
+      const value = detail?.text;
       if (typeof value === "string") fillRef.current(value);
     };
     window.addEventListener(COORDINATOR_PROMPT, onPrompt);

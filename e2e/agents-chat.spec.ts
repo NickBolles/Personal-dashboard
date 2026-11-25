@@ -141,7 +141,7 @@ test("the global composer asks the open area's agent, files the chat there; the 
   await page.goto("/home");
   await page.getByRole("heading", { name: "Now" }).waitFor();
   await openPalette();
-  await expect(palette.getByTestId("composer-target")).toHaveAttribute("data-agent", "Jarvis");
+  await expect(palette.getByRole("button", { name: "? Chief", exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
 
   await page.goto(`/areas?item=${areaId}`);
@@ -158,31 +158,25 @@ test("the global composer asks the open area's agent, files the chat there; the 
     await page.keyboard.press("Escape");
   }
 
-  // The chip switches to plain Jarvis and back.
+  // Palette Ask is explicitly Chief, not a second scoped-chat creation path.
   await openPalette();
-  const chip = palette.getByTestId("composer-target");
-  await expect(chip).toHaveAttribute("data-agent", "momentumchief");
-  await expect(chip).toHaveAttribute("data-routed", "1");
-  await chip.click();
-  await expect(chip).toHaveAttribute("data-agent", "Jarvis");
-  await expect(chip).toHaveAttribute("aria-pressed", "false");
-  await chip.click();
-  await expect(chip).toHaveAttribute("data-agent", "momentumchief");
-
-  const before = await profileHits(page);
-  await palette.getByRole("combobox").fill("what should we bet on next week");
+  await palette.getByRole("combobox").fill("? what should we bet on next week");
   const ask = palette.getByTestId("palette-ask");
-  await expect(ask).toContainText("Ask momentumchief");
-  await expect(ask).toContainText(title);
-  const created = page.waitForResponse((r) => r.url().endsWith("/api/hermes/sessions") && r.request().method() === "POST");
+  await expect(ask).toContainText("Ask Chief of staff");
+  await page.evaluate(() => {
+    window.addEventListener(
+      "jarvis:coordinator-prompt",
+      (e) => {
+        (window as unknown as { palettePrompt: unknown }).palettePrompt = (e as CustomEvent).detail;
+      },
+      { once: true },
+    );
+  });
+  const before = await profileHits(page);
   await page.keyboard.press("Control+Enter");
-  const session = (await (await created).json()) as { id: string; agentProfile?: string; placedIn?: string | null };
-  expect(session.agentProfile).toBe("momentumchief");
-  expect(session.placedIn).toBe(areaId);
-  await page.waitForURL(/\/chat\/.+/);
-  // The question shows at once, the reply streams from the area's agent.
-  await expect(page.getByLabel("Conversation timeline").getByText("what should we bet on next week").first()).toBeVisible();
-  await expect(page.getByTestId("agent-badge")).toHaveText("@momentumchief");
-  await expect(page.getByText("Done", { exact: true })).toBeVisible({ timeout: 20_000 });
-  expect(await profileHits(page)).toBeGreaterThan(before);
+  await expect(palette).toHaveCount(0);
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { palettePrompt: unknown }).palettePrompt))
+    .toEqual({ text: "what should we bet on next week", target: "chief" });
+  expect(await profileHits(page)).toBe(before);
 });
