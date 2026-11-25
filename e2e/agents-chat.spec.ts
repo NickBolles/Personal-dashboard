@@ -124,7 +124,7 @@ test("with routing off, an area's profile is only a hint (and says so)", async (
   await expect(nodeChip).toHaveAttribute("data-routed", "0");
 });
 
-test("the global composer asks the open area's agent, files the chat there; the chip switches back to Jarvis", async ({ page }) => {
+test("scoped dock keeps the area's agent; palette Ask stages in the global Chief without creating a chat", async ({ page }) => {
   test.setTimeout(120_000);
   await putAgents(page, { routing: true, aguiStream: false, routes: [{ profile: "momentumchief", keyEnv: "JARVIS_HERMES_KEY_MOMENTUMCHIEF", baseUrl: null }] });
   const title = `Momentum bets ${Date.now().toString(36)}`;

@@ -4,14 +4,14 @@ Continuation of the shipped [Raycast palette](https://artifacts.ai.nickbolles.co
 
 ## Convention
 
-| Entry | Behavior |
-| --- | --- |
-| Orb tap / Ctrl or Cmd+K | Search by default, existing actions and `/workflow` syntax still available |
-| `>` / Ctrl or Cmd+Shift+P | Commands only; editable prefix remains in the same input |
-| `?` | **Proposed reversible default:** Ask Chief of staff, in the existing global/pinned Chief thread |
-| Typed action | Existing argument chips plus a visible `> Action` parent trail |
-| Visible Back / empty-input Backspace | Move within the palette hierarchy |
-| Prominent Close / Esc / browser Back | Dismiss the entire popup, including subcommands, menu and confirmation |
+| Entry                                | Behavior                                                                                        |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| Orb tap / Ctrl or Cmd+K              | Search by default, existing actions and `/workflow` syntax still available                      |
+| `>` / Ctrl or Cmd+Shift+P            | Commands only; editable prefix remains in the same input                                        |
+| `?`                                  | **Proposed reversible default:** Ask Chief of staff, in the existing global/pinned Chief thread |
+| Typed action                         | Existing argument chips plus a visible `> Action` parent trail                                  |
+| Visible Back / empty-input Backspace | Move within the palette hierarchy                                                               |
+| Prominent Close / Esc / browser Back | Dismiss the entire popup, including subcommands, menu and confirmation                          |
 
 No `!` trigger. Selecting a different mode keeps the query; it never sends, navigates, creates a conversation or runs a command. Prefix-only Ask and IME composition never submit. Prefix syntax is recognized only at the root: a typed task title that starts with `?` or `>` is literal text.
 

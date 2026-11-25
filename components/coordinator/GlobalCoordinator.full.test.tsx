@@ -57,7 +57,9 @@ vi.mock("./CoordinatorThread", async () => {
         <div data-testid="thread" data-standalone={String(!!p.standalone)} data-context={String(!!p.context)} data-on={p.selection?.sessionId ?? "chief"}>
           The conversation
           <output data-testid="thread-draft">{p.draft}</output>
-          <button type="button" onClick={() => p.onDraft?.("Existing draft")}>Keep a draft</button>
+          <button type="button" onClick={() => p.onDraft?.("Existing draft")}>
+            Keep a draft
+          </button>
           <button type="button" onClick={() => p.onSelection?.({ sessionId: "earlier-thread", fresh: false })}>
             Open an earlier thread
           </button>
@@ -143,7 +145,9 @@ it("explicit Chief Ask keeps the pinned destination, page context and draft even
     expect(screen.getByTestId("thread-draft").textContent).toBe("Existing draft\n\nNew question");
     expect(screen.getByTestId("thread").getAttribute("data-context")).toBe("true");
     expect(nav.push).not.toHaveBeenCalled();
-  } finally { pane.remove(); }
+  } finally {
+    pane.remove();
+  }
 });
 
 it("the rail offers Expand, which goes to the Chief of staff's own address", async () => {

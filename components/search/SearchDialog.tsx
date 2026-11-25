@@ -129,11 +129,11 @@ export function SearchDialog({ open, onClose, initialMode = "search" }: { open: 
   const [active, setActive] = useState(0);
   // Raycast state: a typed action with its chips, a confirm step for writes, breadcrumb sub-lists, the ⌘K panel.
   const [typed, setTyped] = useState<{ def: ActionDef; chips: Chip[] } | null>(null);
-  // Prefixes are syntax only at the root; a task title/question argument is literal text.
-  const { mode, query: q } = typed ? { mode: "commands" as const, query: raw } : paletteMode(raw);
   const [confirm, setConfirm] = useState<{ def: ActionDef; chips: Chip[]; run: () => Promise<void>; text?: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [stack, setStack] = useState<{ id: string; title: string }[]>([]);
+  // Prefixes are syntax only at the root; task titles and nested filters are literal text.
+  const { mode, query: q } = typed || stack.length ? { mode: "commands" as const, query: raw } : paletteMode(raw);
   const [panel, setPanel] = useState<{ title: string; entries: PanelEntry[] } | null>(null);
   const [panelActive, setPanelActive] = useState(0);
   const [recent, setRecent] = useState<RecentEntry[]>([]);
@@ -961,8 +961,8 @@ export function SearchDialog({ open, onClose, initialMode = "search" }: { open: 
           <PaletteActionPanel title={panel.title} entries={panel.entries} active={panelActive} onActive={setPanelActive} listId={panelId} />
         ) : null}
         <div className="flex flex-wrap items-center gap-2 border-t border-line bg-surface-2 px-4 py-2 text-xs text-muted">
-          <span className="flex shrink-0 items-center gap-1" data-testid="palette-footer">
-            <kbd className="kbd">↵</kbd> {primary}
+          <span className="flex min-w-0 max-w-full items-center gap-1" data-testid="palette-footer">
+            <kbd className="kbd">↵</kbd> <span className="min-w-0 break-words">{primary}</span>
           </span>
           <span className="min-w-0 flex-1 truncate" role="status">
             {typed || stack.length || confirm || mode !== "search" ? null : !q.trim() ? (
