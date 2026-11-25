@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { mock, openChatPanel, startConversation } from "./helpers";
+import { mock, openChatPanel, startConversation, appPost } from "./helpers";
 import type { ChatExecutionResponse } from "../lib/chat-execution";
 
 test.beforeEach(async ({ request, page }) => {
@@ -88,4 +88,71 @@ test("chat panel desktop: container panel owns rail, resize persists and collaps
   await page.getByRole("button", { name: "Collapse chat panel" }).click();
   await expect(panel).toHaveCount(0);
   await expect(page.getByTestId("gc-rail")).toHaveAttribute("data-open", "true");
+});
+
+test("execution receipts: exact task navigation, keyboard copy and completed history survive reload without creating work on view", async ({
+  page,
+  context,
+}, info) => {
+  test.skip(info.project.name !== "mobile");
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await startConversation(page, "zz-metadata route acceptance");
+  const sourceUrl = page.url();
+  const sourceId = decodeURIComponent(new URL(sourceUrl).pathname.split("/").at(-1)!);
+  const areaResponse = await appPost(page, "/api/work/items", { kind: "area", title: "zz-metadata route fixture" });
+  expect(areaResponse.ok()).toBeTruthy();
+  const area = (await areaResponse.json()).item;
+  const taskResponse = await appPost(page, "/api/work/items", { kind: "thread", parentId: area.id, title: "Exact metadata navigation target" });
+  expect(taskResponse.ok()).toBeTruthy();
+  const task = (await taskResponse.json()).item;
+  let completed = false;
+  let viewCreates = 0;
+  page.on("request", (request) => {
+    if (request.method() === "POST" && /\/api\/work\/items(?:\?|$)/.test(new URL(request.url()).pathname)) viewCreates++;
+  });
+  await page.route("**/api/hermes/sessions/*/execution", (route) =>
+    route.fulfill({
+      json: {
+        sessionId: sourceId,
+        parent: null,
+        sources: [{ source: "registered_runs", state: "ok" }],
+        fetchedAt: new Date().toISOString(),
+        records: [
+          {
+            key: "registered:exact",
+            id: "actual-fixture-run",
+            source: "registered_run",
+            title: "Check the exact task route",
+            state: completed ? "completed" : "running",
+            task: { id: task.id, title: task.title, href: `/areas?item=${task.id}` },
+            run: { id: "actual-fixture-run", ref: "R-9", events: [{ type: "progress", summary: "Navigation receipt retained", at: new Date().toISOString() }] },
+            sourceChat: { id: sourceId, href: `/chat/${sourceId}` },
+          },
+        ],
+      },
+    }),
+  );
+  try {
+    await page.reload();
+    let panel = await openChatPanel(page, "Running");
+    await panel.locator(".cp-run-summary").click();
+    const copy = panel.getByRole("button", { name: "Copy task id" });
+    await copy.focus();
+    await page.keyboard.press("Enter");
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(task.id);
+    await panel.getByRole("link", { name: task.title, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`item=${task.id}`));
+    await expect(page.getByRole("heading", { name: task.title, exact: true })).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole("heading", { name: task.title, exact: true })).toBeVisible();
+    completed = true;
+    await page.goto(sourceUrl);
+    panel = await openChatPanel(page, "Running");
+    await panel.locator(".cp-run-summary").click();
+    await expect(panel.getByText("completed", { exact: true })).toBeVisible();
+    await expect(panel.getByRole("list", { name: "Run history" })).toContainText("Navigation receipt retained");
+    expect(viewCreates).toBe(0);
+  } finally {
+    await page.request.patch(`/api/work/items/${area.id}`, { data: { archived: true }, headers: { "x-jarvis-csrf": "1" } });
+  }
 });
