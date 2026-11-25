@@ -35,7 +35,9 @@ test("chat panel: tray opens chip tabs, truthful running and parent links", asyn
   await expect(page.getByTestId("chat-tray")).toBeVisible();
   const panel = await openChatPanel(page, "Running");
   await expect(page.getByRole("dialog", { name: "In this chat", exact: true })).toBeVisible();
-  await expect(panel.getByText("Panel builder")).toBeVisible();
+  const builder = panel.locator(".cp-run-summary").filter({ hasText: "Panel builder" });
+  await expect(builder.locator(".cp-run-title")).toHaveText("Panel builder");
+  await builder.click();
   await expect(panel.getByRole("link", { name: "↩ Back to parent chat" })).toHaveAttribute("href", "/chat/sess_morning");
   await expect(panel.getByRole("link", { name: "Open child chat · @devchief" })).toHaveAttribute("href", "/chat/child");
   // "In this chat" has a fixed section for each kind of thing, all on the page at once (no tabs).
