@@ -87,9 +87,9 @@ function MenuDemo() {
           label="Actions for R-12"
           items={[
             { label: "R-12 · Working", heading: true },
-            { label: "Steer…" },
+            { label: "Steer…", icon: <SteerIcon className="h-4 w-4" /> },
             { label: "Review D-4 · Rotate the newsletter key before the next send" },
-            { label: "Ask to stop…", danger: true },
+            { label: "Ask to stop…", icon: <StopIcon className="h-4 w-4" />, danger: true },
           ]}
         />
       </div>
