@@ -31,6 +31,7 @@ import { CaptureTriageCard } from "@/components/capture/CaptureTriageCard";
 import { itemAgentChip } from "@/components/work/AgentChip";
 import { ItemWorkList, useItemWork, workRowId } from "@/components/work/ItemWork";
 import { TaskChat, draftFromUrl, type TaskDraft } from "@/components/work/TaskChat";
+import { TaskIdentity } from "@/components/work/TaskIdentity";
 import { ProjectTasks } from "@/components/tasks/ProjectTasks";
 import { TaskHeaderActions, TaskTimelineSection } from "@/components/tasks/TaskList";
 import { ChatMadeRows, TaskDecisions, TaskStatusBar, useChatMade, useTaskDecisions, type ChatMade, type TaskStatus } from "@/components/work/TaskOverview";
@@ -1432,6 +1433,7 @@ function ItemDetail({
             <AnchoredMenu menu={menu} label="More actions" items={menuItems} />
           </div>
         </div>
+        {leaf ? <TaskIdentity id={item.id} /> : null}
         {leaf ? null : headFields}
         {container ? (
           <>

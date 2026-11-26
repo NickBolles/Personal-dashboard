@@ -33,9 +33,9 @@ const NO_COMMANDS = [] as const;
 const SOURCE_NOTE: Record<TaskChatRow["source"], string> = { filed: "filed here", linked: "linked", recorded: "" };
 
 /**
- * "Other chats": the task's chats that are not its primary one, newest first, each with Make primary (confirmed,
- * with Undo), then the chats agent runs on this task happened in that are not this task's (a coordinator's own
- * chat): those are only linked to, never promoted.
+ * "Other chats" and "Source conversations": the task's chats that are not its primary one, newest first, each with
+ * Make primary (confirmed, with Undo), then the chats agent runs on this task happened in that are not this task's
+ * (a coordinator's own chat): source conversations are only linked to, never promoted.
  */
 export function OtherChats({
   item,
@@ -61,9 +61,10 @@ export function OtherChats({
   );
   const count = others.length + startedIn.length;
   if (!count) return null;
+  const summary = others.length ? (startedIn.length ? "Other chats and sources" : "Other chats") : "Source conversations";
   return (
     <>
-      <Disclosure summary="Other chats" meta={String(count)} className="tc-others" testId="task-other-chats">
+      <Disclosure summary={summary} meta={String(count)} className="tc-others" testId="task-other-chats">
         <ul className="tc-list">
           {others.map((c) => (
             <li key={c.sessionId} className="tc-row">
@@ -79,7 +80,7 @@ export function OtherChats({
           {startedIn.map((sessionId) => (
             <li key={sessionId} className="tc-row">
               <Link href={`/chat/${encodeURIComponent(sessionId)}`} className="tc-link">
-                Started in another chat
+                Source conversation
               </Link>
               <span className="tc-note">also used for other work</span>
             </li>
@@ -239,11 +240,8 @@ function FirstMessage({ d, scroll, lead, prefill }: { d: WorkDetail; scroll: "wi
       <div className="tc-first-body">
         {lead}
         {/* Beside Overview (docked) the summary and the log are already on screen: a thing is drawn once. */}
-        {docked ? (
-          <p className="tc-first-what tc-first-quiet">No chat on this task yet.</p>
-        ) : (
-          <p className="tc-first-what">{item.summary || item.nextAction || "No chat on this task yet."}</p>
-        )}
+        <p className={docked ? "tc-first-what tc-first-quiet" : "tc-first-what"}>No dedicated chat on this task yet.</p>
+        {!docked && (item.summary || item.nextAction) ? <p className="tc-first-what">{item.summary || item.nextAction}</p> : null}
         {happened.length && !docked ? (
           <ol className="tc-first-log" aria-label="What has happened">
             {happened.map((e) => (
