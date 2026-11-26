@@ -13,6 +13,8 @@ import { SharedConversations } from "./SharedConversations";
 import { SmartSettings } from "./SmartSettings";
 import { REASONING_EFFORTS } from "@/lib/ai";
 import { AppearanceCard } from "./AppearanceCard";
+import { BrandLockup } from "@/components/brand/BrandLockup";
+import { BRAND_EXPANSION, BRAND_INTRO, BRAND_TAGLINE } from "@/lib/brand";
 import { settingsSections } from "./sections";
 
 type Prefs = {
@@ -93,6 +95,16 @@ export function SettingsView() {
           </ul>
         </nav>
         <div className="min-w-0 space-y-4">
+          <Card>
+            <SectionHeader label="About Atlas" />
+            <div className="mt-2 space-y-2" data-testid="atlas-about">
+              <BrandLockup />
+              <p className="text-sm">{BRAND_TAGLINE}</p>
+              <p className="text-sm text-muted">{BRAND_INTRO}.</p>
+              <p className="text-xs text-muted">{BRAND_EXPANSION}</p>
+              <p className="text-xs text-muted">Hermes is the agent runtime. Chief of staff is your coordinator.</p>
+            </div>
+          </Card>
           <AppearanceCard />
           {form ? (
             <Card>

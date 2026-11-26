@@ -11,7 +11,7 @@ export function settingsSections(isAdmin: boolean, can: (cap: string) => boolean
       ? [{ href: "/settings/brief", label: "Brief", desc: "Who writes your daily brief, what the model sees, and what it knows about you" }]
       : []),
     { href: "/settings/notifications", label: "Notifications", desc: "Push on this device, quiet hours, categories" },
-    { href: "/settings/phones", label: "Phones", desc: "Pair the Jarvis Android app, phone notifications" },
+    { href: "/settings/phones", label: "Phones", desc: "Pair the Atlas Android app, phone notifications" },
     ...(isAdmin ? [{ href: "/settings/ai", label: "AI", desc: "Budget, models and capture triage for background AI actions" }] : []),
     ...(isAdmin ? [{ href: "/settings/agents", label: "Agents", desc: "Which Hermes profile answers in each area" }] : []),
     { href: "/settings#appearance", label: "Appearance", desc: "Theme and density on this device" },

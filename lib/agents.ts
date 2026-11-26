@@ -76,7 +76,7 @@ export const AGENT_REASON_TEXT: Record<AgentReason, string> = {
   default: "Hermes default profile",
   routing_off: "Profile routing is off, so the profile name is sent as a hint to the default profile",
   not_configured: "No route for this profile in Settings → Agents, so it is sent as a hint to the default profile",
-  missing_key: "This profile's key isn't in the Jarvis secrets file yet, so it is sent as a hint to the default profile",
+  missing_key: "This profile's key isn't in the Atlas secrets file yet, so it is sent as a hint to the default profile",
   started_on_default: "This conversation started on the default profile. New conversations here use the area's profile",
 };
 

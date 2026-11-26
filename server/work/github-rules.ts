@@ -36,7 +36,7 @@ const WRITE_SCOPES = new Set([
   "admin:repo_hook",
   "write:discussion",
 ]);
-export const WRITE_WARNING = "This token can write — Jarvis only needs read. Prefer a fine-grained read-only token.";
+export const WRITE_WARNING = "This token can write — Atlas only needs read. Prefer a fine-grained read-only token.";
 
 export function tokenType(token: string): "classic" | "fine_grained" | "other" {
   if (token.startsWith("github_pat_")) return "fine_grained";

@@ -19,7 +19,7 @@ export function ConnectionsView() {
   );
   return (
     <div className="mx-auto w-full max-w-220">
-      <PageHeader title="Connections" subtitle="Credentials stay on the Jarvis server, encrypted at rest." />
+      <PageHeader title="Connections" subtitle="Credentials stay on the Atlas server, encrypted at rest." />
       {q.isPending ? <LoadingState label="Loading connections…" /> : null}
       {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
       <ul className="space-y-1.5">
@@ -98,7 +98,7 @@ export function ConnectionsView() {
         <ExtraPanel
           id="bible"
           title="Offline Bible"
-          tagline="World English Bible verse text on this Jarvis: off until you download it"
+          tagline="World English Bible verse text on this Atlas: off until you download it"
           open={open}
           setOpen={setOpen}
         >

@@ -67,7 +67,7 @@ test("a new chat lands in Miscellaneous, files in one tap, and the composer refe
   const sent = page.locator(`[data-ref="area:${area.id}"]`);
   await expect(sent).toBeVisible({ timeout: 15_000 });
   await expect(sent).toHaveText(`@Rollout ${nonce}`);
-  await expect(page.getByText("Context Jarvis attached").first()).toBeVisible();
+  await expect(page.getByText("Context Atlas attached").first()).toBeVisible();
 
   // / commands: /model opens the searchable list from Hermes' real model list.
   await page.getByText("Done", { exact: true }).waitFor({ timeout: 20_000 });

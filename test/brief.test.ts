@@ -825,7 +825,7 @@ describe("improve: handing a change to an agent", () => {
     const run = getDb().select().from(schema.runs).where(eq(schema.runs.sessionId, made.sessionId)).get()!;
     expect(run.userId).toBe(owner);
     expect(run.idempotencyKey).toBe(`improve-${made.id}`);
-    expect(run.inputPreview ?? "").toContain("I want to change how Jarvis works for me");
+    expect(run.inputPreview ?? "").toContain("I want to change how Atlas works for me");
     const prompt = improvePrompt(text, item);
     expect(prompt).toContain(text);
     expect(prompt).toContain(item.id);
@@ -1120,7 +1120,7 @@ describe("the sparkle: an agent looks into one row", () => {
     };
     const r = await startAssist(u, { target: { kind: "item", id: p.id }, clientKey: key() }, "t", deps);
     expect(sent!.input).toContain("SCOPED_INITIATIVE");
-    expect(sent!.instructions).toContain("filed in Jarvis under: Scoped area › SCOPED_INITIATIVE");
+    expect(sent!.instructions).toContain("filed in Atlas under: Scoped area › SCOPED_INITIATIVE");
     // Not its child tasks, their next actions or its notes: the open-items snapshot a typed chat message carries is left out.
     expect(`${sent!.input}
 ${sent!.instructions}`).not.toContain("SCOPED_CHILD");

@@ -108,8 +108,8 @@ export function WorkoutView() {
         confirmed.session.status === "cancelled"
           ? "Workout discarded · excluded from history and records"
           : confirmed.session.status === "completed"
-            ? "Workout finished · saved privately in Jarvis"
-            : "Saved in Jarvis · ready to resume",
+            ? "Workout finished · saved privately in Atlas"
+            : "Saved in Atlas · ready to resume",
       );
     } catch (e) {
       setError((e as Error).message);
@@ -156,7 +156,7 @@ export function WorkoutView() {
         throw new Error("Import readback incomplete. Retry the same file safely.");
       setRows(readback.workouts);
       setImportData(null);
-      setNotice(`${result.imported} imported · ${result.skipped} already present · saved in Jarvis`);
+      setNotice(`${result.imported} imported · ${result.skipped} already present · saved in Atlas`);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -381,7 +381,7 @@ export function WorkoutView() {
                 <div className="space-y-4 rounded-2xl bg-surface p-4 sm:p-5">
                   <SectionHeader label="Your plan" count={plan.length} action={<span className="text-xs text-muted">~{options.minutes} min</span>} />
                   <p className="text-xs text-muted">
-                    Deterministic plan from your completed Jarvis sets, not AI. Includes time for warm-up and rests; adjust to your pace.
+                    Deterministic plan from your completed Atlas sets, not AI. Includes time for warm-up and rests; adjust to your pace.
                   </p>
                   {plan.map((e) => (
                     <div key={e.name} className="flex items-start justify-between gap-3">
@@ -444,7 +444,7 @@ export function WorkoutView() {
                 <summary className="tap cursor-pointer">
                   <span className="text-xs text-muted">
                     {r.session.date}
-                    {r.source ? " · Imported" : " · Jarvis"}
+                    {r.source ? " · Imported" : " · Atlas"}
                   </span>
                   <span className="block font-medium">{r.session.title}</span>
                 </summary>
@@ -515,7 +515,7 @@ export function WorkoutView() {
         </section>
       )}
       <footer className="text-xs leading-relaxed text-muted">
-        Saved privately in Jarvis. Notion sync is not implemented. Nothing is written to Notion or your original workout artifact.
+        Saved privately in Atlas. Notion sync is not implemented. Nothing is written to Notion or your original workout artifact.
       </footer>
     </div>
   );

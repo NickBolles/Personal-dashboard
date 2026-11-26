@@ -22,7 +22,7 @@ test("keyboard open: composer sits above it, bottom bar + orb hide, list jumps t
   await page.setViewportSize({ width, height: kb });
   await expect(page.locator("html")).toHaveAttribute("data-kb", "open");
   await expect(phoneBar(page)).toBeHidden();
-  await expect(page.getByRole("button", { name: "Jarvis commands" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "Atlas commands" })).toBeHidden();
   const box = await composer.boundingBox();
   expect(box).not.toBeNull();
   expect(box!.y + box!.height).toBeLessThanOrEqual(kb);

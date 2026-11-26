@@ -158,7 +158,7 @@ class AreasTest {
         var retried = 0
         compose.setContent {
             JarvisTheme(dynamicColor = false) {
-                ItemContent(Loadable(error = "Can't reach Jarvis (offline)"), "t_door", false, {}, {}, {}, { _, _, _ -> }, { _, _ -> }, {}, {}, {}, { retried++ })
+                ItemContent(Loadable(error = "Can't reach Atlas (offline)"), "t_door", false, {}, {}, {}, { _, _, _ -> }, { _, _ -> }, {}, {}, {}, { retried++ })
             }
         }
         compose.onNodeWithText("Can't reach Jarvis (offline)").assertExists()

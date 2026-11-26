@@ -387,7 +387,7 @@ function UserText({ body, ctx }: { body: string; ctx: string }) {
       </p>
       {ctx ? (
         <details className="mt-1 text-xs text-muted">
-          <summary className="cursor-pointer">Context Jarvis attached</summary>
+          <summary className="cursor-pointer">Context Atlas attached</summary>
           <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words">{ctx}</pre>
         </details>
       ) : null}
@@ -496,7 +496,7 @@ export function LiveRun({
       {state.phase === "queued" ? (
         <p role="status" className="text-sm text-muted">
           {state.queueReason === "connections"
-            ? "Queued — your message was sent. Jarvis is waiting for a free Hermes connection and shows the reply as soon as one opens."
+            ? "Queued — your message was sent. Atlas is waiting for a free Hermes connection and shows the reply as soon as one opens."
             : "Queued — waiting for an available agent slot. You can leave this chat; the server will start it automatically."}
         </p>
       ) : null}

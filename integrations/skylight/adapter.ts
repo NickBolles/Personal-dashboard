@@ -190,7 +190,7 @@ function choreCategory(rel: Record<string, unknown> | undefined): string | null 
   return many.success && many.data.data[0] ? String(many.data.data[0].id) : null;
 }
 
-/** The owner's member ids: configured, else a unique name match against the Jarvis owner. */
+/** The owner's member ids: configured, else a unique name match against the Atlas owner. */
 async function ownerMembers(members: SkylightMember[], configured: string[]): Promise<string[]> {
   if (configured.length) return configured;
   try {
@@ -567,7 +567,7 @@ async function fetchDirect(ctx: AdapterContext): Promise<SourceData> {
           ...(frequency ? { recurrenceFrequency: frequency } : {}),
           ...(recurring && a.start ? { instanceDate: String(a.start).slice(0, 10) } : {}),
           ...(recurring && a.start_time ? { instanceTime: String(a.start_time).slice(0, 5) } : {}),
-          // Skylight's own flag (not Jarvis' group classification): only these completions may name who did it.
+          // Skylight's own flag (not Atlas' group classification): only these completions may name who did it.
           ...(a.up_for_grabs === true ? { upForGrabs: true } : {}),
           ...(a.start ? { startDate: String(a.start).slice(0, 10) } : {}),
           ...(a.start_time ? { startTime: String(a.start_time).slice(0, 5) } : {}),
@@ -651,7 +651,7 @@ export const skylightAdapter: SourceAdapter = {
               if (!(err instanceof UpstreamError) || err.kind !== "bad_response") throw err;
               // The usual cause: the Hermes profile serving Jarvis lacks the reader skill or its Skylight credentials.
               throw new Error(
-                `${err.message}. Check that the Hermes profile serving Jarvis has the jarvis-skylight-read skill installed and SKYLIGHT_USERNAME, SKYLIGHT_PASSWORD and SKYLIGHT_FRAME_ID set (docs/operations/skylight-reliability.md), or switch to “Directly” and sign in.`,
+                `${err.message}. Check that the Hermes profile serving Atlas has the jarvis-skylight-read skill installed and SKYLIGHT_USERNAME, SKYLIGHT_PASSWORD and SKYLIGHT_FRAME_ID set (docs/operations/skylight-reliability.md), or switch to “Directly” and sign in.`,
               );
             }
             saveSnapshot("skylight", ctx.today, answer);

@@ -25,7 +25,7 @@ export function presentTool(name: string, input?: unknown, depth = 0): ToolPrese
     label = "Used a tool";
   if (/jarvis/.test(lower)) {
     kind = "jarvis";
-    label = "Jarvis request";
+    label = "Atlas request";
   } else if (/delegate|subagent/.test(lower)) {
     kind = "agent";
     label = "Delegated work";
@@ -54,7 +54,7 @@ export function presentTool(name: string, input?: unknown, depth = 0): ToolPrese
           ? "Requested item update"
           : lower.includes("get_item")
             ? "Read item"
-            : "Jarvis request";
+            : "Atlas request";
   const children: ToolPresentation[] = [];
   if (depth < 3 && /tool_call|parallel/.test(lower)) {
     const calls = args?.calls ?? args?.tool_uses;

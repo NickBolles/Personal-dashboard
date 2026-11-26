@@ -58,13 +58,13 @@ export function PhonesView() {
 
   return (
     <div className="mx-auto w-full max-w-220 space-y-4">
-      <PageHeader title="Phones" subtitle="The Jarvis Android app: pair it, see where you're signed in, set up notifications." />
+      <PageHeader title="Phones" subtitle="The Atlas Android app: pair it, see where you're signed in, set up notifications." />
 
       <Card>
         <h2 className="font-semibold">Pair a phone</h2>
         <p className="mt-1 text-sm text-muted">
-          In the Jarvis app, tap <strong>Scan pairing code</strong> and point it at the QR code, or type the server address and code by hand. Codes work once
-          and expire after 10 minutes.
+          In the Atlas app, tap <strong>Scan pairing code</strong> and point it at the QR code, or type the server address and code by hand. Codes work once and
+          expire after 10 minutes.
         </p>
         {pairing && !expired ? (
           <div className="mt-4 flex flex-wrap items-center gap-5">
@@ -153,7 +153,7 @@ export function PhonesView() {
           <Field
             id="sa"
             label="Service-account key (JSON)"
-            hint={push.data?.serviceAccount ? "Saved (encrypted). Paste again to replace." : "Stored encrypted on the Jarvis server; never sent to the phone."}
+            hint={push.data?.serviceAccount ? "Saved (encrypted). Paste again to replace." : "Stored encrypted on the Atlas server; never sent to the phone."}
           >
             <Textarea
               id="sa"

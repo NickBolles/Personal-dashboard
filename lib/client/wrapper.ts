@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * "Is this page running inside the Jarvis Android app (a Trusted Web Activity)?"
+ * "Is this page running inside the Atlas Android app (a Trusted Web Activity)?"
  * The app opens every URL with ?source=android, and Chrome sets the referrer to
  * android-app://com.nickbolles.jarvis on its first navigation. The answer is
  * kept in sessionStorage (per tab), not localStorage: the app shares storage

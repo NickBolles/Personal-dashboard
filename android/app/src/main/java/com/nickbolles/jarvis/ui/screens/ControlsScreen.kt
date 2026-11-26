@@ -226,7 +226,7 @@ fun ControlsContent(
                 if (doorControls) item { SectionHeader("Controls") }
                 if (doorControls) controls.error?.let { item { StatusBanner("Controls need live state: $it", tone = "danger", onRetry = onRefresh) } }
                 val list = if (doorControls) controls.data?.controls.orEmpty() else emptyList()
-                if (doorControls && controls.data != null && list.isEmpty()) item { EmptyState("No controls allowed", "Add entities to “Allowed controls” in Jarvis on the web (Settings → Connections → Home Assistant).") }
+                if (doorControls && controls.data != null && list.isEmpty()) item { EmptyState("No controls allowed", "Add entities to “Allowed controls” in Atlas on the web (Settings → Connections → Home Assistant).") }
                 items(list, key = { "c:${it.entityId}" }) { c -> ControlRow(c, pending == c.entityId, pending != null, onRequest = { s -> confirm = c to s }) }
                 if (doorControls) item {
                     Text(
@@ -268,7 +268,7 @@ fun ControlsContent(
         AlertDialog(
             onDismissRequest = { confirm = null },
             title = { Text("$label ${c.name}?") },
-            text = { Text("Current state: ${c.state}. Jarvis checks that it hasn't changed, then waits for Home Assistant to confirm.") },
+            text = { Text("Current state: ${c.state}. Atlas checks that it hasn't changed, then waits for Home Assistant to confirm.") },
             confirmButton = { Button(onClick = { confirm = null; onExecute(c, service) }) { Text("Yes, ${label.lowercase()}") } },
             dismissButton = { TextButton(onClick = { confirm = null }) { Text("Cancel") } },
         )

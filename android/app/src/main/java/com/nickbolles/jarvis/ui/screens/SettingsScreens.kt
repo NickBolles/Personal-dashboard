@@ -195,7 +195,7 @@ fun SettingsScreen() {
         AlertDialog(
             onDismissRequest = { confirmSignOut = false },
             title = { Text("Sign out this phone?") },
-            text = { Text("Jarvis forgets this phone and stops sending it notifications. You can pair it again any time.") },
+            text = { Text("Atlas forgets this phone and stops sending it notifications. You can pair it again any time.") },
             confirmButton = { Button(onClick = { confirmSignOut = false; vm.signOut() }) { Text("Sign out") } },
             dismissButton = { TextButton(onClick = { confirmSignOut = false }) { Text("Cancel") } },
         )
@@ -231,7 +231,7 @@ fun SettingsContent(
                             SegmentedButton(selected = layout.theme == value, onClick = { onLayout(layout.copy(theme = value)) }, shape = SegmentedButtonDefaults.itemShape(i, options.size)) { Text(label) }
                         }
                     }
-                    ToggleRow("Colors from my wallpaper", "Material You. Off uses Jarvis blue.", layout.dynamicColor) { onLayout(layout.copy(dynamicColor = it)) }
+                    ToggleRow("Colors from my wallpaper", "Material You. Off uses Atlas blue.", layout.dynamicColor) { onLayout(layout.copy(dynamicColor = it)) }
                     ToggleRow("Compact lists", "Tighter cards to fit more on screen.", layout.density == "compact") { onLayout(layout.copy(density = if (it) "compact" else "comfortable")) }
                 }
             }
@@ -243,14 +243,14 @@ fun SettingsContent(
                     val push = me.data?.push
                     Text(
                         when {
-                            !notificationsAllowed -> "Notifications are turned off for Jarvis on this phone."
-                            push == null && me.data != null -> "Phone notifications aren't set up on the server yet. In Jarvis on the web: Settings → Phones → Firebase."
-                            me.data?.device?.pushEnabled == true -> "This phone gets Jarvis notifications."
+                            !notificationsAllowed -> "Notifications are turned off for Atlas on this phone."
+                            push == null && me.data != null -> "Phone notifications aren't set up on the server yet. In Atlas on the web: Settings → Phones → Firebase."
+                            me.data?.device?.pushEnabled == true -> "This phone gets Atlas notifications."
                             else -> "Registering this phone for notifications…"
                         },
                         style = MaterialTheme.typography.bodyLarge,
                     )
-                    Text("Quiet hours and categories are in Jarvis on the web (Settings → Notifications).", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Quiet hours and categories are in Atlas on the web (Settings → Notifications).", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = onTestNotification, enabled = notificationsAllowed && me.data?.push != null) { Text("Send a test") }
                         OutlinedButton(onClick = onSystemNotifications) { Text("System settings") }
@@ -270,7 +270,7 @@ fun SettingsContent(
             }
             item {
                 Text(
-                    "Connections, integrations and pairing other phones are managed in Jarvis on the web.",
+                    "Connections, integrations and pairing other phones are managed in Atlas on the web.",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 8.dp),
@@ -326,7 +326,7 @@ fun LayoutContent(layout: Layout, onChange: (Layout) -> Unit) {
     Column(Modifier.fillMaxSize()) {
         TopAppBar(title = { Text("Home layout") }, navigationIcon = { IconButton(onClick = app::back) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back") } })
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            item { Text("Order and show the sections of Home. Jarvis on the web uses the same layout.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            item { Text("Order and show the sections of Home. Atlas on the web uses the same layout.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             itemsIndexed(sections, key = { _, s -> s.id }) { i, s ->
                 Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {

@@ -135,7 +135,7 @@ const SOURCE_NAMES: Record<string, string> = {
   paperclip: "Paperclip",
   github: "GitHub",
   finance: "Finance",
-  jarvis: "Jarvis",
+  jarvis: "Atlas",
 };
 
 /** Compact label for the source chip, e.g. "Skylight · Chores", "Google Tasks · Groceries". */

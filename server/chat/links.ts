@@ -63,7 +63,7 @@ function sorted(list: (typeof schema.conversationLinks.$inferSelect)[]): PanelLi
     .map(toPanel);
 }
 
-/** Artifact slugs → readable title ("jarvis-chat-context-20261030" → "Jarvis chat context · 2026-10-30"). */
+/** Artifact slugs → readable title ("jarvis-chat-context-20261030" → "Atlas chat context · 2026-10-30"). */
 export function artifactTitle(slug: string) {
   const m = slug.match(/^(.*?)-?(\d{4})(\d{2})(\d{2})$/);
   const words = (m ? m[1] : slug).replace(/[-_.]+/g, " ").trim();

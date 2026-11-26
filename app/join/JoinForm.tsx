@@ -1,4 +1,5 @@
 "use client";
+import { BrandLockup } from "@/components/brand/BrandLockup";
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/client/api";
@@ -55,7 +56,7 @@ export function JoinForm({ initialCode }: { initialCode: string }) {
         }}
       >
         <div>
-          <p className="text-sm font-medium text-accent">Jarvis</p>
+          <BrandLockup />
           <h1 className="text-2xl font-semibold">{who ? `Welcome, ${who.name}` : "Join your household"}</h1>
           {who ? (
             <p className="mt-1 text-sm text-muted">

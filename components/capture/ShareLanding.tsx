@@ -45,7 +45,7 @@ export function ShareLanding({ staged, error }: { staged?: string; error?: strin
         <h1 className="mb-2 text-lg font-semibold">{staged || error ? "Save to Inbox" : "Capture"}</h1>
         {error === "sw" ? (
           <p role="alert" className="mb-2 text-[13px] text-danger">
-            Couldn&apos;t receive the share. Open Jarvis once and try again.
+            Couldn&apos;t receive the share. Open Atlas once and try again.
           </p>
         ) : null}
         {share === undefined ? (

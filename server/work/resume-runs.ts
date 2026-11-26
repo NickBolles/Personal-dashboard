@@ -108,7 +108,7 @@ export async function resumeInterruptedRuns(
     const listed = claims.map(({ run: r }) => ({ ref: runRef(r.seq) ?? r.id, title: r.title }));
     let input = resumePrompt(listed);
     // Titles are agent-written: never send credential-looking text to a model.
-    if (detectSensitivity(input) === "credentials") input = resumePrompt(listed.map((r) => ({ ref: r.ref, title: "see Jarvis" })));
+    if (detectSensitivity(input) === "credentials") input = resumePrompt(listed.map((r) => ({ ref: r.ref, title: "see Atlas" })));
     const key = `cw-resume:${sessionId}:${claims.map(({ run: r }) => `${r.seq}@${r.interruptedAt ?? ""}`).join(",")}`.slice(0, 255);
     try {
       await d.track(user, group.profile === "default" ? null : group.profile, sessionId, correlationId);
@@ -152,7 +152,7 @@ export async function resumeInterruptedRuns(
 const defaultDeps: Deps = {
   start: async (user, r, cid) => (await import("@/server/assistant")).startRun(user, r, cid),
   steer: async (user, runId, input, cid) => (await import("@/server/assistant")).steerRun(user, runId, input, cid),
-  // An agent's own session (made outside Jarvis) is recorded on the run's profile first, so the run goes to
+  // An agent's own session (made outside Atlas) is recorded on the run's profile first, so the run goes to
   // the right Hermes profile; sessions Jarvis already tracks keep their profile.
   track: async (user, profile, sessionId, cid) => {
     const { sessionProfile, adoptSession } = await import("@/integrations/hermes/service");

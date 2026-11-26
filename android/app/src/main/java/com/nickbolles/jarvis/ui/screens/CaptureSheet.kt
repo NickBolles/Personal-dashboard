@@ -65,7 +65,7 @@ fun CaptureSheet(graph: AppGraph, request: CaptureRequest, onDismiss: () -> Unit
                 modifier = Modifier.padding(horizontal = 20.dp),
             )
             Text(
-                "Tap a chip to attach what Jarvis knows right now (calendar, chores, home state…).",
+                "Tap a chip to attach what Atlas knows right now (calendar, chores, home state…).",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 20.dp),

@@ -28,7 +28,7 @@ export function CaptureTriageCard({ itemId }: { itemId: string }) {
           }}
         />
         {triage.state === "done" ? (
-          <p className="mt-1 text-xs text-muted">Check it and settle when you&apos;re happy — Jarvis never settles on its own.</p>
+          <p className="mt-1 text-xs text-muted">Check it and settle when you&apos;re happy — Atlas never settles on its own.</p>
         ) : null}
       </Card>
     </div>

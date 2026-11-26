@@ -166,7 +166,7 @@ private fun MainScaffold(graph: AppGraph, requests: MutableStateFlow<LaunchReque
                 when {
                     href.startsWith("http://") || href.startsWith("https://") ->
                         runCatching { graph.context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(href)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-                    else -> Routes.fromPath(href)?.let { navigate(it) } ?: message("That opens in Jarvis on the web")
+                    else -> Routes.fromPath(href)?.let { navigate(it) } ?: message("That opens in Atlas on the web")
                 }
             }
         }

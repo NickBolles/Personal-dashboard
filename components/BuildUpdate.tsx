@@ -58,7 +58,7 @@ export function BuildUpdate() {
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-28 z-50 flex justify-center px-4 lg:bottom-6" data-build-update={update.slice(0, 7)}>
       <div className="pointer-events-auto flex items-center gap-1">
-        <Toast message="Jarvis updated" action={{ label: "Reload", onClick: () => void reloadOntoNewBuild() }} />
+        <Toast message="Atlas updated" action={{ label: "Reload", onClick: () => void reloadOntoNewBuild() }} />
         <Button variant="ghost" size="sm" aria-label="Dismiss update notice" onClick={() => setDismissed(true)}>
           Later
         </Button>

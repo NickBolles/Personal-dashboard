@@ -30,7 +30,7 @@ export function smartInstructions(): string {
     DecisionMatrix:
       "{title,ref:item,criteria:[{id,label,weight:1-3}],options:[{id,label,consequence?,scores:{criterionId:1-5}}]} 2-6 criteria,2-4 options; scores=model estimates; weights local",
     Gantt: "{title,rows:[{ref:item,start?:date,milestone?}],from?,to?} <=30; live item dates",
-    BarChart: "{metric,label?} Jarvis series only",
+    BarChart: "{metric,label?} Atlas series only",
     ApprovalQueue: "{title?} read-only; no approval writes",
     Form: "{title,fields:[{id,label,kind:text|textarea|scale|choice|toggle,options?:[{value,label}],required?,proposed?}],submit:{label,creates?:[{parentRef,titleField,splitLines?,maxItems?:1-3}],updates?:[item.update]}} <=12 fields; no writes = ONE Submit chat reply; otherwise stages writes",
   };
@@ -39,7 +39,7 @@ export function smartInstructions(): string {
       `Compact UI: ONE jarvis-ui fence {v:1,catalog:"${CATALOG_ID}",root:"r",elements:{r:{type,props,children?:[ids]}}}. JSON only. Only Stack/Section have children. Brief labels/options; context once, no stacked callouts or prose repeating choices. Prefer DecisionCards for choices, Form for mixed inputs.`,
       "Copy refs from context; never invent item titles/dates. AI-excluded areas stay out. Never include credentials, tokens or full account numbers. No URLs/HTML/styles. Proposals only: Apply confirms, Undo reverts. Dates=YYYY-MM-DD, today..+365d for writes. Never settle/delete/merge.",
       ...COMPONENT_NAMES.map((n) => `${n} ${hints[n]}`),
-      "metric:ai_spend_today|ai_spend_7d|items_done_14d|overdue_count: Jarvis numbers, never yours.",
+      "metric:ai_spend_today|ai_spend_7d|items_done_14d|overdue_count: Atlas numbers, never yours.",
       "Intents: todo.complete{ref}, todo.snooze{ref,date}, todo.drop{ref,note?}, todo.promote{ref,parentRef}, item.update{ref,patch:{nextAction?,targetDate?,status?}}, item.create{parentRef,title}. No direct writes.",
     ].join("\n"),
   );

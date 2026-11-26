@@ -30,7 +30,7 @@ export async function testTurn(user: CurrentUser, body: z.infer<typeof testTurnB
   if (!parsed.ok) throw new WorkflowValidationError(parsed.issues);
   const def: WorkflowDefinition = parsed.definition;
   const task = [
-    "SANDBOX TEST TURN for a Jarvis workflow draft. Nothing you answer is saved.",
+    "SANDBOX TEST TURN for an Atlas workflow draft. Nothing you answer is saved.",
     `Workflow: ${def.name}`,
     "<instructions>",
     def.instructions,

@@ -216,7 +216,7 @@ export function describeAction(a: ResolvedAction): string {
     case "skylight_event_create":
       return `Add “${a.summary}” to the family calendar on ${a.date}${a.time ? ` at ${a.time}` : " (all day)"}`;
     case "jarvis_task":
-      return `Keep “${a.title}” as a Jarvis to-do`;
+      return `Keep “${a.title}” as an Atlas to-do`;
   }
 }
 
@@ -228,7 +228,7 @@ export function doneText(a: ResolvedAction): string {
     case "skylight_event_create":
       return `added “${a.summary}” to the family calendar on ${a.date}${a.time ? ` at ${a.time}` : " (all day)"}`;
     case "jarvis_task":
-      return `filed “${a.title}” as a Jarvis to-do`;
+      return `filed “${a.title}” as an Atlas to-do`;
   }
 }
 
@@ -283,7 +283,7 @@ function needsInput(
   const todo = ctx.lists.find((l) => l.kind === "to_do") ?? ctx.lists[0];
   if (todo && !choices.some((c) => c.action?.type === "skylight_list_add"))
     push(`Add “${name}” to ${todo.label} on Skylight`, { type: "skylight_list_add", listId: todo.id, listLabel: todo.label, label: name });
-  if (!choices.some((c) => c.action?.type === "jarvis_task")) push("Just keep it as a Jarvis to-do", { type: "jarvis_task", title: name, nextAction: name });
+  if (!choices.some((c) => c.action?.type === "jarvis_task")) push("Just keep it as an Atlas to-do", { type: "jarvis_task", title: name, nextAction: name });
   const question =
     action.question ||
     (action.type === "skylight_event_create"

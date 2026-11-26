@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * The app's launcher: opens the Jarvis web app full screen in Chrome (Trusted Web Activity).
+ * The app's launcher: opens the Atlas web app full screen in Chrome (Trusted Web Activity).
  * Also the target of every widget, tile, shortcut and notification tap: their native links
  * (jarvis://open/<path>, jarvis://areas/<id>) become web URLs through [WebLinks].
  *

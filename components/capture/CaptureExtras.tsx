@@ -123,7 +123,7 @@ export function CaptureExtras({ entry, onAccepted, onChoose }: { entry: InboxEnt
 export function CaptureRowMenu({ entry, label, onDismiss }: { entry: InboxEntry; label: string; onDismiss: () => void }) {
   const c = entry.capture!;
   const canAi = useAccess().can("work.ai");
-  const investigate = useWorkMutation(() => api.post(`/api/work/inbox/${encodeURIComponent(entry.id)}/investigate`, {}), { ok: "Jarvis is looking into it" });
+  const investigate = useWorkMutation(() => api.post(`/api/work/inbox/${encodeURIComponent(entry.id)}/investigate`, {}), { ok: "Atlas is looking into it" });
   const items: MenuItem[] = [];
   if (canAi && !c.report && !c.investigating && c.sensitivity !== "credentials" && c.triageState !== "queued")
     items.push({ label: "Investigate", onSelect: () => investigate.mutate() });

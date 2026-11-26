@@ -22,7 +22,7 @@ export function buildDeviceProposal(p: DeviceProposal, profile: string, actor: s
   const base = { actor, action: `ha.propose.${p.service}`, source: "home_assistant", sourceRecord: p.entityId, correlationId };
   if (!servicePolicy(p.entityId, p.service) || !entityServices(controlRules(), p.entityId).includes(p.service)) {
     audit({ ...base, result: "rejected", detail: { reason: "not_allowlisted", via: `agent:${profile}` } });
-    throw new HttpError(403, "not_allowlisted", "That device action isn't allowed in Jarvis");
+    throw new HttpError(403, "not_allowlisted", "That device action isn't allowed in Atlas");
   }
   let data: ServiceData;
   try {

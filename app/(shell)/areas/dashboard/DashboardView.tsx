@@ -81,7 +81,7 @@ export function DashboardView() {
       <WorkPageHeader
         eyebrow="Dashboard · yours"
         title="Dashboard"
-        subtitle="Your work at a glance. Widgets read Jarvis work data only."
+        subtitle="Your work at a glance. Widgets read Atlas work data only."
         actions={
           <>
             {editing ? (
@@ -612,7 +612,7 @@ function WidgetDialog({ areas, widget, onClose }: { areas: DashboardResponse["ar
             <Field
               id="wg-html"
               label="HTML"
-              hint={`Runs in a sandboxed frame with no network access, cookies or Jarvis APIs. ${Math.ceil(htmlBytes / 1024)} of 100 KB.`}
+              hint={`Runs in a sandboxed frame with no network access, cookies or Atlas APIs. ${Math.ceil(htmlBytes / 1024)} of 100 KB.`}
               error={htmlBytes > CUSTOM_HTML_MAX_BYTES ? "Too large: custom HTML is limited to 100 KB." : undefined}
             >
               <Textarea

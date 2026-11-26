@@ -385,7 +385,7 @@ function describeTarget(id: string) {
  */
 export function hermesBrief(view: TuningView, budget: { now: number; today: number; upcoming: number }) {
   const lines = [
-    `Jarvis Home ranking (version 1): Now shows up to ${budget.now}, Today up to ${budget.today}, Upcoming preview ${budget.upcoming}; the rest is a counted backlog.`,
+    `Atlas Home ranking (version 1): Now shows up to ${budget.now}, Today up to ${budget.today}, Upcoming preview ${budget.upcoming}; the rest is a counted backlog.`,
     "Tiers: safety alerts, waiting on me, pinned, Daily Compass focus, recently overdue, due within 4h, check-in window, due today, long overdue, next 14 days, someday.",
     "Category weights (−2 = kept out of Now/Today, −1 lower, +1 higher):",
     ...(view.categories.length ? view.categories.map((c) => `- ${c.label}: ${c.weight > 0 ? "+" : ""}${c.weight}`) : ["- none (all normal)"]),

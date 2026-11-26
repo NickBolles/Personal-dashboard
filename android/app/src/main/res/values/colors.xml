@@ -2,6 +2,6 @@
 <resources>
     <color name="window_background">#F6F6F3</color>
     <color name="brand">#2749D8</color>
-    <color name="icon_background">#2749D8</color>
+    <color name="icon_background">#0C0D0F</color>
     <color name="dark_background">#111210</color>
 </resources>

@@ -33,7 +33,7 @@ test.beforeEach(async ({ page }, info) => {
 test("phone search shortcut closes the Chief of staff sheet and focuses the palette", async ({ page }) => {
   await page.goto("/more");
   const sheet = page.getByRole("dialog", { name: "Chief of staff" });
-  const box = page.getByRole("combobox", { name: "Search Jarvis" });
+  const box = page.getByRole("combobox", { name: "Search Atlas" });
   await page.getByRole("button", { name: "Chief of staff", exact: true }).click();
   await expect(sheet).toBeVisible();
   await expect(async () => {

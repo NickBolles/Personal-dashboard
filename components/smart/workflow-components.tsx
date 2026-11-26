@@ -666,7 +666,7 @@ export function PRCard({ element }: P<"PRCard">) {
         ) : null}
       </div>
       <footer className="flex flex-wrap items-center gap-2 border-t border-line-strong px-3 py-2">
-        <p className="min-w-0 flex-1 text-xs text-muted">{open ? "Merging happens on GitHub. Jarvis never merges." : "Read from GitHub just now."}</p>
+        <p className="min-w-0 flex-1 text-xs text-muted">{open ? "Merging happens on GitHub. Atlas never merges." : "Read from GitHub just now."}</p>
         {pr.itemHref ? (
           <Link href={pr.itemHref} className="tap inline-flex items-center px-1 text-sm text-accent hover:underline">
             Open task

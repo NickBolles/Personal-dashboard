@@ -1116,7 +1116,7 @@ export function shareSummary(x: { title: string; agent: string | null; assistant
     x.title,
     `${x.agent ? `@${x.agent}` : x.assistant}${x.path ? ` · ${x.path}` : ""} · ${messages} ${messages === 1 ? "message" : "messages"}`,
     excerpt ? `Latest: ${excerpt}` : null,
-    `${x.url} (opens in Jarvis; sign-in required, read-only for anyone it is shared with)`,
+    `${x.url} (opens in Atlas; sign-in required, read-only for anyone it is shared with)`,
   ]
     .filter(Boolean)
     .join("\n");

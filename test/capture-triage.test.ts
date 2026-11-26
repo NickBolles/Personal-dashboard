@@ -203,7 +203,7 @@ describe("capture triage applier", () => {
     expect((await writes()).length).toBe(0);
     const d = getDb().select().from(schema.decisions).where(eq(schema.decisions.id, r.decisionId!)).get()!;
     const choices = JSON.parse(d.choicesJson) as string[];
-    expect(choices).toEqual(["Add “Dentist appointment” to House projects on Skylight", "Just keep it as a Jarvis to-do"]);
+    expect(choices).toEqual(["Add “Dentist appointment” to House projects on Skylight", "Just keep it as an Atlas to-do"]);
     expect(d.raisedBy).toBe("agent:chiefofstaff");
     expect(triageForItem(userId, r.itemId!)!.decisionRef).toBe(`D-${d.seq}`);
     // owner answers → the hook replans with the chosen action → list add → ready to settle
@@ -241,7 +241,7 @@ describe("capture triage applier", () => {
     await applyPlannedTriage();
     const r = row(id);
     expect(r).toMatchObject({ state: "suggested", itemId: null });
-    expect(r.summary).toMatch(/^Suggested: Open the garage door\. Jarvis only suggests this/);
+    expect(r.summary).toMatch(/^Suggested: Open the garage door\. Atlas only suggests this/);
     expect((await writes()).length).toBe(0);
     expect(() => applySuggestion(user(), id)).toThrow(/can't do this one/);
     const views = triageViewsForInbox(userId, [{ id: inboxId, triageState: "done", updatedAt: "" }]);

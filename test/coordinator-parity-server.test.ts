@@ -40,7 +40,7 @@ describe("coordinator parity (server)", () => {
     store.placeConversation(owner, { sessionId: "api_deep", parentId: project.id, title: "Deep chat" }, cid);
     const noTools = filedChatContext(owner, "api_coord", "devchief")!;
     expect(noTools).toContain("You are the General Dev coordinator");
-    expect(noTools).toContain("Jarvis conversation id: api_coord");
+    expect(noTools).toContain("Atlas conversation id: api_coord");
     expect(noTools).toContain("**Next action:**");
     expect(noTools).not.toContain("**Current state:**");
     expect(noTools).toContain("never claim you changed anything");
@@ -55,7 +55,7 @@ describe("coordinator parity (server)", () => {
     expect(withTools).toContain("D-n");
     expect(withTools).toContain("jarvis_run_event");
     const deep = filedChatContext(owner, "api_deep", "devchief")!;
-    expect(deep).not.toContain("coordinator in Jarvis");
+    expect(deep).not.toContain("coordinator in Atlas");
     expect(deep).toContain("If you dispatch sub-agents with delegate_task");
   });
 

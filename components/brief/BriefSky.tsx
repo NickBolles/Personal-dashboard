@@ -116,7 +116,7 @@ export function BriefSky({ view, actions, canBuild, onImprove }: { view: View; a
       <p className="brief-byline" data-source={brief.source}>
         {brief.source === "ai" ? (
           <>
-            <span>Written by Jarvis</span>
+            <span>Written by Atlas</span>
             <span data-dynamic>at {builtAt(brief.builtAt)}</span>
           </>
         ) : (
@@ -138,7 +138,7 @@ export function BriefSky({ view, actions, canBuild, onImprove }: { view: View; a
 
       {busy ? (
         <p className="brief-status" role="status">
-          <KSpinner /> {brief.source === "ai" ? "Rewriting your brief…" : "Jarvis is writing your brief…"}
+          <KSpinner /> {brief.source === "ai" ? "Rewriting your brief…" : "Atlas is writing your brief…"}
         </p>
       ) : build.state === "failed" ? (
         <p className="brief-status" data-tone="bad" role="status">

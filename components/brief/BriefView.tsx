@@ -43,7 +43,7 @@ function TurnOn({ view, actions }: { view: View; actions: BriefActions }) {
       </Banner>
     );
   return (
-    <ProposedBox label="Let Jarvis write your brief">
+    <ProposedBox label="Let Atlas write your brief">
       <p className="text-sm text-muted">Written from your open items, calendar and check-ins. Finance and AI-excluded areas are never sent.</p>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <Button

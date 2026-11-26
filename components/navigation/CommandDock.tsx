@@ -1,4 +1,5 @@
 "use client";
+import { AtlasMark } from "@/components/brand/AtlasMark";
 
 import {
   useCallback,
@@ -445,7 +446,7 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "do
         ref={orb}
         type="button"
         data-testid="dock-orb"
-        aria-label="Jarvis commands: tap for the command palette, hold for the action map (Ctrl+.)"
+        aria-label="Atlas commands: tap for the command palette, hold for the action map (Ctrl+.)"
         aria-haspopup="menu"
         aria-expanded={!!map}
         onPointerDown={onPointerDown}
@@ -528,9 +529,10 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "do
               <div id="command-map" role="menu" aria-label="Action map" className="fixed h-0 w-0" style={{ left: map.center.x, top: map.center.y }}>
                 <span
                   aria-hidden="true"
-                  className="dock-map-orb absolute -mt-7 -ml-7 inline-flex h-14 w-14 items-center justify-center overflow-hidden rounded-full px-1 text-center text-[10px] leading-tight font-bold break-all text-white"
+                  className="dock-map-orb absolute -mt-7 -ml-7 inline-flex h-14 w-14 flex-col items-center justify-center overflow-hidden rounded-full px-1 text-center text-[10px] leading-tight font-bold break-all text-white"
                   data-testid="map-ask-target"
                 >
+                  <AtlasMark className="h-5 w-5 shrink-0" />
                   {target.agent}
                 </span>
                 {petals.map((p, i) => (
@@ -593,12 +595,7 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "do
   );
 }
 
-/** The v0 orb glyph: a four-point sparkle with a small companion star (stroke, inherits colour). */
+/** Atlas mark inherits the existing Tide orb colour and reduced-motion policy. */
 function OrbSparkle({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinejoin="round" aria-hidden="true">
-      <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" />
-      <path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z" />
-    </svg>
-  );
+  return <AtlasMark className={className} />;
 }

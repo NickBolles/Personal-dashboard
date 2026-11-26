@@ -112,7 +112,7 @@ export function HomeControlView({ focusEntity, propose }: { focusEntity?: string
           <section aria-labelledby="ctl-h" className="@container mt-6">
             <SectionHeader id="ctl-h" label="Controls" />
             {!online ? (
-              <Banner tone="wn">Controls are disabled while offline. Jarvis never queues physical actions; they’ll re-enable after a fresh state check.</Banner>
+              <Banner tone="wn">Controls are disabled while offline. Atlas never queues physical actions; they’ll re-enable after a fresh state check.</Banner>
             ) : null}
             {controls.error ? <ErrorNote error={controls.error} retry={() => controls.refetch()} /> : null}
             {controls.isLoading ? <Spinner label="Reading live state…" /> : null}
@@ -724,7 +724,7 @@ function homeContext(
   controls: Control[] | undefined,
 ) {
   const time = (t?: string) => (t ? new Date(t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "");
-  const lines = [`Home Assistant snapshot from Jarvis at ${time(new Date().toISOString())}:`];
+  const lines = [`Home Assistant snapshot from Atlas at ${time(new Date().toISOString())}:`];
   const ex = data.homeExceptions ?? [];
   lines.push(ex.length ? "Exceptions:" : "Exceptions: none in watched entities.");
   for (const e of ex) lines.push(`- ${e.name} (${e.entityId}): ${e.reason}, state "${e.state}"${e.since ? ` since ${time(e.since)}` : ""}`);

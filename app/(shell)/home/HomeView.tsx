@@ -435,7 +435,7 @@ export function HomeView() {
                     </Link>
                   }
                 >
-                  Jarvis can’t tell what’s next until at least one source is connected.
+                  Atlas can’t tell what’s next until at least one source is connected.
                 </Empty>
               )}
             </section>

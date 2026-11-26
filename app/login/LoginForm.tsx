@@ -1,4 +1,5 @@
 "use client";
+import { BrandLockup } from "@/components/brand/BrandLockup";
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/client/api";
@@ -41,11 +42,11 @@ export function LoginForm({ next, askName }: { next: string; askName: boolean })
         }}
       >
         <div>
-          <p className="text-sm font-medium text-accent">Jarvis</p>
+          <BrandLockup />
           <h1 className="text-2xl font-semibold">Welcome back</h1>
         </div>
         {askName && (
-          <Field id="username" label="Your sign-in name" hint="Leave empty if you set up this Jarvis.">
+          <Field id="username" label="Your sign-in name" hint="Leave empty if you set up this Atlas.">
             <Input
               id="username"
               autoComplete="username"

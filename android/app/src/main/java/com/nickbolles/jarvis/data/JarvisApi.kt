@@ -73,18 +73,18 @@ class JarvisApi(
                 })
             }
         } catch (e: IOException) {
-            throw ApiException(0, "network", "Can't reach Jarvis (${e.message ?: "network error"})")
+            throw ApiException(0, "network", "Can't reach Atlas (${e.message ?: "network error"})")
         }
         res.use { r ->
             val text = r.body.string()
             if (!r.isSuccessful) {
                 val err = runCatching { JarvisJson.decodeFromString(ApiErrorBody.serializer(), text) }.getOrNull()
-                throw ApiException(r.code, err?.code, err?.error ?: "Jarvis returned ${r.code}")
+                throw ApiException(r.code, err?.code, err?.error ?: "Atlas returned ${r.code}")
             }
             try {
                 JarvisJson.decodeFromString(serializer, text.ifBlank { "{}" })
             } catch (e: Exception) {
-                throw ApiException(r.code, "bad_response", "Unexpected response from Jarvis")
+                throw ApiException(r.code, "bad_response", "Unexpected response from Atlas")
             }
         }
     }
@@ -224,7 +224,7 @@ class JarvisApi(
         val res = try {
             http.newCall(req).execute()
         } catch (e: IOException) {
-            throw ApiException(0, "network", "Can't reach Jarvis (${e.message ?: "network error"})")
+            throw ApiException(0, "network", "Can't reach Atlas (${e.message ?: "network error"})")
         }
         res.use { r ->
             if (!r.isSuccessful) throw ApiException(r.code, null, "Camera image unavailable (${r.code})")

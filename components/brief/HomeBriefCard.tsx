@@ -36,7 +36,7 @@ export function HomeBriefCard() {
         <span />
         <span />
       </span>
-      <span className="eyebrow">{b.source === "ai" ? "Your brief, written by Jarvis" : "Your brief"}</span>
+      <span className="eyebrow">{b.source === "ai" ? "Your brief, written by Atlas" : "Your brief"}</span>
       <span className="brief-entry-h">{b.headline}</span>
       {current ? (
         <span className="brief-entry-s">

@@ -24,7 +24,7 @@ import {
 
 /**
  * Daily brief storage (docs/brief.md): per-person settings, AI-built briefs,
- * feedback and the notes that make up "what Jarvis knows about you". Everything
+ * feedback and the notes that make up "what Atlas knows about you". Everything
  * here is private to the person and never edits source data.
  */
 
@@ -323,7 +323,7 @@ export function briefDocs(userId: string, ids: string[]): Map<string, BriefDoc> 
   );
 }
 
-// ---------------------------------------------------------------- notes ("what Jarvis knows about you")
+// ---------------------------------------------------------------- notes ("what Atlas knows about you")
 
 const noteKind = (k: string | null | undefined): BriefNoteKind =>
   (BRIEF_NOTE_KINDS as readonly string[]).includes(k ?? "") ? (k as BriefNoteKind) : "pattern";

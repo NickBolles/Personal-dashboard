@@ -45,7 +45,7 @@ export function HomeSources() {
       }
     >
       {!online ? (
-        <span className="block">Offline: showing what Jarvis had {live.data ? relativeTime(live.data.generatedAt) : "at your last visit"}.</span>
+        <span className="block">Offline: showing what Atlas had {live.data ? relativeTime(live.data.generatedAt) : "at your last visit"}.</span>
       ) : null}
       {problems.map((s) => (
         <span key={s.source} className="block">

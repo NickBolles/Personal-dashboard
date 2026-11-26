@@ -74,7 +74,7 @@ export function driveStatus(): DriveStatus {
 }
 
 function requireAvailable() {
-  if (!driveEnabled()) throw new HttpError(404, "drive_disabled", "Save to Google Drive isn't turned on for this Jarvis");
+  if (!driveEnabled()) throw new HttpError(404, "drive_disabled", "Save to Google Drive isn't turned on for this Atlas");
   const c = client();
   if (!c.clientId || !c.clientSecret) throw new HttpError(409, "drive_not_configured", "No Google OAuth client is configured");
   return c;
@@ -152,7 +152,7 @@ export async function exchangeDriveCode(code: string, redirectUri: string) {
     throw new UpstreamError(
       "Google Drive",
       "bad_response",
-      "Google did not return a refresh token. Remove Jarvis from your Google account's third-party access and try again.",
+      "Google did not return a refresh token. Remove Atlas from your Google account's third-party access and try again.",
     );
   // granted scopes may include earlier grants (include_granted_scopes); we only ever USE drive.file
   if (t.scope && !t.scope.split(/\s+/).includes(DRIVE_FILE_SCOPE)) throw new UpstreamError("Google Drive", "unauthorized", "Drive access wasn't granted");

@@ -28,7 +28,7 @@ describe("parseUserMessage", () => {
 });
 
 describe("splitAttachedContext", () => {
-  it("separates what was typed from what Jarvis attached", () => {
+  it("separates what was typed from what Atlas attached", () => {
     expect(splitAttachedContext("Look at this\n\n---\nContext from Jarvis:\n- Storefront [item:wi_1]")).toEqual({
       body: "Look at this",
       attached: "- Storefront [item:wi_1]",

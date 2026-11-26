@@ -101,7 +101,7 @@ test("create GitHub App via the manifest flow; installations, allowlist, App-sig
   await expect(rows.filter({ hasText: "NickBolles" })).toContainText("Repos: Personal-dashboard");
   await expect(rows.filter({ hasText: "evil-corp" })).toContainText("Ignored: not in the allowlist");
   await expect(rows.filter({ hasText: "momentumbets" })).toContainText("Ignored"); // default allowlist: token owners + App owner
-  await panel.getByLabel("Accounts Jarvis accepts").fill("nickbolles, momentumbets");
+  await panel.getByLabel("Accounts Atlas accepts").fill("nickbolles, momentumbets");
   await panel.getByRole("button", { name: "Save allowlist" }).click();
   await expect(rows.filter({ hasText: "momentumbets" })).toContainText("In use");
   await expect(rows.filter({ hasText: "evil-corp" })).toContainText("Ignored");

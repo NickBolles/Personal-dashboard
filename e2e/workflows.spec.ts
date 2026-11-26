@@ -45,7 +45,7 @@ test("workflows: import as draft, export, turn on, start from the palette", asyn
   await page.getByTestId("workflow-start-submit").click();
   await expect(page).toHaveURL(/\/chat\//);
   await expect(page.getByRole("heading", { name: "Session: Heartland Sun Prairie – Jake Fry", level: 1 })).toBeVisible();
-  await expect(page.getByText("Context Jarvis attached").first()).toBeAttached();
+  await expect(page.getByText("Context Atlas attached").first()).toBeAttached();
 });
 
 test("workflows: import with an unknown area → pick one (#117), then Undo import archives it (#116)", async ({ page }) => {

@@ -24,7 +24,7 @@ for (let i = 0; i < serverCount(); i++) {
 async function onboard(page: Page, i: number) {
   await page.goto("/");
   await expect(page).toHaveURL(/\/onboarding/);
-  await expect(page.getByRole("heading", { name: "Claim this Jarvis" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Claim this Atlas" })).toBeVisible();
 
   // Wrong code is rejected
   await page.getByLabel("Setup code").fill("WRONG");
@@ -61,7 +61,7 @@ async function onboard(page: Page, i: number) {
   await expect(page.getByText("Failing", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Verified", { exact: true })).toHaveCount(6);
 
-  await page.getByRole("button", { name: "Open Jarvis" }).click();
+  await page.getByRole("button", { name: "Open Atlas" }).click();
   await expect(page).toHaveURL(/\/home/);
   await expect(page.getByRole("heading", { name: "Now" })).toBeVisible();
 

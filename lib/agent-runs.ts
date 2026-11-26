@@ -206,7 +206,7 @@ export type ItemAgentInfo = {
   approval?: boolean;
   /** when the deciding run started/finished */
   liveAt: string | null;
-  /** A turn is in flight in one of the task's chats right now (a run Jarvis started there), or an AI action on it: since when. */
+  /** A turn is in flight in one of the task's chats right now (a run Atlas started there), or an AI action on it: since when. */
   chatRunningAt?: string | null;
   /** the task's chat: its primary chat, else the conversation of the deciding run, else its first filed or linked one */
   sessionId: string | null;

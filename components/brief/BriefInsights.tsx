@@ -46,7 +46,7 @@ export function BriefInsights({ view, actions, fb }: { view: BriefView; actions:
     })),
     ...view.proposals.map((n) => ({
       key: n.id,
-      label: `Jarvis noticed: ${BRIEF_NOTE_KIND_LABEL[n.kind]}`,
+      label: `Atlas noticed: ${BRIEF_NOTE_KIND_LABEL[n.kind]}`,
       node: <Proposal note={n} actions={actions} />,
     })),
   ];

@@ -31,7 +31,7 @@ export async function apiFetch<T = unknown>(path: string, init: { method?: strin
     });
   } catch (err) {
     if ((err as Error).name === "AbortError") throw err;
-    throw new ApiError(0, typeof navigator !== "undefined" && !navigator.onLine ? "You're offline" : "Couldn't reach Jarvis", "network");
+    throw new ApiError(0, typeof navigator !== "undefined" && !navigator.onLine ? "You're offline" : "Couldn't reach Atlas", "network");
   }
   const text = await res.text();
   const data = text ? safeJson(text) : undefined;

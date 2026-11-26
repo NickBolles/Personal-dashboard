@@ -49,7 +49,7 @@ export async function addCalendarBlock(
   if (cal === null) {
     const op: SkylightWriteOp = {
       op: "event.create",
-      event: { summary, allDay: false, startsAt: start.toISOString(), endsAt: end.toISOString(), description: "Planned in Jarvis" },
+      event: { summary, allDay: false, startsAt: start.toISOString(), endsAt: end.toISOString(), description: "Planned in Atlas" },
     };
     const result = await runSkylightWrite(op, user, { correlationId });
     const row = recordWrite(op, user, result.created);
@@ -60,7 +60,7 @@ export async function addCalendarBlock(
   await HomeAssistantClient.callService(conn, "calendar", "create_event", {
     entity_id: cal,
     summary,
-    description: "Planned in Jarvis",
+    description: "Planned in Atlas",
     start_date_time: start.toISOString(),
     end_date_time: end.toISOString(),
   });

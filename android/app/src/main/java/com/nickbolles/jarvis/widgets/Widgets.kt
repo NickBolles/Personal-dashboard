@@ -83,9 +83,9 @@ private fun WidgetFrame(content: @Composable () -> Unit) {
 private fun NotPaired(context: Context) {
     WidgetFrame {
         Column(GlanceModifier.fillMaxSize().clickable(openApp(context, "/home"))) {
-            Title("Jarvis")
+            Title("Atlas")
             Spacer(GlanceModifier.height(8.dp))
-            Text("Open Jarvis to connect this phone", style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 14.sp))
+            Text("Open Atlas to connect this phone", style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 14.sp))
         }
     }
 }
@@ -125,7 +125,7 @@ fun NextUpContent(context: Context, summary: WidgetSummary?, count: Int, now: In
             Spacer(GlanceModifier.height(8.dp))
             val items = summary?.next.orEmpty().take(n)
             when {
-                summary == null -> Text("Open Jarvis to load", style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant))
+                summary == null -> Text("Open Atlas to load", style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant))
                 items.isEmpty() -> Text("Nothing needs you right now", style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 15.sp))
                 // At most 5 rows: a plain column renders the same on every launcher (no remote collection).
                 else -> Column { items.forEach { a -> NextRow(context, a, now, zone) } }
@@ -198,7 +198,7 @@ fun HomeStatusContent(context: Context, summary: WidgetSummary?) {
             Title("Home", trailing = summary?.unread?.takeIf { it > 0 }?.let { "🔔 $it" })
             Spacer(GlanceModifier.height(6.dp))
             when {
-                summary == null -> Text("Open Jarvis to load", style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant))
+                summary == null -> Text("Open Atlas to load", style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant))
                 ex.isEmpty() -> Text("All quiet", style = TextStyle(color = GlanceTheme.colors.onSurface, fontWeight = FontWeight.Medium, fontSize = 18.sp))
                 else -> Column {
                     ex.take(if (LocalSize.current.width < 200.dp) 2 else 3).forEach { e ->
@@ -275,7 +275,7 @@ fun CompassContent(context: Context, summary: WidgetSummary?, now: Instant = Ins
                 Spacer(GlanceModifier.height(4.dp))
                 Text(
                     when {
-                        c == null -> if (summary == null) "Open Jarvis to load" else "Not set up"
+                        c == null -> if (summary == null) "Open Atlas to load" else "Not set up"
                         c.completed -> "Done today ✓"
                         c.inWindow -> "Check in now"
                         else -> "Opens ${c.windowLabel.substringBefore("–")}"
@@ -325,7 +325,7 @@ fun AreasNextContent(context: Context, work: WorkItemsResponse?) {
             Spacer(GlanceModifier.height(8.dp))
             val items = work?.let { WorkTree.nextActions(it.items, limit = n) }.orEmpty()
             when {
-                work == null -> Text("Open Areas in Jarvis to load", style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant))
+                work == null -> Text("Open Areas in Atlas to load", style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant))
                 items.isEmpty() -> Text("No next actions. Add one to an item in Areas.", style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 14.sp))
                 else -> Column {
                     items.forEach { i ->

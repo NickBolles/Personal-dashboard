@@ -290,7 +290,7 @@ export function validateDefinition(input: unknown, opts: { excludedAreas?: strin
   ] as const) {
     if (layout == null) continue;
     const r = validateSpec(layout);
-    if (!r.ok) issues.push({ path, code: "layout_invalid", message: "Layout must use the Jarvis UI catalog only" });
+    if (!r.ok) issues.push({ path, code: "layout_invalid", message: "Layout must use the Atlas UI catalog only" });
   }
   return issues.length ? { ok: false, issues } : { ok: true, definition: def };
 }

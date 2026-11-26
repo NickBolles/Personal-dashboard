@@ -23,7 +23,7 @@ export const ACTIVITY_TYPE_LABELS: Record<ActivityType, string> = {
 };
 
 export type ActorKind = "you" | "agent" | "github" | "system";
-export const ACTOR_LABELS: Record<ActorKind, string> = { you: "You", agent: "Agent", github: "GitHub", system: "Jarvis" };
+export const ACTOR_LABELS: Record<ActorKind, string> = { you: "You", agent: "Agent", github: "GitHub", system: "Atlas" };
 
 export type ActivityItem = {
   id: string;
@@ -70,7 +70,7 @@ export function actorFor(actor: string, source: string | null, viewerId: string,
     const name = actor.includes(":") ? actor.split(":").slice(1).join(":") : agentName;
     return { kind: "agent", name: name || agentName };
   }
-  if (actor === "system" || actor === "jarvis" || actor === "auto") return { kind: "system", name: "Jarvis" };
+  if (actor === "system" || actor === "jarvis" || actor === "auto") return { kind: "system", name: "Atlas" };
   return { kind: "you", name: "Someone" };
 }
 

@@ -96,7 +96,7 @@ export function validateAssignee(ref: string | null, ctx: { agents: readonly str
   if (!a) return { ok: false, error: "Assign to an agent or a person" };
   if (a.kind === "agent") {
     const id = a.id.replace(/^@/, "").toLowerCase();
-    if (!PROFILE_NAME_RE.test(id) || !ctx.agents.includes(id)) return { ok: false, error: "That agent isn't set up in Jarvis" };
+    if (!PROFILE_NAME_RE.test(id) || !ctx.agents.includes(id)) return { ok: false, error: "That agent isn't set up in Atlas" };
     return { ok: true, value: assigneeRef({ kind: "agent", id }) };
   }
   if (!ctx.people.includes(a.id)) return { ok: false, error: "That person isn't in Settings → People" };

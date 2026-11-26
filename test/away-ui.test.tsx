@@ -211,7 +211,7 @@ it("renders digest counts, silent/failed runs, attribution and report/decision l
   expect(card.getByText("3 ran")).toBeTruthy();
   expect(card.getByText("1 failed")).toBeTruthy();
   expect(card.getByText("Nothing new")).toBeTruthy();
-  expect(card.getByText("Skipped: deploy (Jarvis never deploys)")).toBeTruthy();
+  expect(card.getByText("Skipped: deploy (Atlas never deploys)")).toBeTruthy();
   fireEvent.click(card.getByRole("button", { name: "1 change" }));
   expect(card.getByText("by @devchief")).toBeTruthy();
   expect(card.getByRole("link", { name: "Added workshop notes" }).getAttribute("href")).toBe("/areas?item=note_lantern");

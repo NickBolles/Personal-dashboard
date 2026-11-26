@@ -23,12 +23,12 @@ export function choreWrite(action: NextAction, op: "chore.complete" | "chore.reo
     instanceTime: ref.instanceTime,
     categoryId: ref.categoryId,
     ...(op === "chore.reopen" && action.status === "skipped" ? { previousStatus: "skipped" as const } : {}),
-    // Skylight's own flag only: a Family/group-assigned chore that Jarvis lists as up for grabs still 422s with category_id.
+    // Skylight's own flag only: a Family/group-assigned chore that Atlas lists as up for grabs still 422s with category_id.
     ...(ref.upForGrabs ? { upForGrabs: true } : {}),
   };
 }
 
-/** Move a one-off chore to `day` (recurring occurrences can't be moved from Jarvis). */
+/** Move a one-off chore to `day` (recurring occurrences can't be moved from Atlas). */
 export function rescheduleWrite(action: NextAction, day: string): SkylightWriteOp | null {
   const ref = action.skylight;
   if (ref?.kind !== "chore" || ref.recurring || !ref.startDate || ref.startDate === day) return null;

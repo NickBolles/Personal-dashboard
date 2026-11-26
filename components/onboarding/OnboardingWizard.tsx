@@ -1,4 +1,5 @@
 "use client";
+import { BrandLockup } from "@/components/brand/BrandLockup";
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -45,8 +46,8 @@ function ClaimStep() {
   const [busy, setBusy] = useState(false);
   return (
     <main id="main" className="mx-auto max-w-md px-4 py-10">
-      <p className="text-sm font-medium text-accent">Jarvis setup</p>
-      <h1 className="text-3xl font-semibold tracking-tight">Claim this Jarvis</h1>
+      <BrandLockup />
+      <h1 className="text-3xl font-semibold tracking-tight">Claim this Atlas</h1>
       <p className="mt-2 text-muted">
         Enter the one-time setup code printed in the server log (<code>docker compose logs jarvis</code>), then choose a passcode.
       </p>
@@ -150,7 +151,7 @@ function Wizard({ initialStep, googleStatus, googleMessage }: { initialStep?: st
   return (
     <div className="mx-auto max-w-5xl px-4 py-6 lg:flex lg:gap-8">
       <nav aria-label="Setup steps" className="mb-4 lg:mb-0 lg:w-56 lg:shrink-0">
-        <p className="mb-2 text-sm font-medium text-accent">Jarvis setup</p>
+        <BrandLockup className="mb-2" />
         <ol className="relative flex gap-1 overflow-x-auto pb-2 lg:flex-col lg:overflow-visible">
           {STEPS.map((s, i) => {
             const st = status(s.id);
@@ -203,7 +204,7 @@ function Wizard({ initialStep, googleStatus, googleMessage }: { initialStep?: st
           {step.id === "install" ? (
             <div className="card p-5">
               <p className="mb-4 text-muted">
-                Install Jarvis to your home screen for a full-screen app, faster launch, offline access, and reliable notifications.
+                Install Atlas to your home screen for a full-screen app, faster launch, offline access, and reliable notifications.
               </p>
               <InstallPrompt />
             </div>
@@ -217,7 +218,7 @@ function Wizard({ initialStep, googleStatus, googleMessage }: { initialStep?: st
           </Button>
           {step.id === "finish" ? (
             <Button variant="primary" loading={finish.isPending} onClick={() => finish.mutate()}>
-              Open Jarvis
+              Open Atlas
             </Button>
           ) : (
             <div className="flex gap-2">
@@ -241,7 +242,7 @@ function Welcome() {
   return (
     <div className="card space-y-4 p-5">
       <p>
-        Jarvis is your command center for <strong>Hermes</strong> and the systems around it. It answers one question:{" "}
+        Atlas is your command center for <strong>Hermes</strong> and the systems around it. It answers one question:{" "}
         <em>what needs my attention, and what should I do next?</em>
       </p>
       <ul className="grid gap-2 sm:grid-cols-2">

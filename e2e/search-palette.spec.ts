@@ -18,7 +18,7 @@ test("palette: typing part of a chat title finds it under Chats & notes and open
   const id = await newChat(page, `Lecture jotting ${nonce}`);
   await page.goto("/home");
   await page.getByRole("heading", { name: "Now" }).waitFor();
-  const box = page.getByRole("combobox", { name: "Search Jarvis" });
+  const box = page.getByRole("combobox", { name: "Search Atlas" });
   await expect(async () => {
     await page.keyboard.press("Control+k");
     await expect(box).toBeFocused({ timeout: 1000 });
@@ -49,5 +49,5 @@ test("composer @: picks a chat by title and attaches it as context", async ({ pa
   const sent = page.locator(`[data-ref="chat:${target}"]`);
   await expect(sent).toBeVisible({ timeout: 15_000 });
   await expect(sent).toHaveText(`@Seminar jotting ${nonce}`);
-  await expect(page.getByText("Context Jarvis attached").first()).toBeVisible();
+  await expect(page.getByText("Context Atlas attached").first()).toBeVisible();
 });

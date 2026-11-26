@@ -60,5 +60,5 @@ export function summaryText(text: string) {
     .filter((s): s is Extract<Segment, { kind: "text" }> => s.kind === "text")
     .map((s) => s.text.trim())
     .join("\n\n");
-  return segs.some((s) => s.kind === "block") ? `${textOnly}\n\n_Structured reply (open in Jarvis)_`.trim() : textOnly;
+  return segs.some((s) => s.kind === "block") ? `${textOnly}\n\n_Structured reply (open in Atlas)_`.trim() : textOnly;
 }

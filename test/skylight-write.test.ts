@@ -620,7 +620,7 @@ describe("routes and smart family calendar", () => {
     expect(result.undo.type).toBe("skylight");
     expect((await writes())[0].body).toMatchObject({
       summary: "Family walk",
-      description: "Planned in Jarvis",
+      description: "Planned in Atlas",
       starts_at: "2026-11-09T14:00:00.000Z",
       ends_at: "2026-11-09T14:30:00.000Z",
     });

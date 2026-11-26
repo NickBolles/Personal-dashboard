@@ -248,9 +248,9 @@ self.addEventListener("push", (event) => {
   try {
     data = event.data ? event.data.json() : {};
   } catch {
-    data = { title: "Jarvis", body: event.data ? event.data.text() : "" };
+    data = { title: "Atlas", body: event.data ? event.data.text() : "" };
   }
-  const title = data.title || "Jarvis";
+  const title = data.title || "Atlas";
   event.waitUntil(
     self.registration.showNotification(title, {
       body: data.body || "",

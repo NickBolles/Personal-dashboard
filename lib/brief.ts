@@ -424,10 +424,10 @@ export type BriefView = {
     /** open safety alerts the picks left out: always shown, whatever the model chose */
     alerts: BriefPickView[];
     blocks: BriefBlockView[];
-    /** what the model was given, by label ("Todos", "Calendar", "3 things you taught Jarvis") */
+    /** what the model was given, by label ("Todos", "Calendar", "3 things you taught Atlas") */
     basedOn: string[];
   };
-  /** today's calendar, for the day arc and the "right now" line (Jarvis' own data, whatever the model placed) */
+  /** today's calendar, for the day arc and the "right now" line (Atlas' own data, whatever the model placed) */
   day?: { events: BriefScheduleEvent[]; known: boolean };
   /** the cards under the picks, in order; the page groups them into rows (BRIEF_DECK_GROUP_OF). May be empty. */
   deck: BriefDeckCard[];

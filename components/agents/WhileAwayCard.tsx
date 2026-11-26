@@ -172,7 +172,7 @@ function RunRow({ run }: { run: AwayRun }) {
       ) : null}
       {run.refused.map((refused, i) => (
         <p key={i} className="mt-1 text-xs text-muted">
-          Skipped: {refused.intent} ({refused.intent === "deploy" ? "Jarvis never deploys" : refused.label})
+          Skipped: {refused.intent} ({refused.intent === "deploy" ? "Atlas never deploys" : refused.label})
         </p>
       ))}
     </li>

@@ -3,7 +3,7 @@ import { config } from "@/server/config";
 import { JoinForm } from "./JoinForm";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Join Jarvis" };
+export const metadata = { title: "Join Atlas" };
 
 export default async function JoinPage({ searchParams }: { searchParams: Promise<{ code?: string }> }) {
   if (config.authMode === "proxy") redirect("/home");

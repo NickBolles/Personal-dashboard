@@ -362,7 +362,7 @@ export async function adoptSession(user: CurrentUser, body: { profile: string | 
   const profile = body.profile?.trim().toLowerCase() || null;
   const existing = metaFor([body.sessionId]).get(body.sessionId);
   if (existing && (existing.hermesProfile ?? null) !== profile)
-    throw new HttpError(409, "profile_mismatch", "Jarvis already tracks that conversation on another agent.");
+    throw new HttpError(409, "profile_mismatch", "Atlas already tracks that conversation on another agent.");
   let raw;
   try {
     raw = (await HermesSessionClient.get(connForProfile(profile), body.sessionId)).session;

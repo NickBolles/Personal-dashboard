@@ -224,7 +224,7 @@ export function briefContext(user: CurrentUser, now = new Date()) {
   const rows = candidates(user, today, now);
   const metrics = [...(can(user, "work.ai") ? ["metric:ai_spend_today", "metric:ai_spend_7d"] : []), "metric:items_done_14d", "metric:overdue_count"];
   return [
-    `Morning brief for ${today}. Use ApprovalChips for the rows, Gauge/Sparkline with these metric refs (Jarvis fills in the numbers): ${metrics.join(", ")}.`,
+    `Morning brief for ${today}. Use ApprovalChips for the rows, Gauge/Sparkline with these metric refs (Atlas fills in the numbers): ${metrics.join(", ")}.`,
     `Due today or overdue (${rows.length}). Columns: ref | title | due | estimate`,
     ...(rows.length ? lines(rows) : ["(none)"]),
   ].join("\n");
@@ -239,7 +239,7 @@ export function weekContext(user: CurrentUser, now = new Date()) {
   const events =
     "events" in cal ? cal.events.map((e) => `${e.day} ${e.allDay ? "all day" : `${e.start}${e.end ? `–${e.end}` : ""}`} ${e.title.slice(0, 60)}`) : [];
   return [
-    `Week plan: WeekPlan weekOf ${weekOf} (Mon–Fri, today ${today}). Place blocks on days ≥ today, 07:00–21:00, around these fixed events (Jarvis shows them; don't add them as blocks):`,
+    `Week plan: WeekPlan weekOf ${weekOf} (Mon–Fri, today ${today}). Place blocks on days ≥ today, 07:00–21:00, around these fixed events (Atlas shows them; don't add them as blocks):`,
     ...(events.length ? events.slice(0, 40) : ["(no calendar events)"]),
     `Work to place (${rows.length}). Columns: ref | title | due | estimate`,
     ...(rows.length ? lines(rows) : ["(none)"]),

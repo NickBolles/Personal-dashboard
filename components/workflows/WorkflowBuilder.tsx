@@ -258,7 +258,7 @@ function BuilderView({ detail, intro }: { detail: Detail | null; intro?: React.R
           {state.section === "forms" ? <Forms d={d} slot={state.formSlot} selected={state.selectedField} dispatch={dispatch} /> : null}
           {state.section === "layout" ? (
             <p className="text-sm text-muted">
-              Layouts use the Jarvis UI catalog only. The run panel uses the default outline for this workflow{d.layout ? " plus its custom layout" : ""}.
+              Layouts use the app&apos;s UI catalog only. The run panel uses the default outline for this workflow{d.layout ? " plus its custom layout" : ""}.
             </p>
           ) : null}
           {state.section === "outputs" ? <p className="text-sm text-muted">Summary, exports and schedules arrive in the next update.</p> : null}

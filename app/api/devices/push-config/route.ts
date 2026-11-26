@@ -14,7 +14,7 @@ const schema = z.object({
 /** Paste google-services.json and a service-account key (Settings → Phones). Validated before saving. */
 export const PUT = api<z.infer<typeof schema>>(
   ({ body, user, correlationId }) => {
-    if (user.via === "device") throw new HttpError(403, "forbidden", "Change push settings from Jarvis on the web");
+    if (user.via === "device") throw new HttpError(403, "forbidden", "Change push settings from Atlas on the web");
     try {
       saveFcmConfig(body);
     } catch (err) {

@@ -250,7 +250,7 @@ function GoogleConnect({ connected, onBeforeConnect }: { connected: boolean; onB
     <div className="rounded-xl border border-line bg-surface-2 p-3 text-sm">
       <p className="font-medium">{connected ? "Google account connected" : "Connect your Google account"}</p>
       <p className="mt-1 text-muted">
-        Saves the client ID/secret above, then opens Google to grant Tasks access. Jarvis stores only the refresh token, encrypted.
+        Saves the client ID/secret above, then opens Google to grant Tasks access. Atlas stores only the refresh token, encrypted.
       </p>
       <Button
         type="button"

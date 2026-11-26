@@ -59,7 +59,7 @@ const pollMs = () => Number(process.env.JARVIS_STRUCTURED_POLL_MS ?? 750);
 export function structuredInstructions(source: string, example: unknown) {
   return [
     `${STRUCTURED_MARKER} source=${source}`,
-    "This is an automated request from the Jarvis dashboard, not a person.",
+    "This is an automated request from the Atlas dashboard, not a person.",
     "Use your tools to do exactly the task below. Do not ask questions and do not take any action the task does not name.",
     "Reply with ONE JSON object and nothing else: no prose, no markdown. It must have this shape:",
     JSON.stringify(example),

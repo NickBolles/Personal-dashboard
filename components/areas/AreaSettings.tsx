@@ -235,7 +235,7 @@ export function AreaAutonomy({
           <p className="text-xs text-muted">
             {value === "propose"
               ? "Scheduled runs only suggest; every change becomes a Needs-you decision."
-              : "Jarvis may add notes and threads, update next actions and file to Inbox, with Undo. Everything else asks you. Never settles, merges, deploys, spends or sends."}
+              : "Atlas may add notes and threads, update next actions and file to Inbox, with Undo. Everything else asks you. Never settles, merges, deploys, spends or sends."}
           </p>
           {area.settings?.aiPolicy === "triage_only" ? <p className="text-xs text-muted">Triage-only policy limits scheduled runs to proposals.</p> : null}
         </>

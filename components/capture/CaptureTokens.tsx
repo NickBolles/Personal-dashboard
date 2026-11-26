@@ -99,7 +99,7 @@ export function CaptureTokens() {
           open
           onClose={() => setShown(null)}
           title="Copy your capture token"
-          description="Shown once. Jarvis keeps only a hash."
+          description="Shown once. Atlas keeps only a hash."
           footer={
             <Button variant="primary" onClick={() => setShown(null)}>
               Done

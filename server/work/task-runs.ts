@@ -125,7 +125,7 @@ function startsToday(userId: string, now: Date) {
 export function briefFooter(item: Pick<WorkItem, "id" | "title">, ref: string) {
   return [
     "---",
-    `Jarvis task: ${item.title} (item ${item.id}), run ${ref}. This conversation is the task's chat: do the work here.`,
+    `Atlas task: ${item.title} (item ${item.id}), run ${ref}. This conversation is the task's chat: do the work here.`,
     `Report each key moment with jarvis_run_event (runId ${ref}, type "progress", moment "found" | "made" | "blocked" | "handed_off"): one line of at most 140 characters each. Report at least one before you finish.`,
     `When you finish or fail, call jarvis_run_update (runId ${ref}) with state done or failed and a one-line summary.`,
     `To ask the owner, call jarvis_raise_decision (itemId ${item.id}, runId ${ref}).`,

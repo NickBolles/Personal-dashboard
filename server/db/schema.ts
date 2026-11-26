@@ -378,7 +378,7 @@ export const homeMilestones = sqliteTable(
   (t) => [index("home_milestones_user_idx").on(t.userId)],
 );
 
-/** Built-in todo store — only used when "Jarvis" is the canonical todo provider. */
+/** Built-in todo store — only used when "Atlas" is the canonical todo provider. */
 export const localTodos = sqliteTable("local_todos", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),
@@ -2065,7 +2065,7 @@ export const agentRuns = sqliteTable(
     hermesSessionId: text("hermes_session_id"),
     /** the coordinator's own handle for the delegation (Hermes delegate_task id/batch); run_start is idempotent on it */
     delegationId: text("delegation_id"),
-    /** where the sub-agent transcript lives on the agent's host (shown as copyable text, never read by Jarvis) */
+    /** where the sub-agent transcript lives on the agent's host (shown as copyable text, never read by Atlas) */
     transcriptPath: text("transcript_path"),
     /** JSON [{title, state, summary?}] child summaries of a delegation batch (max 20) */
     childrenJson: text("children_json"),

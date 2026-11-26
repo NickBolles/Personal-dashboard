@@ -61,7 +61,7 @@ export function AiSettingsView() {
     <div className="min-w-0 space-y-3 wrap-anywhere">
       <PageHeader title="AI" subtitle="Background research, plans, scheduling help, drafts and capture triage through Hermes." />
       <p className="rounded-lg border border-line bg-bg px-3 py-2 text-sm" role="note">
-        Areas excluded from AI are never sent. Calendar data stays in Jarvis.
+        Areas excluded from AI are never sent. Calendar data stays in Atlas.
       </p>
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -193,7 +193,7 @@ export function AiSettingsView() {
               <span id="ai-capture-actions-auto-handle">
                 Auto-handle captures
                 <span className="block text-xs text-muted">
-                  Jarvis does low-risk, undoable things itself (Skylight list items and events, Jarvis to-dos) and leaves the item ready to settle. Risky things
+                  Atlas does low-risk, undoable things itself (Skylight list items and events, Atlas to-dos) and leaves the item ready to settle. Risky things
                   are only suggested.
                 </span>
               </span>
@@ -219,7 +219,7 @@ export function AiSettingsView() {
             [
               ["skylightList", "Skylight list items"],
               ["skylightEvent", "Skylight calendar events"],
-              ["jarvisTask", "Jarvis to-dos"],
+              ["jarvisTask", "Atlas to-dos"],
             ] as const
           ).map(([key, label]) => (
             <Checkbox

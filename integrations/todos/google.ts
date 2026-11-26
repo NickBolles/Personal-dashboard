@@ -111,7 +111,7 @@ export async function exchangeCode(code: string, redirectUri: string) {
     throw new UpstreamError(
       "Google",
       "bad_response",
-      "Google did not return a refresh token. Remove Jarvis from your Google account's third-party access and try again.",
+      "Google did not return a refresh token. Remove Atlas from your Google account's third-party access and try again.",
     );
   saveIntegration("todos", { enabled: true, config: { provider: "google_tasks" }, secrets: { refreshToken: t.refresh_token } });
   cache.clear();

@@ -40,7 +40,7 @@ export function InitiativesView() {
     <div className="mx-auto max-w-3xl px-3 pt-3 pb-6 sm:px-5 sm:pt-4 dense:px-7 dense:pt-5">
       <PageHeader
         title="Initiatives"
-        subtitle="Paperclip owns status, blockers and assignments. Jarvis shows them and links conversations."
+        subtitle="Paperclip owns status, blockers and assignments. Atlas shows them and links conversations."
         actions={
           q.data ? (
             <ButtonLink href={q.data.paperclipUrl} external>

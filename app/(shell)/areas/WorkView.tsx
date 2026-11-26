@@ -2636,7 +2636,7 @@ function LinkDialog({ kind, onClose, item }: { kind: LinkKind; onClose: () => vo
       open
       onClose={onClose}
       title={heading}
-      description={kind === "github_pr" ? "Jarvis only reads PR state; it never writes to GitHub." : undefined}
+      description={kind === "github_pr" ? "Atlas only reads PR state; it never writes to GitHub." : undefined}
       footer={
         <>
           <Button onClick={onClose}>Cancel</Button>

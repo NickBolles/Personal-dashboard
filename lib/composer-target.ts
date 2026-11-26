@@ -1,5 +1,5 @@
 /**
- * The global "Ask Jarvis" composer (⌘K palette, desktop dock, phone orb) is area-contextual:
+ * The global "Ask Atlas" composer (⌘K palette, desktop dock, phone orb) is area-contextual:
  * inside an area, project or item it asks that area's agent, files the conversation there
  * and attaches the node as context. Outside Areas it is plain Jarvis.
  */
@@ -31,7 +31,7 @@ export function sessionIdFromRoute(pathname: string): string | null {
 }
 
 export type ComposerTarget = {
-  /** who answers: the routed profile, else "Jarvis" */
+  /** who answers: the routed profile, else "Atlas" */
   agent: string;
   routed: boolean;
   /** null = outside Areas (plain Jarvis, filed in Miscellaneous) */
@@ -42,7 +42,7 @@ export type ComposerTarget = {
   context: string | undefined;
 };
 
-export const JARVIS_TARGET: ComposerTarget = { agent: "Jarvis", routed: false, node: null, areaId: null, context: undefined };
+export const JARVIS_TARGET: ComposerTarget = { agent: "Atlas", routed: false, node: null, areaId: null, context: undefined };
 
 /**
  * Who answers the global composer. Routing off, no agent on the area, or a route without a key all answer
@@ -53,7 +53,7 @@ export function composerTargetFor(node: ComposerNode | null | undefined, agent: 
   if (!node || useJarvis) return JARVIS_TARGET;
   const routed = Boolean(agent?.routed && agent.profile);
   return {
-    agent: routed ? agent!.profile! : "Jarvis",
+    agent: routed ? agent!.profile! : "Atlas",
     routed,
     node,
     areaId: node.id,
@@ -61,7 +61,7 @@ export function composerTargetFor(node: ComposerNode | null | undefined, agent: 
   };
 }
 
-/** "Ask momentumchief · Momentum bets" / "Ask Jarvis". */
+/** "Ask momentumchief · Momentum bets" / "Ask Atlas". */
 export function composerLabel(t: ComposerTarget) {
-  return t.node ? `Ask ${t.agent} · ${t.node.title}` : "Ask Jarvis";
+  return t.node ? `Ask ${t.agent} · ${t.node.title}` : "Ask Atlas";
 }

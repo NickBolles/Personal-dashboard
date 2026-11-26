@@ -170,7 +170,7 @@ const KEY_KINDS: [RegExp, string][] = [
   [/^xox/, "Slack token"],
   [/^(?:AKIA|ASIA)/, "AWS key"],
   [/^AIza/, "Google API key"],
-  [/^(?:jdv|jcap|jva)_/, "Jarvis token"],
+  [/^(?:jdv|jcap|jva)_/, "Atlas token"],
   [/^eyJ/, "JWT"],
 ];
 

@@ -23,7 +23,7 @@ export function SourceBanner({ status, hasData }: { status?: SourceStatus; hasDa
           </ButtonLink>
         }
       >
-        Jarvis doesn’t know this source’s state yet.
+        Atlas doesn’t know this source’s state yet.
       </EmptyState>
     );
   }
