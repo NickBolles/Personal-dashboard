@@ -121,7 +121,9 @@ test("coordinator parity: reply actions and Running shortcut, area sub-agent ste
 
   const pane = await openAreaPane(page);
   await expect(pane.getByTestId("actions-taken")).toBeVisible();
-  const run = pane.getByTestId("coordinator-run-card");
+  await expect(pane.getByTestId("coordinator-run-card")).toHaveCount(0);
+  await pane.getByRole("button", { name: "Tasks", exact: true }).click();
+  const run = page.getByRole("dialog", { name: "Area tasks" }).getByTestId("coordinator-run-card");
   await expect(run).toContainText("Audit retries");
   // One composer: Steer on the row puts the work's chip in the pane's composer; nothing is sent until Send there.
   await expect(run.getByRole("button", { name: "Stop Audit retries", exact: true })).toBeVisible();
@@ -140,6 +142,7 @@ test("coordinator parity: reply actions and Running shortcut, area sub-agent ste
   await expect(pane.getByTestId("gc-scope")).toHaveCount(0);
   await expect(input).toHaveValue("");
   // The chip belongs to the draft it was set for: a quick action written into the composer starts its own message.
+  await pane.getByRole("button", { name: "Tasks", exact: true }).click();
   await run.getByRole("button", { name: "Steer Audit retries", exact: true }).click();
   await expect(pane.getByTestId("gc-scope")).toContainText("Audit retries");
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("jarvis:coordinator-prompt", { detail: { text: "Plan my week" } })));
@@ -148,6 +151,7 @@ test("coordinator parity: reply actions and Running shortcut, area sub-agent ste
   await input.fill("");
   expect(sent).toHaveLength(1);
   // Stop asks once on the row, then sends.
+  await pane.getByRole("button", { name: "Tasks", exact: true }).click();
   await run.getByRole("button", { name: "Stop Audit retries", exact: true }).click();
   expect(sent).toHaveLength(1);
   await run.getByRole("button", { name: "Stop sub-agent", exact: true }).click();
@@ -170,7 +174,9 @@ test("coordinator parity: active parent receives steering and can be stopped dir
   });
   const pane = await openAreaPane(page);
   await expect(pane.getByText("Working…", { exact: true })).toBeVisible();
-  const run = pane.getByTestId("coordinator-run-card");
+  await expect(pane.getByTestId("coordinator-run-card")).toHaveCount(0);
+  await pane.getByRole("button", { name: "Tasks", exact: true }).click();
+  const run = page.getByRole("dialog", { name: "Area tasks" }).getByTestId("coordinator-run-card");
   await run.getByRole("button", { name: "Steer Audit retries", exact: true }).click();
   await pane.getByTestId("coordinator-input").fill("Keep the audit bounded");
   await pane.getByTestId("coordinator-send").click();

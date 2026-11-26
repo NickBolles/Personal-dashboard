@@ -484,7 +484,7 @@ export function GlobalCoordinator() {
       onOpen();
       setTab("chat");
       if (detail.target === "chief") setThread(CHIEF_THREAD);
-      if (detail.target !== "chief") setScope(null);
+      setScope(null);
       // Explicit palette Ask belongs to the pinned Chief thread. Stage it without losing an existing draft.
       setDraft((old) => (detail.target === "chief" && old.trim() ? `${old}\n\n${value}` : value.slice(0, 8000)));
       requestAnimationFrame(() =>

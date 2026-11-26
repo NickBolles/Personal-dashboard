@@ -76,6 +76,17 @@ test("explicit prefixes edit and switch without sending; commands shortcut and I
   expect(sends).toBe(0);
 });
 
+test("shell Search resets a previously dismissed Commands mode", async ({ page }) => {
+  await page.goto("/chat");
+  await open(page, true);
+  await expect(box(page)).toHaveValue("> ");
+  await page.getByRole("button", { name: "Close search (Esc)" }).click();
+  await expect(box(page)).toHaveCount(0);
+  await page.getByRole("button", { name: /^Search \(/ }).click();
+  await expect(box(page)).toHaveValue("");
+  await page.getByRole("button", { name: "Close search (Esc)" }).click();
+});
+
 test("reload while palette is open leaves no invisible Back stop", async ({ page }) => {
   await page.goto("/home");
   await page.getByRole("heading", { name: "Now" }).waitFor();

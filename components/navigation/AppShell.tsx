@@ -277,7 +277,7 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
           ) : null}
           <button
             type="button"
-            onClick={() => setSearchOpen(true)}
+            onClick={() => window.dispatchEvent(new Event(OPEN_SEARCH_EVENT))}
             aria-label={`Search (${shortcutLabel(mod, "K")})`}
             title={`Search (${shortcutLabel(mod, "K")})`}
             className={cx(

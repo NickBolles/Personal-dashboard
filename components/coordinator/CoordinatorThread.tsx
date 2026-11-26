@@ -28,7 +28,7 @@ import { ContextSheet, type ContextChip } from "@/components/chat/ContextSheet";
 import { parseFileMarkers } from "@/lib/chat-files";
 import { AlertIcon, BellIcon, BoltIcon, CheckIcon, ClockIcon, InboxIcon, PanelIcon } from "@/components/icons";
 import { RateMessage } from "@/components/feedback/RateMessage";
-import { Button, ChipButton, Dot, IconButton, RefPill, useOnline, useToast } from "@/components/ui";
+import { Button, ChipButton, Dialog, Dot, IconButton, RefPill, useOnline, useToast } from "@/components/ui";
 import { ChatTray } from "@/components/chat/things/ChatTray";
 import { ChatPanel } from "@/components/chat/things/ChatPanel";
 import { useChatThings } from "@/components/chat/things/useChatThings";
@@ -53,7 +53,9 @@ import { ActionsTaken } from "@/components/chat/ActionsTaken";
 
 import { actionsByReply } from "@/lib/chat/actions";
 import { isActiveExec, type ChatExecutionResponse } from "@/lib/chat-execution";
-import { sinceChips, type SinceChip, type SinceCounts } from "@/lib/coordinator/run-card";
+import { sinceChips, mergeBackgroundWork, type SinceChip, type SinceCounts } from "@/lib/coordinator/run-card";
+import { ExecCard } from "@/components/coordinator/running/RunCard";
+import { useCoordinatorRuns } from "@/components/coordinator/running/useCoordinatorRuns";
 
 import type { ConversationListResponse } from "@/lib/work";
 import { parseUserMessage, splitAttachedContext } from "@/lib/chat/display";
@@ -563,6 +565,10 @@ export function CoordinatorThread({
     () => new Map(actionsByReply(detail.data?.timeline ?? []).map((group) => [group.replyId, group.actions])),
     [detail.data?.timeline],
   );
+  // Area panes have no global Tasks tab: preserve their controls in a separate, explicitly opened view, never in Chat.
+  const [areaTasks, setAreaTasks] = useState(false);
+  const tracked = useCoordinatorRuns(!compact && areaTasks, !compact && areaTasks);
+  const areaWork = mergeBackgroundWork(execution.data?.records ?? [], tracked.data?.runs ?? []);
   const sourceDown = !!execution.error || !!execution.data?.sources?.some((source) => source.state === "unavailable");
   // This bot's other threads, newest first: the top of the chat, above the one on screen.
   const previous = (discussions.data?.conversations ?? [])
@@ -718,6 +724,28 @@ export function CoordinatorThread({
   };
   return (
     <SmartScope session={sid} reply={d.excluded ? null : smartReply} liveDecision={liveDecision}>
+      {!compact && !d.excluded ? (
+        <Dialog open={areaTasks} onClose={() => setAreaTasks(false)} title="Area tasks">
+          {areaWork.length ? (
+            areaWork.map((work) => (
+              <ExecCard
+                key={`${sid}:${work.record.key}`}
+                work={work}
+                events={tracked.data?.events}
+                pending={control.isPending}
+                onControl={(input) => control.mutateAsync(input)}
+                onCompose={(next) => {
+                  setAreaTasks(false);
+                  setScope(next);
+                  requestAnimationFrame(() => composer.current?.focus());
+                }}
+              />
+            ))
+          ) : (
+            <p className="text-sm text-muted">No background work in this conversation.</p>
+          )}
+        </Dialog>
+      ) : null}
       <div
         ref={bodyRef}
         className={compact ? "gc-thread-body" : "co-body"}
@@ -758,6 +786,9 @@ export function CoordinatorThread({
                   setSessionId(null);
                 }}
               />
+              {!compact ? (
+                <IconButton label="Tasks" icon={<BoltIcon className="h-4 w-4" />} onClick={() => setAreaTasks(true)} data-testid="co-area-tasks" />
+              ) : null}
               {sid ? (
                 <span className="relative inline-flex shrink-0">
                   <IconButton
