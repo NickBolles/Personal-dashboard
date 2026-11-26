@@ -41,6 +41,7 @@ const base = (d: React.ReactNode, className = "h-6 w-6") => (
     {d}
   </svg>
 );
+export const CloseIcon = ({ className }: P) => base(<path d="m6 6 12 12M18 6 6 18" />, className);
 export const HomeIcon = ({ className }: P) =>
   base(
     <>
