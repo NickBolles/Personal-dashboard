@@ -952,6 +952,12 @@ test("visual: tide orb desktop dock (1440)", async ({ page }, info) => {
 });
 test("tide orb: reduced motion stops flow, aura and twinkle", async ({ page }, info) => {
   test.skip(info.project.name !== "mobile", "computed-style check, once");
+  // Same cross-spec leak as the phone bar shot: a failed run left on this worker adds the attention dot + red tray line.
+  const never = { chat: null, needs: null, running: null, changes: null, context: null };
+  await page.route("**/api/coordinator/runs", (r) => r.fulfill({ json: { runs: [], events: [], lastLooked: never } }));
+  await page.route("**/api/coordinator/decisions*", (r) => r.fulfill({ json: { decisions: [], counts: { open: 0, deferred: 0 } } }));
+  await page.route("**/api/work/decisions*", (r) => r.fulfill({ json: { entries: [], count: 0 } }));
+  await page.route("**/api/work/agent-runs*", (r) => r.fulfill({ json: { items: {}, active: [] } }));
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/more");

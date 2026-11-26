@@ -14,6 +14,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
+import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SMART_CAPABILITY } from "@/lib/jarvis-ui/types";
@@ -28,7 +29,7 @@ import { ContextSheet, type ContextChip } from "@/components/chat/ContextSheet";
 import { parseFileMarkers } from "@/lib/chat-files";
 import { AlertIcon, BellIcon, BoltIcon, CheckIcon, ClockIcon, InboxIcon, PanelIcon } from "@/components/icons";
 import { RateMessage } from "@/components/feedback/RateMessage";
-import { Button, ChipButton, Dialog, Dot, IconButton, RefPill, useOnline, useToast } from "@/components/ui";
+import { Button, ChipButton, Dot, IconButton, RefPill, SectionHeader, useOnline, useToast } from "@/components/ui";
 import { ChatTray } from "@/components/chat/things/ChatTray";
 import { ChatPanel } from "@/components/chat/things/ChatPanel";
 import { useChatThings } from "@/components/chat/things/useChatThings";
@@ -107,6 +108,9 @@ export function CoordinatorThread({
   onScope,
   mentions,
   onAnswer,
+  tasksSlot = null,
+  tasksOpen = false,
+  onShowChat,
 }: {
   /**
    * What the next message is about (the chip in the composer): set by Steer, Reply, Retry or "ask about this" on
@@ -159,6 +163,14 @@ export function CoordinatorThread({
    * background-work cards here do. Null while there is no conversation to send it to.
    */
   commandRef?: { current: ((text: string) => Promise<unknown>) | null };
+  /**
+   * Area panes: the element inside the pane's own Tasks tab where this conversation's background work (sub-agents
+   * with Steer/Stop) is listed. Chat never shows those inventories. `tasksOpen` = that tab is showing;
+   * `onShowChat` switches back to Chat when Steer/Reply puts a chip in the composer.
+   */
+  tasksSlot?: HTMLElement | null;
+  tasksOpen?: boolean;
+  onShowChat?: () => void;
 }) {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -565,9 +577,9 @@ export function CoordinatorThread({
     () => new Map(actionsByReply(detail.data?.timeline ?? []).map((group) => [group.replyId, group.actions])),
     [detail.data?.timeline],
   );
-  // Area panes have no global Tasks tab: preserve their controls in a separate, explicitly opened view, never in Chat.
-  const [areaTasks, setAreaTasks] = useState(false);
-  const tracked = useCoordinatorRuns(!compact && areaTasks, !compact && areaTasks);
+  // Area panes list this conversation's background work under their Tasks tab (portal below), never in Chat.
+  const tracked = useCoordinatorRuns(tasksOpen, !compact && tasksOpen && !!tasksSlot);
+  const workId = useId();
   const areaWork = mergeBackgroundWork(execution.data?.records ?? [], tracked.data?.runs ?? []);
   const sourceDown = !!execution.error || !!execution.data?.sources?.some((source) => source.state === "unavailable");
   // This bot's other threads, newest first: the top of the chat, above the one on screen.
@@ -724,28 +736,28 @@ export function CoordinatorThread({
   };
   return (
     <SmartScope session={sid} reply={d.excluded ? null : smartReply} liveDecision={liveDecision}>
-      {!compact && !d.excluded ? (
-        <Dialog open={areaTasks} onClose={() => setAreaTasks(false)} title="Area tasks">
-          {areaWork.length ? (
-            areaWork.map((work) => (
-              <ExecCard
-                key={`${sid}:${work.record.key}`}
-                work={work}
-                events={tracked.data?.events}
-                pending={control.isPending}
-                onControl={(input) => control.mutateAsync(input)}
-                onCompose={(next) => {
-                  setAreaTasks(false);
-                  setScope(next);
-                  requestAnimationFrame(() => composer.current?.focus());
-                }}
-              />
-            ))
-          ) : (
-            <p className="text-sm text-muted">No background work in this conversation.</p>
-          )}
-        </Dialog>
-      ) : null}
+      {!compact && !d.excluded && tasksSlot && areaWork.length
+        ? createPortal(
+            <section aria-labelledby={workId} className="mb-3 space-y-2" data-testid="coordinator-thread-work">
+              <SectionHeader id={workId} label="This conversation" count={areaWork.length} />
+              {areaWork.map((work) => (
+                <ExecCard
+                  key={`${sid}:${work.record.key}`}
+                  work={work}
+                  events={tracked.data?.events}
+                  pending={control.isPending}
+                  onControl={(input) => control.mutateAsync(input)}
+                  onCompose={(next) => {
+                    onShowChat?.();
+                    setScope(next);
+                    requestAnimationFrame(() => composer.current?.focus());
+                  }}
+                />
+              ))}
+            </section>,
+            tasksSlot,
+          )
+        : null}
       <div
         ref={bodyRef}
         className={compact ? "gc-thread-body" : "co-body"}
@@ -786,9 +798,6 @@ export function CoordinatorThread({
                   setSessionId(null);
                 }}
               />
-              {!compact ? (
-                <IconButton label="Tasks" icon={<BoltIcon className="h-4 w-4" />} onClick={() => setAreaTasks(true)} data-testid="co-area-tasks" />
-              ) : null}
               {sid ? (
                 <span className="relative inline-flex shrink-0">
                   <IconButton

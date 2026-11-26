@@ -77,6 +77,8 @@ test("explicit prefixes edit and switch without sending; commands shortcut and I
 });
 
 test("shell Search resets a previously dismissed Commands mode", async ({ page }) => {
+  // The shell header (with its Search button) starts at the tablet breakpoint; phones open search from the orb.
+  await page.setViewportSize({ width: 820, height: 900 });
   await page.goto("/chat");
   await open(page, true);
   await expect(box(page)).toHaveValue("> ");
