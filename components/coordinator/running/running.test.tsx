@@ -1149,59 +1149,6 @@ it("the catch-up chips use the shared words: runs that need you and runs that st
     ["running", "stuck"],
   ]);
 });
-it("a steer started on a background-work row stays addressed to its sub-agent when a tracked run arrives and when the rows reorder", async () => {
-  client.setQueryData(["session", "thread"], { session: { id: "thread" }, timeline: [{ kind: "assistant", id: "reply", at, text: "Working" }] });
-  const a = sub({ startedAt: at });
-  const b = sub({ key: "subagent:sa_2", id: "sa_2", subagentId: "sa_2", startedAt: at });
-  const registration = sub({ key: "registered_run:reg_1", source: "registered_run", id: "reg_1", subagentId: null, state: "unknown" });
-  const records = (list: ExecutionRecord[]) =>
-    client.setQueryData(["session-exec", "thread"], { sessionId: "thread", parent: null, records: list, sources: [] });
-  const tracked = (runs: CoordinatorRunRow[]) => client.setQueryData<RunsResponse>(COORDINATOR_RUNS_KEY, { runs, events: [], lastLooked: markers });
-  records([a, registration]);
-  tracked([]);
-  render(
-    <QueryClientProvider client={client}>
-      <CoordinatorThread info={info} />
-    </QueryClientProvider>,
-  );
-  const cards = () => screen.getAllByTestId("coordinator-run-card");
-  const field = () => screen.getByRole("textbox", { name: "Message the coordinator" }) as HTMLTextAreaElement;
-  const chip = () => screen.getByTestId("gc-scope");
-  expect(cards()).toHaveLength(1);
-  // the one text field is the composer: Steer puts the sub-agent's chip in it and sends nothing
-  expect(screen.getAllByRole("textbox")).toHaveLength(1);
-  fireEvent.click(within(cards()[0]!).getByRole("button", { name: "Steer Audit the feeds" }));
-  expect(chip().textContent).toContain("Audit the feeds");
-  expect(field().placeholder).toBe("Steer this work…");
-  fireEvent.change(field(), { target: { value: "Only the feeds page" } });
-  expect(api.post).not.toHaveBeenCalled();
-  // its tracked run is matched a poll later: the same row, now with its R-n, and the chip and the text are still there
-  act(() => {
-    tracked([run(7, { title: "Audit the feeds" })]);
-  });
-  await waitFor(() => expect(cards()[0]!.textContent).toContain("R-7"));
-  expect(cards()).toHaveLength(1);
-  expect(field().value).toBe("Only the feeds page");
-  expect(chip().getAttribute("aria-label")).toBe("Steering Audit the feeds");
-  // a second live sub-agent with the same title turns up and sorts first (it is waiting)
-  act(() => {
-    records([{ ...b, state: "waiting" }, a, registration]);
-  });
-  await waitFor(() => expect(cards()).toHaveLength(3));
-  expect(field().value).toBe("Only the feeds page");
-  // and what was typed for the first one is sent to the first one, through the control channel
-  fireEvent.click(screen.getByTestId("coordinator-send"));
-  await waitFor(() =>
-    expect(api.post).toHaveBeenCalledExactlyOnceWith(
-      "/api/hermes/sessions/thread/runs",
-      expect.objectContaining({ input: "Steer sa_1: Only the feeds page", idempotencyKey: expect.stringMatching(/^ctl-/) }),
-    ),
-  );
-  expect(vi.mocked(api.post).mock.calls.some(([, payload]) => String((payload as { input?: string } | undefined)?.input).includes("sa_2"))).toBe(false);
-  // sent: the field and the chip clear
-  await waitFor(() => expect(screen.queryByTestId("gc-scope")).toBeNull());
-  expect(field().value).toBe("");
-});
 it("thread omits the divider without a marker; the owner's active-run Stop still stops it", async () => {
   client.setQueryData(["session", "thread"], {
     session: { id: "thread", activeRun: { runId: "active-1" } },

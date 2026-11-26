@@ -38,6 +38,7 @@ vi.mock("@/lib/client/api", () => ({
   },
 }));
 const ABOUT_R40: ComposeScope = { kind: "ask", ref: "R-40", title: "Ledger import" };
+let selectedKind: ComposeScope["kind"] = "ask";
 // The thread, reduced to the host's side of the composer: what chip and draft it is handed, and the two things the
 // owner does there (a row's Ask puts the chip in; typing changes the draft).
 vi.mock("./CoordinatorThread", () => ({
@@ -45,7 +46,7 @@ vi.mock("./CoordinatorThread", () => ({
     <div>
       <output data-testid="chip">{p.scope?.ref ?? ""}</output>
       <output data-testid="draft">{p.draft ?? ""}</output>
-      <button type="button" onClick={() => p.onScope?.(ABOUT_R40)}>
+      <button type="button" onClick={() => p.onScope?.({ ...ABOUT_R40, kind: selectedKind })}>
         Ask about R-40
       </button>
       <button type="button" onClick={() => p.onDraft?.("what changed in")}>
@@ -73,6 +74,7 @@ vi.mock("./useCoordinatorThings", () => ({
 const originalShow = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, "showModal");
 const originalClose = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, "close");
 beforeEach(() => {
+  selectedKind = "ask";
   vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
   Object.defineProperty(HTMLDialogElement.prototype, "showModal", {
     configurable: true,
@@ -138,6 +140,20 @@ it("a prompt from the palette starts its own message too", async () => {
     window.dispatchEvent(new CustomEvent(COORDINATOR_PROMPT, { detail: { text: "Plan my week" } }));
   });
   expect(draft()).toBe("Plan my week");
+  expect(chip()).toBe("");
+});
+
+it.each(["answer", "steer", "retry"] as const)("explicit Chief question clears an old %s scope while retaining draft text", async (kind) => {
+  selectedKind = kind;
+  await mount();
+  openSheet();
+  askAboutR40();
+  typeWords();
+  expect(chip()).toBe("R-40");
+  act(() => {
+    window.dispatchEvent(new CustomEvent(COORDINATOR_PROMPT, { detail: { text: "Plan my week", target: "chief" } }));
+  });
+  expect(draft()).toBe("what changed in\n\nPlan my week");
   expect(chip()).toBe("");
 });
 

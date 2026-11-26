@@ -276,11 +276,12 @@ function TokenRow({
   const { surfaceProps } = menu;
   const scopes = normaliseScopes(t.scopes);
   return (
-    <li className={`min-w-0 p-2.5 text-sm ${live ? "" : "opacity-70"}`} data-testid="agent-token-row" {...surfaceProps}>
+    // Revoked rows are muted by colour token, never by opacity: an opacity layer drops muted text and pills below AA.
+    <li className="min-w-0 p-2.5 text-sm" data-testid="agent-token-row" {...surfaceProps}>
       <div className="flex min-w-0 items-start gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-            <span className="min-w-0 font-semibold [overflow-wrap:anywhere]">{t.name}</span>
+            <span className={`min-w-0 font-semibold [overflow-wrap:anywhere] ${live ? "" : "text-muted"}`}>{t.name}</span>
             <span className="font-mono text-xs text-muted">…{t.hint}</span>
             {live ? null : <Pill tone="neutral">Revoked</Pill>}
           </div>

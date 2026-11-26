@@ -129,6 +129,7 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
     MORE,
   ];
   const [searchOpen, setSearchOpen] = useState(false);
+  const [paletteMode, setPaletteMode] = useState<"search" | "commands">("search");
   const [capturing, setCapturing] = useState(false);
   const [newMenu, setNewMenu] = useState(false);
   const canWork = capabilities.includes("work.use");
@@ -152,7 +153,11 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
   }, []);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+      if (e.isComposing || e.keyCode === 229 || e.defaultPrevented) return;
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent(OPEN_SEARCH_EVENT, { detail: { mode: "commands" } }));
+      } else if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "k") {
         e.preventDefault();
         window.dispatchEvent(new Event(OPEN_SEARCH_EVENT));
       } else if (e.key === "/" && !(e.target as HTMLElement | null)?.closest("input, textarea, select, [contenteditable=true]")) {
@@ -160,7 +165,10 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
         window.dispatchEvent(new Event(OPEN_SEARCH_EVENT));
       }
     };
-    const onOpen = () => setSearchOpen(true);
+    const onOpen = (e: Event) => {
+      setPaletteMode((e as CustomEvent<{ mode?: string }>).detail?.mode === "commands" ? "commands" : "search");
+      setSearchOpen(true);
+    };
     window.addEventListener("keydown", onKey);
     window.addEventListener(OPEN_SEARCH_EVENT, onOpen);
     // ?search=1 opens search (the Android app's search shortcut; there's no /search page).
@@ -269,7 +277,7 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
           ) : null}
           <button
             type="button"
-            onClick={() => setSearchOpen(true)}
+            onClick={() => window.dispatchEvent(new Event(OPEN_SEARCH_EVENT))}
             aria-label={`Search (${shortcutLabel(mod, "K")})`}
             title={`Search (${shortcutLabel(mod, "K")})`}
             className={cx(
@@ -398,6 +406,7 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
       </Suspense>
       <SearchDialog
         open={searchOpen}
+        initialMode={paletteMode}
         onClose={() => {
           setSearchOpen(false);
           window.dispatchEvent(new Event(OVERLAY_CLOSED_EVENT));

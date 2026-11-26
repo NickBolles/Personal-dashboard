@@ -6,9 +6,9 @@ import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-quer
 import { api } from "@/lib/client/api";
 import type { SearchResponse, SearchResult } from "@/lib/search";
 import { moduleFor } from "@/lib/modules";
-import { cx, useToast } from "@/components/ui";
+import { Button, IconButton, Input, cx, useToast } from "@/components/ui";
 import { Spinner } from "@/components/ui/legacy";
-import { BoltIcon, ChevronIcon, SearchIcon } from "@/components/icons";
+import { BoltIcon, ChevronIcon, CloseIcon, SearchIcon } from "@/components/icons";
 import { matchCommands, NEW_CHAT_EVENT, useCommands, type Command } from "@/components/navigation/commands";
 import { useAccess } from "@/components/access";
 import { useAskHermes } from "@/components/chat/useAskHermes";
@@ -17,7 +17,8 @@ import { WORKFLOW_START_EVENT } from "@/components/workflows/events";
 import { useComposerTarget, useRouteNodeId } from "@/components/agents/useComposerTarget";
 import { KeyboardInset } from "@/lib/client/keyboard";
 import type { ComposerNode } from "@/lib/composer-target";
-import { ComposerTargetChip } from "@/components/agents/ComposerTargetChip";
+import { paletteMode, modeInput, type PaletteMode } from "@/lib/palette-mode";
+import { usePaletteHistory } from "@/lib/client/palette-history";
 import { useModKey } from "@/lib/client/platform";
 import { isContainer, type ItemsResponse, type WorkItem } from "@/lib/work";
 import {
@@ -117,19 +118,22 @@ function fallbackNode(id: string | null, byId: Map<string, WorkItem>): ComposerN
   return { id: it.id, title: it.title, kind: it.kind, path: [], areaId: root.id, areaTitle: root.title };
 }
 
-export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function SearchDialog({ open, onClose, initialMode = "search" }: { open: boolean; onClose: () => void; initialMode?: PaletteMode }) {
   const router = useRouter();
   const pathname = usePathname() ?? "";
   const qc = useQueryClient();
   const { toast } = useToast();
   const mod = useModKey();
-  const [q, setQ] = useState("");
+  const [raw, setQ] = useState("");
+  const dismiss = usePaletteHistory(open, onClose);
   const [active, setActive] = useState(0);
   // Raycast state: a typed action with its chips, a confirm step for writes, breadcrumb sub-lists, the ⌘K panel.
   const [typed, setTyped] = useState<{ def: ActionDef; chips: Chip[] } | null>(null);
   const [confirm, setConfirm] = useState<{ def: ActionDef; chips: Chip[]; run: () => Promise<void>; text?: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [stack, setStack] = useState<{ id: string; title: string }[]>([]);
+  // Prefixes are syntax only at the root; task titles and nested filters are literal text.
+  const { mode, query: q } = typed || stack.length ? { mode: "commands" as const, query: raw } : paletteMode(raw);
   const [panel, setPanel] = useState<{ title: string; entries: PanelEntry[] } | null>(null);
   const [panelActive, setPanelActive] = useState(0);
   const [recent, setRecent] = useState<RecentEntry[]>([]);
@@ -147,7 +151,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
     queryKey: ["search", debounced],
     queryFn: ({ signal }) => api.get<SearchResponse>(`/api/search?q=${encodeURIComponent(debounced)}`, signal),
     // The empty query (recent chats and items) is prefetched on load, so the palette opens with them at once.
-    enabled: (open && searching) || !debounced,
+    enabled: (open && searching && mode === "search") || !debounced,
     staleTime: debounced ? 15_000 : 60_000,
     placeholderData: keepPreviousData,
   });
@@ -180,16 +184,16 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
     return { areas, items, agents: [{ id: "jarvis", label: "Jarvis" }, ...modes.map((m) => ({ id: m, label: m }))], assignees, tags };
   }, [workItems, byId, tagDir.data]);
   // Grouped (Areas, Projects, Items, Chats & notes, People…): groups in order of their best match, rank kept inside each.
-  const results = useMemo(() => {
+  const results = (() => {
     const list = res.data?.results ?? [];
     // Recent (empty query) and matches never mix: typing hides Recent, clearing hides the last matches.
     if (Boolean(q.trim()) !== Boolean(res.data?.query)) return [];
     const order: string[] = [];
     for (const r of list) if (!order.includes(r.group ?? "")) order.push(r.group ?? "");
     return [...list].sort((a, b) => order.indexOf(a.group ?? "") - order.indexOf(b.group ?? ""));
-  }, [res.data, q]);
+  })();
   const allCommands = useCommands();
-  const commands = useMemo(() => matchCommands(allCommands, q.trim()).filter((c) => c.id !== "search"), [allCommands, q]);
+  const commands = matchCommands(allCommands, q.trim()).filter((c) => c.id !== "search");
   const quickActions = useQuickActions(open && canWork);
   const canAsk = can("hermes.chat");
   // Area-contextual "Ask": inside an area/project/item it asks that area's agent and files the chat there.
@@ -224,7 +228,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
     | { kind: "node"; item: WorkItem }
     | { kind: "cand"; c: Candidate };
   // Not until we know who answers here: an early ask would land in Miscellaneous on plain Jarvis.
-  const canAskNow = canAsk && Boolean(q.trim()) && !target.loading && searching;
+  const canAskNow = canAsk && canWork && Boolean(q.trim()) && !target.loading && searching;
   const askRow: Row[] = canAskNow ? [{ kind: "ask" }] : [];
   // Workflows: "/teaching Jake Fry" starts that workflow's filed chat (W1: args prefill, start form in W2).
   const slash = canWork && canAsk ? parseSlashCommand(q) : null;
@@ -264,12 +268,14 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
   const matches = canWork && searching ? matchActions(q, has) : [];
   const exactRows: Row[] = matches.filter((m) => m.exact || q.trim().startsWith("/")).map((m) => ({ kind: "action" as const, m }));
   const prefixRows: Row[] = matches.filter((m) => !m.exact && !q.trim().startsWith("/")).map((m) => ({ kind: "action" as const, m }));
-  // Enter keeps opening commands and results ("today" ↵, "skylight" ↵); a question (4+ words or "?") asks first.
-  // Ctrl/⌘ ↵ always asks. A fully typed action ("new item in home") goes on top.
-  const question = /\?\s*$/.test(q) || q.trim().split(/\s+/).length >= 4;
+  // Default search always ranks search/commands first. Explicit ? and Ctrl/⌘ Enter stage a Chief draft.
   let rows: Row[];
   const arg = typed ? currentArg(typed.def, typed.chips) : null;
-  if (typed) {
+  if (mode === "chief" && !typed) {
+    rows = canAskNow ? [{ kind: "ask" }] : [];
+  } else if (mode === "commands" && !typed && !stack.length) {
+    rows = [...wfRows, ...exactRows, ...commandRows, ...prefixRows];
+  } else if (typed) {
     rows = arg && arg.kind !== "text" ? candidatesFor(arg.kind, q, ctx).map((c) => ({ kind: "cand" as const, c })) : [];
   } else if (stack.length) {
     const top = stack[stack.length - 1]!;
@@ -293,16 +299,13 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
       .map((e) => ({ kind: "recent" as const, e }));
     rows = [...sugg, ...mine, ...resultRows, ...(canWork ? [{ kind: "browse" as const }] : []), ...commandRows];
   } else {
-    rows =
-      question && !commandRows.length && !exactRows.length && !wfRows.length
-        ? [...askRow, ...resultRows, ...prefixRows]
-        : [...wfRows, ...exactRows, ...commandRows, ...resultRows, ...prefixRows, ...askRow];
+    rows = [...wfRows, ...exactRows, ...commandRows, ...resultRows, ...prefixRows, ...askRow];
   }
 
   useEffect(() => {
     if (!open) return;
     restore.current = document.activeElement as HTMLElement | null;
-    setQ("");
+    setQ(modeInput(initialMode, ""));
     setActive(0);
     setTyped(null);
     setConfirm(null);
@@ -311,7 +314,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
     setRecent(readRecent());
     requestAnimationFrame(() => input.current?.focus());
     return () => restore.current?.focus?.();
-  }, [open]);
+  }, [open, initialMode]);
 
   if (!open) return null;
   const refresh = () => {
@@ -321,7 +324,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
   };
   const close = () => {
     if (press.current) clearTimeout(press.current);
-    onClose();
+    return dismiss();
   };
   const startTyped = (def: ActionDef, rest: string, preset: Chip[] = []) => {
     const filled = preset.length ? { chips: preset, input: rest } : fillAll(def, rest, ctx);
@@ -339,6 +342,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
         return async () => {
           const { item } = await api.post<{ item: WorkItem }>("/api/work/items", { parentId: v(0).id, kind: "thread", title: v(1).label });
           toast(`Created “${item.title}”`, "ok");
+          await close();
           router.push(`/areas?item=${encodeURIComponent(item.id)}`);
         };
       case "move":
@@ -413,8 +417,9 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
       });
       requestAnimationFrame(() => confirmBtn.current?.focus());
     } else {
-      close();
-      void run().catch((e: Error) => toast(e.message, "danger"));
+      void close()
+        .then(run)
+        .catch((e: Error) => toast(e.message, "danger"));
     }
   };
   const doConfirm = async () => {
@@ -475,14 +480,16 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
       return;
     }
     const link = hrefOf(row);
-    close();
-    if (row.kind === "command") row.c.run();
-    else if (row.kind === "ask") void asker.ask(q, { areaId: target.areaId, context: target.context });
-    else if (row.kind === "workflow") startWorkflow(`/${row.w.slug} ${row.rest}`);
-    else if (link) {
-      remember({ id: link.href, title: link.title, href: link.href });
-      router.push(link.href);
-    }
+    void close().then(() => {
+      if (row.kind === "command") row.c.run();
+      else if (row.kind === "ask") {
+        window.dispatchEvent(new CustomEvent(COORDINATOR_PROMPT, { detail: { text: q.trim(), target: "chief" } }));
+      } else if (row.kind === "workflow") startWorkflow(`/${row.w.slug} ${row.rest}`);
+      else if (link) {
+        remember({ id: link.href, title: link.title, href: link.href });
+        router.push(link.href);
+      }
+    });
   };
   const openPanel = (row: Row | undefined) => {
     const link = hrefOf(row);
@@ -491,7 +498,14 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
     const abs = new URL(link.href, window.location.origin).toString();
     const entries: PanelEntry[] = [
       { id: "open", label: "Open", hint: "↵", run: () => go(row) },
-      { id: "tab", label: "Open in new tab", run: () => (window.open(abs, "_blank", "noopener"), close()) },
+      {
+        id: "tab",
+        label: "Open in new tab",
+        run: () => {
+          window.open(abs, "_blank", "noopener");
+          void close();
+        },
+      },
       {
         id: "copy",
         label: "Copy link",
@@ -560,14 +574,33 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
   };
   const primary = confirm
     ? "Confirm"
-    : typed
-      ? arg && arg.kind !== "text"
-        ? `Fill ${arg.name}`
-        : "Continue"
-      : rows[active]?.kind === "action"
-        ? "Start"
-        : "Open";
+    : mode === "chief"
+      ? "Continue in Chief (review before sending)"
+      : typed
+        ? arg && arg.kind !== "text"
+          ? `Fill ${arg.name}`
+          : "Continue"
+        : rows[active]?.kind === "action"
+          ? "Start"
+          : "Open";
   const onKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === "p") {
+      e.preventDefault();
+      e.stopPropagation();
+      setTyped(null);
+      setStack([]);
+      setPanel(null);
+      setQ(modeInput("commands", q));
+      setActive(0);
+      return;
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      void close();
+      return;
+    }
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
       e.preventDefault();
       e.stopPropagation();
@@ -593,11 +626,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
     }
     if (e.key === "Escape") {
       e.preventDefault();
-      if (typed) {
-        setTyped(null);
-        setQ("");
-      } else if (stack.length) setStack([]);
-      else close();
+      void close();
     } else if (e.key === "Backspace" && !q && (typed || stack.length)) {
       // Backspace on an empty input: drop the last chip, then the action; or go up one sub-list
       e.preventDefault();
@@ -614,7 +643,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setActive((i) => Math.max(i - 1, 0));
-    } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && canAskNow) {
+    } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && canAskNow && mode !== "commands") {
       e.preventDefault();
       go({ kind: "ask" });
     } else if (e.key === "Enter") {
@@ -654,8 +683,66 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
         role="dialog"
         aria-modal="true"
         aria-label="Search"
+        onKeyDownCapture={(e) => {
+          if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+          if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            void close();
+          }
+        }}
         className="palette-sheet flex w-full flex-col overflow-hidden bg-surface pb-[var(--kb-inset,0px)] sm:max-h-[80vh] sm:max-w-[620px] sm:rounded-[14px] sm:border sm:border-line sm:pb-0 sm:shadow-[var(--shadow-pop)]"
       >
+        <div className="flex min-w-0 items-center justify-between gap-2 border-b border-line px-3 py-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-1 text-xs text-muted" aria-label="Palette mode">
+            {(["search", "commands", "chief"] as const)
+              .filter((m) => m !== "chief" || canAsk)
+              .map((m) => (
+                <Button
+                  key={m}
+                  size="sm"
+                  variant="ghost"
+                  aria-pressed={!typed && !stack.length && mode === m}
+                  onClick={() => {
+                    setTyped(null);
+                    setConfirm(null);
+                    setStack([]);
+                    setPanel(null);
+                    setQ(modeInput(m, q));
+                    setActive(0);
+                    requestAnimationFrame(() => input.current?.focus());
+                  }}
+                >
+                  {m === "search" ? "Search" : m === "commands" ? "> Commands" : "? Chief"}
+                </Button>
+              ))}
+          </div>
+          <IconButton label="Close search (Esc)" icon={<CloseIcon />} onClick={() => void close()} />
+        </div>
+        {typed || stack.length || confirm || panel ? (
+          <div className="flex min-w-0 items-center gap-2 border-b border-line px-3 py-1 text-xs text-muted">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                if (panel) setPanel(null);
+                else if (confirm) setConfirm(null);
+                else if (typed) {
+                  setTyped(null);
+                  setQ("> ");
+                } else {
+                  setStack((s) => s.slice(0, -1));
+                  setQ("");
+                }
+                setActive(0);
+                requestAnimationFrame(() => input.current?.focus());
+              }}
+            >
+              Back
+            </Button>
+            <span className="min-w-0 truncate">{panel ? "Actions" : typed ? `> ${typed.def.label}` : confirm ? "Confirm" : "Browse areas"}</span>
+          </div>
+        ) : null}
         {stack.length ? (
           <nav aria-label="Breadcrumb" className="flex items-center gap-1 border-b border-line px-4 py-1.5 text-xs text-muted" data-testid="palette-breadcrumb">
             {stack.map((s, i) => (
@@ -672,7 +759,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
         <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 border-b border-line px-4 py-1.5">
           <SearchIcon className="h-[18px] w-[18px] shrink-0 text-muted" />
           {typed ? <PaletteChips def={typed.def} chips={typed.chips} /> : null}
-          <input
+          <Input
             ref={input}
             role="combobox"
             aria-expanded={rows.length > 0}
@@ -687,10 +774,14 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
                   : ""
                 : stack.length
                   ? `Filter ${stack[stack.length - 1]!.title}…`
-                  : "Search, or type a command (“new item in”, “today”, “/”)…"
+                  : mode === "chief"
+                    ? "? Ask Chief of staff…"
+                    : mode === "commands"
+                      ? "> Type a command…"
+                      : "Search, > commands, ? Chief…"
             }
-            className="min-h-11 min-w-[8rem] flex-1 bg-transparent text-base outline-none placeholder:text-muted"
-            value={q}
+            className="min-w-0 flex-1"
+            value={raw}
             disabled={Boolean(confirm)}
             onChange={(e) => {
               setQ(e.target.value);
@@ -699,15 +790,6 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
             onKeyDown={onKey}
           />
           {res.isFetching && q.trim() && searching ? <Spinner label="Searching" /> : null}
-          {canAsk && !typed ? <ComposerTargetChip target={target} /> : null}
-          <button
-            type="button"
-            onClick={close}
-            aria-label="Close search (Esc)"
-            className="tap inline-flex shrink-0 items-center justify-center rounded-[8px] px-1.5 hover:bg-surface-2"
-          >
-            <kbd className="kbd">Esc</kbd>
-          </button>
         </div>
         {confirm ? (
           <div className="flex min-w-0 flex-col gap-3 p-4" data-testid="palette-confirm">
@@ -804,8 +886,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
                         ✦
                       </span>
                       <span className="min-w-0 flex-1 truncate">
-                        <span className="font-medium">Ask {target.agent}</span>
-                        {target.node ? <span className="text-muted"> · {target.node.title}</span> : null}
+                        <span className="font-medium">Ask Chief of staff</span>
                         <span className="text-muted">: “{q.trim()}”</span>
                       </span>
                       <kbd className="kbd shrink-0">{i === 0 ? "↵" : `${mod} ↵`}</kbd>
@@ -879,12 +960,12 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
         {panel && !confirm ? (
           <PaletteActionPanel title={panel.title} entries={panel.entries} active={panelActive} onActive={setPanelActive} listId={panelId} />
         ) : null}
-        <div className="flex items-center gap-3 border-t border-line bg-surface-2 px-4 py-2 text-xs text-muted">
-          <span className="flex shrink-0 items-center gap-1" data-testid="palette-footer">
-            <kbd className="kbd">↵</kbd> {primary}
+        <div className="flex flex-wrap items-center gap-2 border-t border-line bg-surface-2 px-4 py-2 text-xs text-muted">
+          <span className="flex min-w-0 max-w-full items-center gap-1" data-testid="palette-footer">
+            <kbd className="kbd">↵</kbd> <span className="min-w-0 break-words">{primary}</span>
           </span>
           <span className="min-w-0 flex-1 truncate" role="status">
-            {typed || stack.length || confirm ? null : !q.trim() ? (
+            {typed || stack.length || confirm || mode !== "search" ? null : !q.trim() ? (
               <span className="sr-only">Type to search or filter commands.</span>
             ) : res.isError ? (
               `Search failed: ${(res.error as Error).message}`

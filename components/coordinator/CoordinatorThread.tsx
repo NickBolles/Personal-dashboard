@@ -14,6 +14,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
+import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SMART_CAPABILITY } from "@/lib/jarvis-ui/types";
@@ -28,7 +29,7 @@ import { ContextSheet, type ContextChip } from "@/components/chat/ContextSheet";
 import { parseFileMarkers } from "@/lib/chat-files";
 import { AlertIcon, BellIcon, BoltIcon, CheckIcon, ClockIcon, InboxIcon, PanelIcon } from "@/components/icons";
 import { RateMessage } from "@/components/feedback/RateMessage";
-import { Button, ChipButton, Dot, IconButton, RefPill, useNow, useOnline, useToast } from "@/components/ui";
+import { Button, ChipButton, Dot, IconButton, RefPill, SectionHeader, useOnline, useToast } from "@/components/ui";
 import { ChatTray } from "@/components/chat/things/ChatTray";
 import { ChatPanel } from "@/components/chat/things/ChatPanel";
 import { useChatThings } from "@/components/chat/things/useChatThings";
@@ -52,19 +53,11 @@ import { useQuickActions } from "@/components/quick-actions/useQuickActions";
 import { ActionsTaken } from "@/components/chat/ActionsTaken";
 
 import { actionsByReply } from "@/lib/chat/actions";
-import { isActiveExec, type ChatExecutionResponse, type ExecutionRecord } from "@/lib/chat-execution";
-import {
-  mergeBackgroundWork,
-  placeWork,
-  quietChatWork,
-  sinceChips,
-  workKey,
-  type BackgroundWork,
-  type SinceChip,
-  type SinceCounts,
-} from "@/lib/coordinator/run-card";
-import { ExecCard, LiveLine } from "@/components/coordinator/running/RunCard";
+import { isActiveExec, type ChatExecutionResponse } from "@/lib/chat-execution";
+import { sinceChips, mergeBackgroundWork, type SinceChip, type SinceCounts } from "@/lib/coordinator/run-card";
+import { ExecCard } from "@/components/coordinator/running/RunCard";
 import { useCoordinatorRuns } from "@/components/coordinator/running/useCoordinatorRuns";
+
 import type { ConversationListResponse } from "@/lib/work";
 import { parseUserMessage, splitAttachedContext } from "@/lib/chat/display";
 // PR A (pinned Chief of staff thread): thread switcher, paging, live decisions and questionnaire replies.
@@ -115,6 +108,9 @@ export function CoordinatorThread({
   onScope,
   mentions,
   onAnswer,
+  tasksSlot = null,
+  tasksOpen = false,
+  onShowChat,
 }: {
   /**
    * What the next message is about (the chip in the composer): set by Steer, Reply, Retry or "ask about this" on
@@ -167,6 +163,14 @@ export function CoordinatorThread({
    * background-work cards here do. Null while there is no conversation to send it to.
    */
   commandRef?: { current: ((text: string) => Promise<unknown>) | null };
+  /**
+   * Area panes: the element inside the pane's own Tasks tab where this conversation's background work (sub-agents
+   * with Steer/Stop) is listed. Chat never shows those inventories. `tasksOpen` = that tab is showing;
+   * `onShowChat` switches back to Chat when Steer/Reply puts a chip in the composer.
+   */
+  tasksSlot?: HTMLElement | null;
+  tasksOpen?: boolean;
+  onShowChat?: () => void;
 }) {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -196,10 +200,7 @@ export function CoordinatorThread({
   const [answering, setAnswering] = useState(false);
   const answerKey = scope?.kind === "answer" ? `${scope.ref}:${text.trim()}` : null;
   const confirming = armed !== null && armed === answerKey;
-  const compose = (next: ComposeScope) => {
-    setScope(next);
-    requestAnimationFrame(() => composer.current?.focus());
-  };
+
   /** The chip belongs to the draft it was set for: a new draft from elsewhere or another thread starts without it. */
   const dropScope = () => {
     setScope(null);
@@ -253,7 +254,9 @@ export function CoordinatorThread({
     // The area pane takes ⌘K quick actions while it is open; the global rail/sheet handles them otherwise.
     if (compact || d.excluded) return;
     const onPrompt = (e: Event) => {
-      const value = (e as CustomEvent<{ text?: string }>).detail?.text;
+      const detail = (e as CustomEvent<{ text?: string; target?: "chief" }>).detail;
+      if (detail?.target === "chief") return;
+      const value = detail?.text;
       if (typeof value === "string") fillRef.current(value);
     };
     window.addEventListener(COORDINATOR_PROMPT, onPrompt);
@@ -574,29 +577,10 @@ export function CoordinatorThread({
     () => new Map(actionsByReply(detail.data?.timeline ?? []).map((group) => [group.replyId, group.actions])),
     [detail.data?.timeline],
   );
-  const records = (execution.data?.records?.filter((r) => r.source === "subagent" || r.source === "registered_run" || r.source === "jarvis_run") ?? [])
-    .map((record, index) => ({ record, index }))
-    // What needs the owner first (failed, waiting), then what is in flight, then what ended; newest first within each.
-    .sort((a, b) => EXEC_ORDER[a.record.state] - EXEC_ORDER[b.record.state] || a.index - b.index)
-    .map((x) => x.record);
-  // Work that is also a tracked run (R-n) brings its timeline into the card.
-  const tracked = useCoordinatorRuns(
-    true,
-    records.some((r) => r.source !== "subagent"),
-  );
-  const work = mergeBackgroundWork(records, tracked.data?.runs ?? []);
-  const row = (w: BackgroundWork) => (
-    <ExecCard
-      // Keyed by what its controls reach: a row that came to control another sub-agent is a new row, so a stop
-      // being confirmed on one can never be sent to the other.
-      key={`${sid}:${workKey(w)}`}
-      work={w}
-      events={tracked.data?.events}
-      pending={control.isPending}
-      onControl={(input) => control.mutateAsync(input)}
-      onCompose={compose}
-    />
-  );
+  // Area panes list this conversation's background work under their Tasks tab (portal below), never in Chat.
+  const tracked = useCoordinatorRuns(tasksOpen, !compact && tasksOpen && !!tasksSlot);
+  const workId = useId();
+  const areaWork = mergeBackgroundWork(execution.data?.records ?? [], tracked.data?.runs ?? []);
   const sourceDown = !!execution.error || !!execution.data?.sources?.some((source) => source.state === "unavailable");
   // This bot's other threads, newest first: the top of the chat, above the one on screen.
   const previous = (discussions.data?.conversations ?? [])
@@ -623,18 +607,11 @@ export function CoordinatorThread({
   const hiddenGroups = allGroups.length - shownCount;
   const messageGroups = allGroups.slice(hiddenGroups);
   const msgs = messageGroups.map((group) => group[0]);
-
-  // Each piece of work is drawn once, under the reply that started it; a hand-off is not also a chip there.
-  const placed = placeWork(work, msgs);
-  const liveWork = placed.get("live") ?? [];
-  const actionsFor = (id: string) => {
-    const actions = replyActions.get(id) ?? [];
-    return placed.get(id)?.length ? actions.filter((a) => a.kind !== "delegated" && a.kind !== "run_started") : actions;
-  };
-  // What a reply mentions is drawn once too: as a row under the LATEST reply that mentions it, unless it already
-  // has its row as work a reply started. Everywhere else it is only the chip in the text.
+  // Actions are part of the real conversation. The full background-work inventory lives in Tasks, not in Chat.
+  const actionsFor = (id: string) => replyActions.get(id) ?? [];
+  // Work rows are exclusive to Tasks. Chat only draws host-provided decision and task mentions.
   const smartOn = !!smartSettings.data?.enabled;
-  const drawn = new Set([...placed.values()].flat().flatMap((w) => (w.run ? [w.run.ref] : [])));
+  const drawn = new Set<string>();
   // Only suppress rows actually replaced by the enabled rich renderer. Smart-off keeps native owner-session controls.
   if (smartOn) for (const m of msgs) if (m.kind === "assistant") for (const ref of smartDecisionRefs(m.text)) drawn.add(ref);
   const mentionedBy = new Map<string, string>();
@@ -759,6 +736,28 @@ export function CoordinatorThread({
   };
   return (
     <SmartScope session={sid} reply={d.excluded ? null : smartReply} liveDecision={liveDecision}>
+      {!compact && !d.excluded && tasksSlot && areaWork.length
+        ? createPortal(
+            <section aria-labelledby={workId} className="mb-3 space-y-2" data-testid="coordinator-thread-work">
+              <SectionHeader id={workId} label="This conversation" count={areaWork.length} />
+              {areaWork.map((work) => (
+                <ExecCard
+                  key={`${sid}:${work.record.key}`}
+                  work={work}
+                  events={tracked.data?.events}
+                  pending={control.isPending}
+                  onControl={(input) => control.mutateAsync(input)}
+                  onCompose={(next) => {
+                    onShowChat?.();
+                    setScope(next);
+                    requestAnimationFrame(() => composer.current?.focus());
+                  }}
+                />
+              ))}
+            </section>,
+            tasksSlot,
+          )
+        : null}
       <div
         ref={bodyRef}
         className={compact ? "gc-thread-body" : "co-body"}
@@ -906,11 +905,6 @@ export function CoordinatorThread({
 
                           <AssistantText text={m.text} messageId={m.id} />
                           <ActionsTaken actions={actionsFor(m.id)} sessionId={sid ?? undefined} areaHint={d.area.title} compact />
-                          {placed.get(m.id)?.length ? (
-                            <section aria-label="Work started by this reply" className="gc-bgwork">
-                              <ChatWork work={placed.get(m.id)!} render={row} onActivity={onJump ? () => onJump("running") : undefined} />
-                            </section>
-                          ) : null}
                           {mentions ? <MentionRows refs={mentionRows(m.id)} render={mentions.render} /> : null}
                         </li>
                       ) : (
@@ -951,7 +945,7 @@ export function CoordinatorThread({
               </div>
             ) : null}
             <ActionsTaken actions={actionsFor("live")} sessionId={sid ?? undefined} areaHint={d.area.title} compact />
-            {sourceDown && !records.length ? (
+            {sourceDown ? (
               <p role="alert" className="mt-2 text-xs text-danger">
                 {execution.error ? "Couldn't load coordinator runs." : "Couldn't check every source of background work."}{" "}
                 <Button size="sm" variant="ghost" loading={execution.isFetching} onClick={() => void execution.refetch()}>
@@ -959,16 +953,7 @@ export function CoordinatorThread({
                 </Button>
               </p>
             ) : null}
-            {/* The rows are kept current (5 s while anything runs). Freshness is said only when a refresh failed:
-                "stale" is the child inventory's permanent caveat (server/chat/execution.ts), not news. */}
-            {sourceDown && records.length ? (
-              <LiveLine updatedAt={execution.dataUpdatedAt} failed fetching={execution.isFetching} onRetry={() => void execution.refetch()} />
-            ) : null}
-            {liveWork.length ? (
-              <section aria-label="Work in progress" className="gc-bgwork">
-                <ChatWork work={liveWork} render={row} onActivity={onJump ? () => onJump("running") : undefined} />
-              </section>
-            ) : null}
+
             {sid && !compact ? (
               <Link href={`/chat/${encodeURIComponent(sid)}`} className="mt-2 inline-block text-xs text-accent hover:underline">
                 Open full conversation
@@ -1256,32 +1241,6 @@ function SentFiles({ sessionId, ids }: { sessionId: string; ids: string[] }) {
   return <MessageAttachments sessionId={sessionId} ids={ids} files={files.data ?? []} />;
 }
 
-/** Do not repeat the full stalled inventory beneath the conversation. No records are changed or removed. */
-export function ChatWork({ work, render, onActivity }: { work: BackgroundWork[]; render: (w: BackgroundWork) => ReactNode; onActivity?: () => void }) {
-  const [open, setOpen] = useState(false);
-  const now = useNow();
-  const quiet = [...new Map(work.filter((w) => quietChatWork(w, now)).map((w) => [workKey(w), w])).values()];
-  const visible = work.filter((w) => !quietChatWork(w, now));
-  return (
-    <>
-      {visible.map(render)}
-      {quiet.length ? (
-        <div className="gc-quiet-work" data-testid="quiet-chat-work">
-          <Button size="sm" variant="ghost" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
-            {quiet.length} stalled {quiet.length === 1 ? "run" : "runs"}
-          </Button>
-          {onActivity ? (
-            <Button size="sm" variant="ghost" onClick={onActivity}>
-              Tasks
-            </Button>
-          ) : null}
-          {open ? <div aria-label="Stalled run history">{quiet.map(render)}</div> : null}
-        </div>
-      ) : null}
-    </>
-  );
-}
-
 type ThreadMessage = Extract<TimelineItem, { kind: "user" | "assistant" | "system" }>;
 function isBackgroundNotice(text: string) {
   const notice = parseNotice(text);
@@ -1366,7 +1325,6 @@ function MentionRows({ refs, render }: { refs: string[]; render: (ref: string) =
 }
 
 /** Background work in the order the owner needs it. */
-const EXEC_ORDER: Record<ExecutionRecord["state"], number> = { failed: 0, waiting: 1, running: 2, unknown: 3, completed: 4, cancelled: 5 };
 const SINCE_ICON: Record<SinceChip["key"], ReactNode> = {
   failed: <AlertIcon className="h-3.5 w-3.5" />,
   decisions: <InboxIcon className="h-3.5 w-3.5" />,

@@ -65,7 +65,7 @@ test("action panel and breadcrumb Backspace", async ({ page }) => {
   await expect(panel.getByRole("menuitem", { name: "Open", exact: true })).toBeVisible();
   await expect(panel.getByRole("menuitem", { name: "Copy link" })).toBeVisible();
   await expect(panel.getByRole("menuitem", { name: "Open in new tab" })).toBeVisible();
-  await box(page).press("Escape");
+  await page.getByRole("button", { name: "Back", exact: true }).click();
   await expect(panel).toHaveCount(0);
   // Backspace on an empty input goes up one level
   await box(page).press("Backspace");

@@ -49,6 +49,8 @@ export function CoordinatorPane({ areaId, onClose }: { areaId: string; onClose: 
   const titleId = useId();
   const ref = useRef<HTMLDivElement>(null);
   const [tab, setTab] = useState<"chat" | "tasks">("chat");
+  // Where the thread lists its own background work (Steer/Stop) inside Tasks; Chat never shows those inventories.
+  const [workSlot, setWorkSlot] = useState<HTMLDivElement | null>(null);
   const flight = useTaskList(areaId, "flight");
   const info = useQuery({
     queryKey: ["work", "coordinator", areaId],
@@ -112,10 +114,17 @@ export function CoordinatorPane({ areaId, onClose }: { areaId: string; onClose: 
               />
             </div>
             <div hidden={tab !== "chat"} className="co-tabpane">
-              <CoordinatorThread key={areaId} info={d} />
+              <CoordinatorThread
+                key={areaId}
+                info={d}
+                tasksSlot={tab === "tasks" ? workSlot : null}
+                tasksOpen={tab === "tasks"}
+                onShowChat={() => setTab("chat")}
+              />
             </div>
             {tab === "tasks" ? (
               <div className="co-body co-tabpane" data-testid="coordinator-tasks">
+                <div ref={setWorkSlot} />
                 <TaskList
                   scope={areaId}
                   view="flight"

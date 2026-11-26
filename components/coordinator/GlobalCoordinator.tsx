@@ -477,13 +477,16 @@ export function GlobalCoordinator() {
     };
     // ⌘K quick action: open the rail/sheet and fill the composer. Never sends.
     const onPrompt = (e: Event) => {
-      const value = (e as CustomEvent<{ text?: string }>).detail?.text;
+      const detail = (e as CustomEvent<{ text?: string; target?: "chief" }>).detail;
+      const value = detail?.text;
       if (typeof value !== "string") return;
-      if (document.querySelector('[data-testid="coordinator-pane"]')) return; // an open area pane takes it
+      if (detail.target !== "chief" && document.querySelector('[data-testid="coordinator-pane"]')) return; // an open area pane takes ordinary quick actions
       onOpen();
       setTab("chat");
+      if (detail.target === "chief") setThread(CHIEF_THREAD);
       setScope(null);
-      setDraft(value.slice(0, 8000));
+      // Explicit palette Ask belongs to the pinned Chief thread. Stage it without losing an existing draft.
+      setDraft((old) => (detail.target === "chief" && old.trim() ? `${old}\n\n${value}` : value.slice(0, 8000)));
       requestAnimationFrame(() =>
         requestAnimationFrame(() => host.current?.ownerDocument.querySelector<HTMLTextAreaElement>('[data-testid="gc-input"]')?.focus()),
       );
