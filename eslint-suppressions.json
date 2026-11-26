@@ -373,11 +373,6 @@
       "count": 2
     }
   },
-  "components/chat/ToolStep.tsx": {
-    "jarvis-ui/no-native-controls": {
-      "count": 1
-    }
-  },
   "components/chat/WorkSummary.tsx": {
     "jarvis-ui/no-native-controls": {
       "count": 1
@@ -397,11 +392,6 @@
     },
     "jarvis-ui/no-native-controls": {
       "count": 6
-    }
-  },
-  "components/chat/things/ChatPanel.tsx": {
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
     }
   },
   "components/chat/things/ChatTray.tsx": {

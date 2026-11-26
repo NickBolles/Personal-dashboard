@@ -36,7 +36,7 @@ import { usePanelLinks } from "@/components/chat/LinksPanel";
 import { ModelSelectDialog } from "@/components/areas/ModelPicker";
 import type { ThingsTab } from "@/lib/chat/things";
 import { Composer, type ComposerHandle } from "@/components/chat/Composer";
-import { AssistantName, LiveRun, ToolGroup, liveRunVisible, toolRunsByReply } from "@/components/chat/Timeline";
+import { AssistantName, LiveRun, ToolGroup, liveRunVisible, toolRunsByReply, groupTimeline } from "@/components/chat/Timeline";
 import { useRunStream, type RunState } from "@/components/chat/useRunStream";
 import { useRunAnswers } from "@/components/chat/useRunAnswers";
 import { kvDel, kvGet, kvSet } from "@/lib/client/idb";
@@ -50,6 +50,7 @@ import { QuickActionChips } from "@/components/quick-actions/QuickActionChips";
 import { ProposedQuickActions } from "@/components/quick-actions/ProposedQuickActions";
 import { useQuickActions } from "@/components/quick-actions/useQuickActions";
 import { ActionsTaken } from "@/components/chat/ActionsTaken";
+
 import { actionsByReply } from "@/lib/chat/actions";
 import { isActiveExec, type ChatExecutionResponse } from "@/lib/chat-execution";
 import { sinceChips, type SinceChip, type SinceCounts } from "@/lib/coordinator/run-card";
@@ -547,7 +548,15 @@ export function CoordinatorThread({
   };
   const timeline = detail.data?.timeline ?? [];
   // The tool work behind each reply, as the one folded row every chat draws (it opens to the steps).
-  const toolRuns = useMemo(() => toolRunsByReply(detail.data?.timeline ?? NO_ITEMS), [detail.data?.timeline]);
+  const toolHistory = useMemo(
+    () => (detail.data?.timeline ?? NO_ITEMS).filter((item) => !("text" in item && isBackgroundNotice(item.text))),
+    [detail.data?.timeline],
+  );
+  const toolRuns = useMemo(() => toolRunsByReply(toolHistory), [toolHistory]);
+  const trailingTools = useMemo(() => {
+    const last = groupTimeline(toolHistory).at(-1);
+    return last && "tools" in last ? last : null;
+  }, [toolHistory]);
   const replyActions = useMemo(
     () => new Map(actionsByReply(detail.data?.timeline ?? []).map((group) => [group.replyId, group.actions])),
     [detail.data?.timeline],
@@ -851,6 +860,7 @@ export function CoordinatorThread({
                               </span>
                             ) : null}
                           </div>
+
                           <AssistantText text={m.text} messageId={m.id} />
                           <ActionsTaken actions={actionsFor(m.id)} sessionId={sid ?? undefined} areaHint={d.area.title} compact />
                           {mentions ? <MentionRows refs={mentionRows(m.id)} render={mentions.render} /> : null}
@@ -867,6 +877,8 @@ export function CoordinatorThread({
             ) : sid && detail.isSuccess ? (
               <p className="text-sm text-muted">No messages yet.</p>
             ) : null}
+
+            {trailingTools ? <ToolGroup group={trailingTools} /> : null}
             {showLive ? (
               <MarkdownRefRenderer.Provider value={refChip}>
                 <AssistantName.Provider value={name}>

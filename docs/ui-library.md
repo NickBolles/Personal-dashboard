@@ -51,7 +51,9 @@ The library implements the design system in [design-system.md](design-system.md)
 
 ## Density tiers
 
-Kit controls size themselves per device. **Touch** (phone and tablet, owner 2026-11-21: "huge text boxes … bulky labels"): `Input`/`Select`/`Textarea` and `Button` md are 36px with 14px text, `Button` sm 32px, `Checkbox`/`Toggle` rows 36px, chip pickers 32px; `Field` labels are 12px muted. Icon-only buttons keep a 44px box on phones (36px from 600px). **Desktop** `dense:` (≥1100px + fine pointer): 28–30px. On iOS the fields keep 16px text inside the same box, so Safari does not zoom on focus. Don't hand-roll heights, and don't draw a page frame by hand: use `Page` (12px gutters on phones, 20px on tablets; a `Page` inside a `Page`, like a settings section, adds no second gutter).
+Menu rows accept an optional decorative `icon` (ReactNode). Use the shared SVG icons at `h-4 w-4`; labels remain accessible text, with one aligned icon gutter. Composer actions use ContextIcon, PaperclipIcon, CameraIcon, ImageIcon and ChipIcon. Never replace a label with an emoji or a color-only signal.
+
+Kit controls size themselves per device: phone (44px), tablet `sm:` (Button md 40 / sm 36, inputs 40) and desktop `dense:` (≥1024px + fine pointer). Don't hand-roll heights.
 
 **Sleek tier** (owner taste, 2026-11-12 — "compact, dense, premium"): put `data-density="sleek"` on a container (the Chief of staff rail and sheet do) and every kit `Button`, `IconButton`, chip picker (`.k-pick`) and menu item inside gets a small visual box (30px, `sm` 26px, icon 30/26px, 13px text) at every width. The **tap area stays at the house minimum** — 44px on phones/tablets, 40px with a fine pointer at ≥1024px — through an invisible `::after` hit-slop computed from the control's own box (`components/ui/density.css`, `--k-hit`). Controls that size themselves inside a sleek container (row bodies, answer option cards, a panel's close button) opt out with `data-density-skip`. Never copy sleek rules into a surface's CSS or override `.k-btn` sizes per panel; opt the container in. `/dev/ui` shows it ("Sleek density").
 

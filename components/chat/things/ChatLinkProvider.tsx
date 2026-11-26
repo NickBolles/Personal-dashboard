@@ -14,7 +14,7 @@ export function ChatLinkProvider({ links, children }: { links: PanelLink[]; chil
     </MarkdownLinkRenderer.Provider>
   );
 }
-function ChatInlineLink({ href, label, links }: { href: string; label: ReactNode; links: PanelLink[] }) {
+export function ChatInlineLink({ href, label, links }: { href: string; label: ReactNode; links: PanelLink[] }) {
   const internal = href.startsWith("/") || href.startsWith("#");
   const classified = classifyUrl(/^\/(a|v)\//.test(href) ? `https://${ARTIFACT_HOST}${href}` : href);
   const artifact = classified?.kind === "artifact" || /^\/(a|v)\/[\w.-]+/.test(href);

@@ -123,6 +123,7 @@ export function ButtonLink({
 
 export type KMenuItem = {
   label: string;
+  icon?: ReactNode;
   onSelect?: () => void;
   hint?: string;
   danger?: boolean;
@@ -182,7 +183,14 @@ export function Menu({
               onClose?.();
             }}
           >
-            <span>{it.label}</span>
+            <span className="flex min-w-0 items-center gap-2">
+              {it.icon ? (
+                <span aria-hidden className="flex h-4 w-4 shrink-0 items-center justify-center">
+                  {it.icon}
+                </span>
+              ) : null}
+              <span className="min-w-0 break-words">{it.label}</span>
+            </span>
             {it.hint ? <Kbd>{it.hint}</Kbd> : null}
           </button>
         ),
