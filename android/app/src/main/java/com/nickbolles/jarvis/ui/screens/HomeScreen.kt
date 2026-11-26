@@ -293,7 +293,7 @@ private fun LazyListScope.nowSection(data: HomePayload, busy: Set<String>, handl
         item {
             val checked = data.sources.filter { it.state == "ok" || it.state == "stale" }
             if (checked.isEmpty()) {
-                EmptyState("No sources connected yet", "Connect Hermes, todos, Home Assistant and more from Jarvis on the web (Settings → Connections).")
+                EmptyState("No sources connected yet", "Connect Hermes, todos, Home Assistant and more from Atlas on the web (Settings → Connections).")
             } else {
                 EmptyState("Nothing needs you right now", "Checked ${checked.joinToString(", ") { it.label }}.")
             }

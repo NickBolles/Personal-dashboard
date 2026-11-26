@@ -135,7 +135,7 @@ it("ProgressBar clamps, Orb exposes expanded, LockBar unlocks", () => {
     </>,
   );
   expect(screen.getByRole("progressbar", { name: "Load" }).getAttribute("aria-valuenow")).toBe("100");
-  expect(screen.getByRole("button", { name: "Jarvis commands" }).getAttribute("aria-expanded")).toBe("true");
+  expect(screen.getByRole("button", { name: "Atlas commands" }).getAttribute("aria-expanded")).toBe("true");
   fireEvent.click(screen.getByRole("button", { name: "Unlock" }));
   expect(unlock).toHaveBeenCalled();
 });

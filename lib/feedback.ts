@@ -5,7 +5,7 @@
  * 👎 to the Chief of staff. Shared contract (server + client) + pure logic.
  *
  * Rules:
- * - Ratings are the rater's own (user-scoped); nothing leaves Jarvis until the
+ * - Ratings are the rater's own (user-scoped); nothing leaves Atlas until the
  *   owner asks to fix (confirmed send) or enables the triage job.
  * - The triage payload never includes feedback from AI-excluded areas or text
  *   that trips the sensitivity filter (the server filters before building it).
@@ -222,7 +222,7 @@ export const FEEDBACK_TRIAGE_TEMPLATE = {
   prompt:
     "Daily feedback triage. Below is the owner's new thumbs-down feedback on assistant replies. " +
     "Cluster the entries by likely root cause (prompt/skill, tool or integration bug, UI, model choice, missing data). " +
-    "Use read tools (e.g. jarvis_search) to find existing Jarvis items for each cluster. " +
+    "Use read tools (e.g. jarvis_search) to find existing Atlas items for each cluster. " +
     "Then propose: create_thread (or update_next_action on the existing item) per cluster, with the feedback ids and message links in the text, " +
     "and a decision for the owner per proposed fix (what to change, where, and whether to delegate a code fix through the normal PR process). " +
     "Never change code, merge or deploy yourself. If a cluster is a one-off, say so and propose nothing for it. " +

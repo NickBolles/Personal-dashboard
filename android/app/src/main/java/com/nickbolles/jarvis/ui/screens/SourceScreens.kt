@@ -100,7 +100,7 @@ fun LazyListScope.sourceStatus(state: Loadable<SourceResult>, onRefresh: () -> U
     when {
         state.error != null -> item { StatusBanner(if (state.data != null) "Showing saved data · ${state.error}" else state.error, tone = if (state.data != null) "warn" else "danger", onRetry = onRefresh) }
         st != null && st.state in setOf("error", "unauthorized") -> item { StatusBanner("${st.label}: ${st.error ?: st.state}" + if (st.fromCache) " (last known)" else "", tone = "danger", onRetry = onRefresh) }
-        st != null && st.state == "unconfigured" -> item { EmptyState("${st.label} isn't connected", "Connect it from Jarvis on the web: Settings → Connections.") }
+        st != null && st.state == "unconfigured" -> item { EmptyState("${st.label} isn't connected", "Connect it from Atlas on the web: Settings → Connections.") }
         st != null && st.state == "stale" -> item { StatusBanner("This may be out of date (last read ${parseInstant(st.fetchedAt)?.let { relativeTime(it, java.time.Instant.now()) } ?: "a while ago"}).", onRetry = onRefresh) }
     }
 }
@@ -279,7 +279,7 @@ fun CompassContent(state: Loadable<DailyCompassResponse>, working: String?, onSt
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 state.error?.let { item { StatusBanner(it, tone = if (state.data != null) "warn" else "danger", onRetry = onRefresh) } }
                 val d = state.data
-                if (d != null && !d.enabled) item { EmptyState("Daily Compass isn't set up", "Set it up from Jarvis on the web: Settings → Connections.") }
+                if (d != null && !d.enabled) item { EmptyState("Daily Compass isn't set up", "Set it up from Atlas on the web: Settings → Connections.") }
                 val s = d?.state
                 if (d != null && d.enabled && s != null) {
                     item {

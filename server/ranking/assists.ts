@@ -100,7 +100,7 @@ function overdueTriage(input: AssistInput, today: string): Draft | undefined {
     chat = {
       label: "Help me triage",
       draft:
-        "Help me triage my overdue tasks. This is read-only planning: don’t complete, reschedule or delete anything. For each one, suggest do it this week, reschedule (with a date) or drop, and I’ll make the changes in Jarvis myself.",
+        "Help me triage my overdue tasks. This is read-only planning: don’t complete, reschedule or delete anything. For each one, suggest do it this week, reschedule (with a date) or drop, and I’ll make the changes in Atlas myself.",
       context: [
         ...(list.some((a) => a.source === "todos") ? [OVERDUE_CTX_REF] : []),
         ...(others.length ? [`Other overdue tasks (${others.length}):`, ...lines, ...(more > 0 ? [`…and ${more} more`] : [])] : []),
@@ -154,7 +154,7 @@ function milestonePlans(input: AssistInput, today: string): Draft[] {
       origin: "milestone",
       tone: "accent",
       why: [`You saved ${fmtDay(occ)}${m.yearly ? " (every year)" : ""}`, `Shown up to ${m.leadDays} days ahead`],
-      chat: planChat(input, m.title, occ, days, `Saved date in Jarvis: ${m.title}, ${occ}${m.yearly ? " (yearly)" : ""}.`),
+      chat: planChat(input, m.title, occ, days, `Saved date in Atlas: ${m.title}, ${occ}${m.yearly ? " (yearly)" : ""}.`),
       fp: `${m.id}:${occ}`,
       sources: ["milestones"],
       order: 1 + days / 1000,

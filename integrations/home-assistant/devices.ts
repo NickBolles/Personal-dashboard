@@ -181,7 +181,7 @@ export async function switchLight(
   const base = { actor, action: `ha.${service}`, source: "home_assistant", sourceRecord: entityId, correlationId };
   if (!entityServices(controlRules(), entityId).includes(service)) {
     audit({ ...base, result: "rejected", detail: { reason: "not_allowed" } });
-    throw new HttpError(403, "not_allowlisted", "Jarvis isn't allowed to switch that light (Settings → Connections → Home Assistant).");
+    throw new HttpError(403, "not_allowlisted", "Atlas isn't allowed to switch that light (Settings → Connections → Home Assistant).");
   }
   if (!actorMayExecute(currentVia())) {
     audit({ ...base, result: "rejected", detail: { reason: "agent_must_propose" } });

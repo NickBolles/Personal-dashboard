@@ -390,7 +390,7 @@ export function SmartForm({ element }: P<"Form">) {
               )}
               {proposed ? (
                 <small id={`${id}-provenance`} className="text-ai">
-                  proposed · from Jarvis data, editable
+                  proposed · from Atlas data, editable
                 </small>
               ) : null}
             </div>

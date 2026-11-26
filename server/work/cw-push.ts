@@ -47,7 +47,7 @@ export function pushRaisedDecision(d: DecisionRow) {
       severity: risky ? "high" : "normal",
       title: `${ref} needs you`,
       // A credential-flagged question is never sent to a push service, even when it looks harmless.
-      body: parseRisk(d.riskJson).includes("credential") ? "Open Jarvis to see the question." : safeText(d.question, "Open Jarvis to see the question."),
+      body: parseRisk(d.riskJson).includes("credential") ? "Open Atlas to see the question." : safeText(d.question, "Open Atlas to see the question."),
       source: "jarvis",
       deepLink: coordLink({ coord: "needs", d: ref }),
       dedupeKey: `cw:decision:${ref}`,

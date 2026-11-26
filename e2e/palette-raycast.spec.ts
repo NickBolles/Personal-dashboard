@@ -7,7 +7,7 @@ import { appPost } from "./helpers";
  * and on phones: orb tap opens the palette, orb hold keeps the radial map.
  */
 
-const box = (page: Page) => page.getByRole("combobox", { name: "Search Jarvis" });
+const box = (page: Page) => page.getByRole("combobox", { name: "Search Atlas" });
 
 /** The shared e2e DB has no "Home" area: make a uniquely named one per test. */
 async function makeArea(page: Page, title: string) {

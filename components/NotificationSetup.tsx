@@ -64,7 +64,7 @@ export function PushControls() {
       <div className="flex flex-wrap items-center gap-2 text-sm" data-testid="push-status">
         <span>{inApp ? "This phone:" : "This device:"}</span>
         {nativePush && !subscribed ? (
-          <Badge tone="ok">Notifications from the Jarvis app</Badge>
+          <Badge tone="ok">Notifications from the Atlas app</Badge>
         ) : support === "supported" ? (
           <Badge tone={subscribed ? "ok" : perm === "denied" ? "danger" : undefined}>{webPushLabel}</Badge>
         ) : support === "insecure" ? (
@@ -82,18 +82,18 @@ export function PushControls() {
       </div>
       {nativePush ? (
         <p className="text-sm text-muted" data-testid="android-app-push-note">
-          This phone gets notifications from the Jarvis app, so web push stays off here and nothing arrives twice.
+          This phone gets notifications from the Atlas app, so web push stays off here and nothing arrives twice.
         </p>
       ) : inApp ? (
         <p className="text-sm text-muted" data-testid="android-app-webpush-note">
-          The Jarvis app delivers notifications through Chrome until Firebase is set up. Enable them here; Android asks once.
+          The Atlas app delivers notifications through Chrome until Firebase is set up. Enable them here; Android asks once.
         </p>
       ) : null}
       {perm === "denied" && support === "supported" && !subscribed ? (
         <p className="text-sm text-muted">Notifications are blocked. Allow them for this site in Chrome (site settings → Notifications), then try again.</p>
       ) : null}
       {support === "insecure" && !nativePush ? (
-        <p className="text-sm text-muted">Browsers only allow push (and app install) on HTTPS. Open Jarvis through its HTTPS address.</p>
+        <p className="text-sm text-muted">Browsers only allow push (and app install) on HTTPS. Open Atlas through its HTTPS address.</p>
       ) : null}
       <div className="flex flex-wrap gap-2">
         {support === "supported" && !subscribed && !nativePush ? (

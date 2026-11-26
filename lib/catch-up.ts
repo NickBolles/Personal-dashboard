@@ -1,5 +1,5 @@
 /**
- * "Catch me up" prompt for an area's coordinator chat (Work from Jarvis batch 2).
+ * "Catch me up" prompt for an area's coordinator chat (Work from Atlas batch 2).
  * Pure: builds the text the owner can send with one tap — nothing is sent here.
  * AI-excluded areas get no prompt. Credentials stay out; account numbers are masked.
  */

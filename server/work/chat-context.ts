@@ -21,19 +21,19 @@ export function delegationRule(scopeId: string, sessionId: string) {
  */
 export function coordinatorBrief(areaTitle: string, scopeId: string, sessionId: string, tools: boolean): string[] {
   return [
-    `You are the ${areaTitle} coordinator in Jarvis: you coordinate work, you don't just chat. For each request:`,
+    `You are the ${areaTitle} coordinator in Atlas: you coordinate work, you don't just chat. For each request:`,
     "1. Plan: turn it into a short numbered plan (skip for simple questions).",
     tools
-      ? `2. Dispatch: run independent pieces in parallel with delegate_task. Register every sub-agent on the item it serves with jarvis_run_start (itemId; delegationId = <delegation id>:<subagent id> — one per child, never the bare batch id; hermesSessionId = ${sessionId} unless you know the child's) and update it with jarvis_run_update when it finishes or fails. Jarvis also lists sub-agents it sees in this conversation on ${scopeId}.`
+      ? `2. Dispatch: run independent pieces in parallel with delegate_task. Register every sub-agent on the item it serves with jarvis_run_start (itemId; delegationId = <delegation id>:<subagent id> — one per child, never the bare batch id; hermesSessionId = ${sessionId} unless you know the child's) and update it with jarvis_run_update when it finishes or fails. Atlas also lists sub-agents it sees in this conversation on ${scopeId}.`
       : "2. Dispatch: run independent pieces in parallel with delegate_task.",
     '3. Control: when the owner writes "Steer <subagent id>: <message>" or "Stop <subagent id>", call delegate_task with action steer or stop for that sub-agent and confirm in one line.',
     tools
-      ? "4. Record: create or update Jarvis items for the work, link PRs and boards (jarvis_link), and raise a decision (jarvis_raise_decision) for anything only the owner can choose. Never settle, archive or move: use jarvis_request_change."
+      ? "4. Record: create or update Atlas items for the work, link PRs and boards (jarvis_link), and raise a decision (jarvis_raise_decision) for anything only the owner can choose. Never settle, archive or move: use jarvis_request_change."
       : "4. Record: list the exact item changes (item id + change) and decisions for the owner; never claim you changed anything.",
     "5. Reconcile: when results arrive, merge them into one answer.",
     ...(tools
       ? [
-          'Decisions and runs live in Jarvis (Needs you / Running tabs), not in your replies: don\'t re-list open decisions or end replies with a status footer. Raise each owner question once with jarvis_raise_decision and refer to it by its D-n id (e.g. "waiting on D-48"); supersede your own instead of re-asking. Report progress on a registered run with jarvis_run_event (R-n) rather than a chat message; background completion notices are folded into the run, so only write when something changed for the owner.',
+          'Decisions and runs live in Atlas (Needs you / Running tabs), not in your replies: don\'t re-list open decisions or end replies with a status footer. Raise each owner question once with jarvis_raise_decision and refer to it by its D-n id (e.g. "waiting on D-48"); supersede your own instead of re-asking. Report progress on a registered run with jarvis_run_event (R-n) rather than a chat message; background completion notices are folded into the run, so only write when something changed for the owner.',
         ]
       : ['End every reply with one short line: **Next action:** … and list any decision the owner must make as a question ("none" when there is none).']),
   ];
@@ -88,10 +88,10 @@ export function filedChatContext(user: CurrentUser, sessionId: string, profile: 
   // A conversation filed directly under an area is that area's coordinator thread (server/work/coordinator.ts).
   const coordinator = node?.kind === "conversation" && scope.id === area.id;
   const lines = [
-    `This conversation is filed in Jarvis under: ${path.join(" › ")} (${scope.kind} id ${scope.id}). Jarvis conversation id: ${sessionId}.`,
+    `This conversation is filed in Atlas under: ${path.join(" › ")} (${scope.kind} id ${scope.id}). Atlas conversation id: ${sessionId}.`,
     tools
-      ? "You can read more and act with the Jarvis tools (jarvis_get_item, jarvis_tree, jarvis_update_item …). Settling, archiving and moving are owner-only: use jarvis_request_change."
-      : `You have no Jarvis item tools in this conversation${snapshot ? ": use the snapshot below to answer" : ""}. To change items, list the exact changes (item id + change) for the owner to apply; never claim you changed anything. Settling is always the owner's call.`,
+      ? "You can read more and act with the Atlas tools (jarvis_get_item, jarvis_tree, jarvis_update_item …). Settling, archiving and moving are owner-only: use jarvis_request_change."
+      : `You have no Atlas item tools in this conversation${snapshot ? ": use the snapshot below to answer" : ""}. To change items, list the exact changes (item id + change) for the owner to apply; never claim you changed anything. Settling is always the owner's call.`,
     ...(coordinator ? coordinatorBrief(area.title, scope.id, sessionId, tools) : tools ? [delegationRule(scope.id, sessionId)] : []),
     ...(snapshot
       ? [

@@ -17,7 +17,7 @@ import { claudeAvailable, claudeConfig } from "./settings";
  * Conversations answered directly by Claude (the fast option when Hermes is
  * slow). Same shapes as Hermes so the web and phone chat UIs work unchanged:
  * SessionSummary, TimelineItem, RunView and the normalized SSE RunEvents.
- * No tools: Claude can't act here, only answer (with any Jarvis context the
+ * No tools: Claude can't act here, only answer (with any Atlas context the
  * person attaches).
  */
 const db = () => getDb();
@@ -32,8 +32,8 @@ type LiveRun = {
 };
 const live = processSingleton("assistant_local_runs", () => new Map<string, LiveRun>());
 
-const SYSTEM = `You are Jarvis, a household assistant inside a private family dashboard. Answer clearly and briefly; use short paragraphs or lists when they help.
-You can't take actions, see devices or read accounts yourself. When the message includes a "Context from Jarvis" section, treat it as current facts from the household's own systems and say how fresh it is when that matters. If something isn't in the context, say you don't know rather than guessing.`;
+const SYSTEM = `You are Atlas, a household assistant inside a private family dashboard. Answer clearly and briefly; use short paragraphs or lists when they help.
+You can't take actions, see devices or read accounts yourself. When the message includes a "Context from Atlas" section, treat it as current facts from the household's own systems and say how fresh it is when that matters. If something isn't in the context, say you don't know rather than guessing.`;
 
 function client() {
   const c = claudeConfig();
@@ -406,7 +406,7 @@ export function reconcileLocalRun(runId: string): RunView {
   if (!row) throw new HttpError(404, "run_not_found", "Run not found");
   if (!isTerminal(row.status) && !live.has(runId)) {
     setRun(runId, { status: "interrupted", completedAt: new Date().toISOString() });
-    return { runId, sessionId: row.sessionId, status: "interrupted", error: "Jarvis restarted while Claude was answering." };
+    return { runId, sessionId: row.sessionId, status: "interrupted", error: "Atlas restarted while Claude was answering." };
   }
   const r = live.get(runId);
   const terminal = r?.events.find((e) => e.type === "run.terminal") as Extract<RunEvent, { type: "run.terminal" }> | undefined;

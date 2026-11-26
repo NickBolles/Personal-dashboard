@@ -177,7 +177,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
         ]
       : [];
     const tags = (dir?.tags ?? []).map((t) => ({ id: t.name, label: `#${t.name}` }));
-    return { areas, items, agents: [{ id: "jarvis", label: "Jarvis" }, ...modes.map((m) => ({ id: m, label: m }))], assignees, tags };
+    return { areas, items, agents: [{ id: "jarvis", label: "Atlas" }, ...modes.map((m) => ({ id: m, label: m }))], assignees, tags };
   }, [workItems, byId, tagDir.data]);
   // Grouped (Areas, Projects, Items, Chats & notes, People…): groups in order of their best match, rank kept inside each.
   const results = useMemo(() => {
@@ -679,7 +679,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
             aria-controls={listId}
             aria-activedescendant={panel ? undefined : rows[active] ? `${listId}-${active}` : undefined}
             aria-autocomplete="list"
-            aria-label="Search Jarvis"
+            aria-label="Search Atlas"
             placeholder={
               typed
                 ? arg

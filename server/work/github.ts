@@ -142,7 +142,7 @@ export async function githubGet(path: string, auth: Pick<ResolvedToken, "token" 
   const limited = rateLimitBackoff(res, now, map.get(auth.backoffKey)?.failures ?? 0);
   if (limited) {
     map.set(auth.backoffKey, limited);
-    throw new HttpError(503, "github_rate_limited", "GitHub rate limit reached; Jarvis will wait before reading again");
+    throw new HttpError(503, "github_rate_limited", "GitHub rate limit reached; Atlas will wait before reading again");
   }
   if (res.ok) map.delete(auth.backoffKey);
   const body = (await res.json().catch(() => null)) as unknown;

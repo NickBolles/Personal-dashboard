@@ -133,9 +133,8 @@ export function AgentAccessCard() {
       <section aria-labelledby="agent-access-h" data-testid="agent-access">
         <SectionHeader label="Agent access" count={active.length} id="agent-access-h" />
         <p className="mb-2 text-sm text-muted">
-          Lets a Hermes profile read and update your work through Jarvis MCP (<code>/api/mcp</code>). Its changes show &quot;by @profile&quot; and can be
-          undone. Agents can&apos;t settle, archive, move or delete — they ask you. Areas excluded from AI are never available to agents. Credentials are never
-          sent.
+          Lets a Hermes profile read and update your work through Atlas MCP (<code>/api/mcp</code>). Its changes show &quot;by @profile&quot; and can be undone.
+          Agents can&apos;t settle, archive, move or delete — they ask you. Areas excluded from AI are never available to agents. Credentials are never sent.
         </p>
         {minted ? (
           <div className="mb-3 rounded-lg border border-line p-2.5" role="status" data-testid="agent-token-once">

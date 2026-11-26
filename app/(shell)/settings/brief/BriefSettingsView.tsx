@@ -220,7 +220,7 @@ export function BriefSettingsView() {
         <div className="space-y-3">
           {n.error ? <ErrorNote error={n.error} retry={() => n.refetch()} /> : null}
           {proposed.length ? (
-            <ul className="space-y-1.5" aria-label="Proposed by Jarvis">
+            <ul className="space-y-1.5" aria-label="Proposed by Atlas">
               {proposed.map((x) => (
                 <li key={x.id} className="flex flex-wrap items-center gap-2 text-sm">
                   <Pill tone="prop">{BRIEF_NOTE_KIND_LABEL[x.kind]}</Pill>
@@ -239,7 +239,7 @@ export function BriefSettingsView() {
             </ul>
           ) : null}
           {active.length ? (
-            <ul className="divide-y divide-line" aria-label="Notes Jarvis uses">
+            <ul className="divide-y divide-line" aria-label="Notes Atlas uses">
               {active.map((x) => (
                 <li key={x.id} className="flex flex-wrap items-center gap-2 py-1.5 text-sm">
                   <span className="min-w-0 flex-1">{x.text}</span>

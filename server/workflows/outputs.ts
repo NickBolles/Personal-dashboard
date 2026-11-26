@@ -50,7 +50,7 @@ export async function proposeSummary(user: CurrentUser, ctx: RunCtx, id: string)
   const { row, def } = ownRun(ctx.userId, id);
   const capture = parseJson<Capture>(row.captureJson, {});
   const task = [
-    `End-of-session summary for the Jarvis workflow "${def.name}".`,
+    `End-of-session summary for the Atlas workflow "${def.name}".`,
     def.outputs?.summary?.instructions ?? "Write a short summary (≤ 5 lines) of the notes below. No added commentary.",
     "Use only the notes; never add outside content.",
     "<notes>",

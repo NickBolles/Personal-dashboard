@@ -1,5 +1,5 @@
 /**
- * Home Assistant control policy (owner decision 2026-11-07: "Jarvis should be
+ * Home Assistant control policy (owner decision 2026-11-07: "Atlas should be
  * able to modify garage door and home assistant devices"). Pure and
  * client-safe: the server enforces it, the House page uses it for labels,
  * risk and Undo.

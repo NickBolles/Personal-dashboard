@@ -32,7 +32,7 @@ export type TodoItem = {
   completedAt?: string;
   updatedAt?: string;
   url?: string;
-  /** Source chip text: "Google Tasks · <list>", "Home Assistant · <list>", "Jarvis". */
+  /** Source chip text: "Google Tasks · <list>", "Home Assistant · <list>", "Atlas". */
   sourceLabel?: string;
   provenance?: NextAction["provenance"];
 };
@@ -138,7 +138,7 @@ function listLocal(ctx: AdapterContext): TodoItem[] {
       completed: Boolean(t.completedAt),
       completedAt: t.completedAt ?? undefined,
       updatedAt: t.updatedAt,
-      sourceLabel: "Jarvis",
+      sourceLabel: "Atlas",
       ...(t.createdVia ? { provenance: { via: t.createdVia, ...(agentProfileOf(t.createdVia) ? { agent: agentProfileOf(t.createdVia)! } : {}) } } : {}),
     }));
 }
@@ -246,7 +246,7 @@ export const todosAdapter: SourceAdapter = {
     const p = provider();
     let lists: { id: string; title: string }[] = [];
     if (p === "jarvis") {
-      return runChecks([{ name: "Built-in list", run: async () => "Todos are stored in Jarvis" }]);
+      return runChecks([{ name: "Built-in list", run: async () => "Todos are stored in Atlas" }]);
     }
     if (p === "home_assistant") {
       return runChecks([

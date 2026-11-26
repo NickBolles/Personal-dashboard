@@ -164,7 +164,7 @@ export function HomeTuningView() {
           <Card>
             <h2 className="font-semibold">Saved dates</h2>
             <p className="mt-1 text-sm text-muted">
-              Birthdays, anniversaries and other dates to plan ahead for. Only you see them; Home suggests planning when one is coming up. Jarvis never guesses
+              Birthdays, anniversaries and other dates to plan ahead for. Only you see them; Home suggests planning when one is coming up. Atlas never guesses
               these.
             </p>
             {t.milestones.length ? (
@@ -262,7 +262,7 @@ export function HomeTuningView() {
                   label: "Tune with Hermes",
                   context: t.hermesBrief,
                   draft:
-                    "Help me tune what my Jarvis Home shows first. Read-only: don’t change anything. Suggest specific changes to my category settings or saved dates, and I’ll apply them myself.",
+                    "Help me tune what my Atlas Home shows first. Read-only: don’t change anything. Suggest specific changes to my category settings or saved dates, and I’ll apply them myself.",
                 })}
               >
                 Tune with Hermes

@@ -37,7 +37,7 @@ function overdueDate(a: NextAction, tz: string, today: string, now: Date) {
  */
 export function formatOverdue(rows: { ref: string; title: string; due: string; source: string }[], maxChars = OVERDUE_MAX_CHARS) {
   const list = rows.slice(0, OVERDUE_MAX_ROWS);
-  const head = `Overdue todos Jarvis can see (${rows.length} total${rows.length > list.length ? `, first ${list.length}` : ""}, most recently due first). Columns: ref | title | due | source`;
+  const head = `Overdue todos Atlas can see (${rows.length} total${rows.length > list.length ? `, first ${list.length}` : ""}, most recently due first). Columns: ref | title | due | source`;
   const line = (r: (typeof list)[number], n: number) => `${r.ref} | ${r.title.length > n ? `${r.title.slice(0, n - 1)}…` : r.title} | ${r.due} | ${r.source}`;
   for (const n of [120, 80, 60, 40, 28, 20]) {
     const text = [head, ...list.map((r) => line(r, n))].join("\n");

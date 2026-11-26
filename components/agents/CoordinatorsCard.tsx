@@ -107,9 +107,9 @@ export function CoordinatorsCard() {
                         ))}
                       </ul>
                     ) : (
-                      <p>No active Jarvis access scopes granted.</p>
+                      <p>No active Atlas access scopes granted.</p>
                     )}
-                    <p className="mt-1 text-xs text-muted">Granted Jarvis token scopes only; not a promise about tools outside Jarvis.</p>
+                    <p className="mt-1 text-xs text-muted">Granted Atlas token scopes only; not a promise about tools outside Atlas.</p>
                   </dd>
                 </div>
                 <div>

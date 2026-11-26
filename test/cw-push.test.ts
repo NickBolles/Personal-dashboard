@@ -62,7 +62,7 @@ describe("CW-5 push", () => {
 
   it("credential-flagged questions never leave Jarvis in a push body", () => {
     raiseDecision(owner.id, itemId, { question: "Use password hunter2 for the db?", risk: ["credential"] }, { raisedBy: "agent:x", correlationId: cid });
-    expect(notes("cw.decision")[0]?.body).toBe("Open Jarvis to see the question.");
+    expect(notes("cw.decision")[0]?.body).toBe("Open Atlas to see the question.");
   });
 
   it("a failed run pushes with an R-n deep link; an interrupted one pushes Resume all; done never pushes", () => {

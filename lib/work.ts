@@ -730,7 +730,7 @@ const widgetConfigSchema = z
   })
   .strict()
   .refine((c) => c.html === undefined || utf8Bytes(c.html) <= CUSTOM_HTML_MAX_BYTES, { path: ["html"], message: "Custom HTML is limited to 100 KB" })
-  .refine((c) => !c.href || safeHref(c.href) !== null, { path: ["href"], message: "Links must be http(s) or a Jarvis path" });
+  .refine((c) => !c.href || safeHref(c.href) !== null, { path: ["href"], message: "Links must be http(s) or an Atlas path" });
 
 export const widgetCreateSchema = z
   .object({

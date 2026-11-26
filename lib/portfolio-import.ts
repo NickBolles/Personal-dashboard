@@ -288,7 +288,7 @@ export function planPortfolioImport(
       tags: newTags,
       links: newLinks,
       matchedId: match.id,
-      reason: newLinks.length || newTags.length ? undefined : "already in Jarvis",
+      reason: newLinks.length || newTags.length ? undefined : "already in Atlas",
     };
   };
 

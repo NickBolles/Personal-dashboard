@@ -4,7 +4,7 @@ import { config } from "@/server/config";
 import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Set up Jarvis" };
+export const metadata = { title: "Set up Atlas" };
 
 export default async function OnboardingPage({ searchParams }: { searchParams: Promise<{ step?: string; google?: string; message?: string }> }) {
   const claimed = isClaimed();

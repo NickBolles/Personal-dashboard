@@ -105,7 +105,7 @@ export function triageViewsForInbox(userId: string, entries: { id: string; triag
         id: e.id,
         inboxId: e.id,
         state: "failed",
-        summary: "Jarvis couldn't triage this capture.",
+        summary: "Atlas couldn't triage this capture.",
         itemId: null,
         decisionRef: null,
         runRef: null,

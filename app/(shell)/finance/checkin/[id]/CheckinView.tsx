@@ -178,7 +178,7 @@ function ActionDialog({ draft, onClose, data }: { draft: Draft | null; onClose: 
       open={Boolean(draft)}
       onClose={onClose}
       title={d.id ? "Edit action" : "Add action"}
-      description="Plans and records only. Jarvis never moves money."
+      description="Plans and records only. Atlas never moves money."
       size="lg"
       footer={
         <>

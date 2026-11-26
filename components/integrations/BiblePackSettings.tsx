@@ -44,8 +44,8 @@ export function BiblePackSettings() {
   return (
     <div className="space-y-2 text-sm" data-testid="bible-pack">
       <p>
-        Shows verse text next to Scripture references in workflows, from a copy of the {s.name} ({s.translation}) stored on this Jarvis. Lookups never leave
-        Jarvis.
+        Shows verse text next to Scripture references in workflows, from a copy of the {s.name} ({s.translation}) stored on this Atlas. Lookups never leave
+        Atlas.
       </p>
       <p className="text-muted">
         The {s.name} is in the public domain; text from eBible.org. &ldquo;World English Bible&rdquo; is a trademark of eBible.org. Other translations stay
@@ -63,7 +63,7 @@ export function BiblePackSettings() {
       ) : confirm ? (
         <div className="space-y-2 rounded-lg border border-line p-2.5" role="group" aria-label="Confirm download">
           <p>
-            Download {mb} MB once from <span className="break-all">{s.sourceUrl}</span>? Jarvis checks it against the pinned checksum (version {s.version})
+            Download {mb} MB once from <span className="break-all">{s.sourceUrl}</span>? Atlas checks it against the pinned checksum (version {s.version})
             before using it.
           </p>
           <div className="flex flex-wrap gap-2">

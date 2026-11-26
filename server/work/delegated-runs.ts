@@ -56,7 +56,7 @@ const ELLIPSIS = /\s*(?:…|\.\.\.)$/;
 /** A truncated child title must keep at least this much of the goal to count as a prefix match. */
 const MIN_PREFIX = 12;
 /**
- * Same task title. Hermes' session list truncates long child titles with "…" ("Subagent: Resume owning Jarvis
+ * Same task title. Hermes' session list truncates long child titles with "…" ("Subagent: Resume owning Atlas
  * Phase 2 implementation…"), so a child title ending in an ellipsis matches a dispatch goal that starts with it (#261).
  */
 export function sameTaskTitle(childTitle: string | null | undefined, dispatchTitle: string | null | undefined): boolean {

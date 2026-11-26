@@ -16,7 +16,7 @@ export const WORK_STALE_MS = 15 * 60_000;
 
 type Row = { id: string; title: string; status: string; nextAction: string; targetDate: string | null; updatedAt: string; createdVia?: string | null };
 
-/** #229: the item's recorded creator (work_items.created_via), like Jarvis-local todos, so /todos' AI segment sees agent-created work. */
+/** #229: the item's recorded creator (work_items.created_via), like Atlas-local todos, so /todos' AI segment sees agent-created work. */
 function provenanceOf(r: Row): Pick<NextAction, "provenance"> {
   if (!r.createdVia) return {};
   const agent = r.createdVia.startsWith("agent:") ? r.createdVia.slice(6) : "";

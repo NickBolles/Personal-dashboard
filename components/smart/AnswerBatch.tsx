@@ -132,7 +132,7 @@ function AnswerBatchState({ questions, session, source }: BatchProps) {
               {q.label ?? q.title} {q.required ? <span className="sr-only">Required</span> : <span className="answer-optional">Optional</span>}
             </legend>
             {q.context && q.context !== questions[index - 1]?.context ? <p className="answer-context">{q.context}</p> : null}
-            {q.proposed && !draft.edited?.includes(q.id) && draft.values[q.id] ? <p className="text-xs text-ai">Proposed by Jarvis · editable</p> : null}
+            {q.proposed && !draft.edited?.includes(q.id) && draft.values[q.id] ? <p className="text-xs text-ai">Proposed by Atlas · editable</p> : null}
             {q.kind === "choice" ? (
               <div className="answer-options" role="group" aria-label={q.title}>
                 {q.options.map((o) => (

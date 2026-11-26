@@ -128,7 +128,7 @@ fun SearchContent(state: Loadable<SearchResponse>, onQuery: (String) -> Unit, au
         OutlinedTextField(
             value = q,
             onValueChange = { q = it; onQuery(it) },
-            label = { Text("Search Jarvis") },
+            label = { Text("Search Atlas") },
             leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).focusRequester(focus),
@@ -330,7 +330,7 @@ fun FinanceContent(
                 }
                 item {
                     Text(
-                        "Jarvis plans and records; it never moves money. Plan payments, close check-ins and edit the long-term plan on the web.",
+                        "Atlas plans and records; it never moves money. Plan payments, close check-ins and edit the long-term plan on the web.",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 8.dp),

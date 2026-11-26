@@ -11,7 +11,7 @@ const LABELS: Record<ComponentName, string | null> = {
   BarChart: "Chart",
   ApprovalQueue: "Approvals",
   Form: "Form",
-  Stack: "Jarvis",
+  Stack: "Atlas",
   Section: null,
   Text: null,
   Callout: null,

@@ -1265,7 +1265,7 @@ async function openPaletteVisual(page: Page) {
   await page.addInitScript(() => localStorage.removeItem("jarvis.palette.recent"));
   await page.goto("/more");
   await page.locator("h1").first().waitFor();
-  const box = page.getByRole("combobox", { name: "Search Jarvis" });
+  const box = page.getByRole("combobox", { name: "Search Atlas" });
   await expect(async () => {
     await page.keyboard.press("Control+k");
     await expect(box).toBeFocused({ timeout: 1000 });

@@ -206,7 +206,7 @@ export function SourceBadge({ source, label }: { source: ActionSource | "jarvis"
   return (
     <span data-testid="source-chip" className="inline-flex items-center gap-1.5 text-xs font-medium text-muted">
       <span aria-hidden="true" className={cx("h-2 w-2 rounded-full", SOURCE_DOT[source])} />
-      {label || (source === "jarvis" ? "Jarvis" : SOURCE_LABELS[source])}
+      {label || (source === "jarvis" ? "Atlas" : SOURCE_LABELS[source])}
     </span>
   );
 }

@@ -143,7 +143,7 @@ async function overview(user: Viewer, tz: string) {
   const home = await getHome(user, { live: false });
   const now = home.now;
   const laterToday = home.later.laterToday;
-  const lines = ["Jarvis overview:"];
+  const lines = ["Atlas overview:"];
   lines.push(now.length ? "Now:" : "Now: nothing urgent.", ...now.map((a) => fmtAction(a, tz)));
   if (laterToday.length) lines.push("Later today:", ...laterToday.map((a) => fmtAction(a, tz)));
   if (home.glance.nextEvent) lines.push(`Next event: ${fmtEvent(home.glance.nextEvent, tz).slice(2)}`);

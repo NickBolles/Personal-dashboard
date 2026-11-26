@@ -53,7 +53,7 @@ export const AI_ACTIONS: Record<AiActionKind, { label: string; verb: string; ico
     verb: "Finding a time",
     icon: "◷",
     tier: "triage",
-    description: "Estimates the effort; Jarvis finds free slots in your calendars (calendars never go to AI).",
+    description: "Estimates the effort; Atlas finds free slots in your calendars (calendars never go to AI).",
   },
   draft: { label: "Draft it…", verb: "Drafting", icon: "✎", tier: "standard", description: "A draft you copy or continue in the conversation. Never sent." },
   summarize: {

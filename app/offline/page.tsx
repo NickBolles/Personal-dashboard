@@ -1,8 +1,10 @@
+import { BrandLockup } from "@/components/brand/BrandLockup";
 export const metadata = { title: "Offline" };
 
 export default function OfflinePage() {
   return (
     <main id="main" className="mx-auto max-w-md p-6 text-center">
+      <BrandLockup className="mb-4" />
       <h1 className="text-2xl font-semibold">You’re offline</h1>
       <p className="mt-2 text-muted">
         This page hasn’t been saved on this device yet. Home and recent conversations are available offline once you’ve opened them.

@@ -96,12 +96,12 @@ test("turn it on, read it, correct it, and keep what Jarvis noticed", async ({ p
   // Says what leaves before anything does.
   await expect(page.getByText(/Finance and AI-excluded areas are never sent/)).toBeVisible();
   await page.getByRole("button", { name: "Turn on", exact: true }).click();
-  await expect(brief.getByText("Written by Jarvis")).toBeVisible({ timeout: 30_000 });
+  await expect(brief.getByText("Written by Atlas")).toBeVisible({ timeout: 30_000 });
   // On a second attempt the same day, the earlier attempt's brief shows at once while the new build is still
   // running, and would be replaced under the steps below. Wait for the build to land, then read the page fresh.
   await expect.poll(async () => (await api<{ build: { state: string } }>(page, "get", "/api/brief")).build.state, { timeout: 30_000 }).toBe("idle");
   await page.reload();
-  await expect(brief.getByText("Written by Jarvis")).toBeVisible();
+  await expect(brief.getByText("Written by Atlas")).toBeVisible();
   await expect(brief.getByRole("heading", { name: "Protect the morning for the one thing that moves this week" })).toBeVisible();
 
   // One primary action on the page: opening the first pick.
@@ -165,7 +165,7 @@ test("turn it on, read it, correct it, and keep what Jarvis noticed", async ({ p
   await expect(brief.getByText(/From your feedback on \d{4}-\d{2}-\d{2}/)).toBeVisible();
 
   const notes = async () => (await api<{ notes: { state: string }[] }>(page, "get", "/api/brief/notes")).notes.map((n) => n.state).sort();
-  const proposal = page.getByRole("group", { name: "Jarvis noticed" });
+  const proposal = page.getByRole("group", { name: "Atlas noticed" });
   await expect(proposal.getByText("Marked morning picks right on two briefs.")).toBeVisible();
   await expect(proposal.getByText("Driver", { exact: true })).toBeVisible();
   await proposal.getByRole("button", { name: /^Keep/ }).click();
@@ -251,7 +251,7 @@ test("settings list what it knows, with export, import and a confirmed reset", a
   await api(page, "post", "/api/brief/notes", { text: "Workouts matter more than inbox zero" });
   await page.goto("/settings/brief");
   await expect(page.getByRole("heading", { level: 1, name: "Brief" })).toBeVisible();
-  const notes = page.getByRole("list", { name: "Notes Jarvis uses" });
+  const notes = page.getByRole("list", { name: "Notes Atlas uses" });
   await expect(notes.getByText("Workouts matter more than inbox zero", { exact: true })).toBeVisible();
   await expect(page.getByText("Never Finance or AI-excluded areas")).toBeVisible();
   await expect(page.getByText("Teach it something")).toHaveCount(0);

@@ -61,7 +61,7 @@ export function AdoptDialog({ item, onClose, onDone }: { item: WorkItem; onClose
         open
         onClose={onClose}
         title="Adopt this chat?"
-        description={`Jarvis will track it on ${current ?? "the default agent"} and file it under ${item.title}. Nothing in the chat changes.`}
+        description={`Atlas will track it on ${current ?? "the default agent"} and file it under ${item.title}. Nothing in the chat changes.`}
         footer={
           <>
             <Button onClick={() => setPicked(null)} disabled={busy}>
@@ -89,7 +89,7 @@ export function AdoptDialog({ item, onClose, onDone }: { item: WorkItem; onClose
       onClose={onClose}
       size="lg"
       title="Adopt an existing chat"
-      description="Chats you started outside Jarvis on this agent. The Bot Chat inbox is never listed."
+      description="Chats you started outside Atlas on this agent. The Bot Chat inbox is never listed."
       footer={<Button onClick={onClose}>Close</Button>}
     >
       <div className="space-y-3">

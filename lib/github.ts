@@ -103,7 +103,7 @@ export const APP_CALLBACK_PATH = "/api/github/app/callback";
 export const APP_NAME_MAX = 34;
 
 export type GithubAppSetup = {
-  /** "Jarvis (<host>)", trimmed to 34 characters */
+  /** "Atlas (<host>)", trimmed to 34 characters */
   defaultName: string;
   origin: string;
   callbackUrl: string;
@@ -181,9 +181,9 @@ export function appInstallUrl(slug: string) {
 /** Callback outcomes shown on Settings → Connections (`?github_app=<code>`). */
 export const APP_CALLBACK_MESSAGES: Record<string, string> = {
   created: "GitHub App created. Next: install it on your account and organization.",
-  installed: "Installed on GitHub. Jarvis is reading the installations…",
+  installed: "Installed on GitHub. Atlas is reading the installations…",
   state: "That GitHub link expired or wasn't started from this session. Start again from “Create GitHub App”.",
-  forbidden: "Only an admin signed in to Jarvis can finish creating the GitHub App.",
+  forbidden: "Only an admin signed in to Atlas can finish creating the GitHub App.",
   exists: "A GitHub App is already set up. Forget it first to create another.",
   missing_code: "GitHub didn't send a code back. Start again.",
   conversion: "GitHub refused the code (it's single-use and expires after an hour). Start again.",

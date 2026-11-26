@@ -34,7 +34,7 @@ export function FinanceOverviewView() {
   if (q.isPending || q.error)
     return (
       <div className="mx-auto max-w-6xl space-y-4 px-3 pt-3 pb-6 sm:px-5 sm:pt-4 dense:px-7 dense:pt-5">
-        <PageHeader title="Finance" subtitle="Plans and records. Jarvis never moves money." />
+        <PageHeader title="Finance" subtitle="Plans and records. Atlas never moves money." />
         {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : <LoadingState label="Loading finances" />}
       </div>
     );
@@ -44,7 +44,7 @@ export function FinanceOverviewView() {
     <div className="@container mx-auto max-w-6xl space-y-4 px-3 pt-3 pb-6 sm:px-5 sm:pt-4 dense:px-7 dense:pt-5">
       <PageHeader
         title="Finance"
-        subtitle="Plans and records. Jarvis never moves money."
+        subtitle="Plans and records. Atlas never moves money."
         actions={
           can("finance.edit") && o.setup.accounts ? (
             o.setup.balanceSource === "monarch" ? (

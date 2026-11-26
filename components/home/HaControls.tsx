@@ -82,7 +82,7 @@ function ConfirmInner({
           ) : null}
           Current state: <strong>{action.state}</strong>
           {action.observedAt ? ` (checked ${new Date(action.observedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })})` : ""}. If it changed
-          since then, Jarvis will stop and ask again.
+          since then, Atlas will stop and ask again.
         </>
       }
       footer={

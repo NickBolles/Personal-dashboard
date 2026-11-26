@@ -116,8 +116,8 @@ export function AgentsSettingsView() {
       <Card>
         <SectionHeader label="Profile routes" count={q.data.routes.length} />
         <p className="mb-2 text-sm text-muted">
-          Each profile needs its own Hermes API key. Put it in the Jarvis secrets env file as the variable below (it never goes in the database), then recreate
-          the container.
+          Each profile needs its own Hermes API key. Put it in the server&apos;s secrets env file as the variable below (it never goes in the database), then
+          recreate the container.
         </p>
         {q.data.routes.length ? (
           <ul className="mb-3 divide-y divide-line rounded-lg border border-line" aria-label="Profile routes">

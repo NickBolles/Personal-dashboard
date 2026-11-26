@@ -7,7 +7,7 @@ import { createPairingCode, pairingUri } from "@/server/devices";
 
 /** Show a one-time pairing code (and QR) in Settings → Phones. Browser sessions only. */
 export const POST = api(async ({ req, user, correlationId }) => {
-  if (user.via === "device") throw new HttpError(403, "forbidden", "Pair new phones from Jarvis on the web");
+  if (user.via === "device") throw new HttpError(403, "forbidden", "Pair new phones from Atlas on the web");
   const origin = publicOrigin(req);
   const { code, expiresAt } = createPairingCode(user.id);
   const uri = pairingUri(origin, code);

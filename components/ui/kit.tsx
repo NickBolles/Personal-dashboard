@@ -1,4 +1,5 @@
 "use client";
+import { AtlasMark } from "@/components/brand/AtlasMark";
 
 /**
  * Jarvis design system v1 component kit (docs/design-system.md §6).
@@ -331,7 +332,7 @@ export function StatusCircle({ status, label }: { status: Status; label: string 
 }
 
 export type Agent = "cos" | "mom" | "dev" | "lab" | "jar";
-export const AGENT_NAMES: Record<Agent, string> = { cos: "Chief of staff", mom: "Mom", dev: "Dev", lab: "Lab", jar: "Jarvis" };
+export const AGENT_NAMES: Record<Agent, string> = { cos: "Chief of staff", mom: "Mom", dev: "Dev", lab: "Lab", jar: "Atlas" };
 
 export function AgentMark({ agent, size = "md", label }: { agent: Agent; size?: "sm" | "md" | "lg"; label?: string }) {
   return (
@@ -807,7 +808,7 @@ export function Orb({
   expanded = false,
   onClick,
   size = 52,
-  label = "Jarvis commands",
+  label = "Atlas commands",
 }: {
   expanded?: boolean;
   onClick?: () => void;
@@ -824,9 +825,7 @@ export function Orb({
       onClick={onClick}
     >
       <span className="k-orb-aura" aria-hidden />
-      <svg className="k-orb-g" width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
-        <path d="M10 1.5 11.9 8.1 18.5 10 11.9 11.9 10 18.5 8.1 11.9 1.5 10 8.1 8.1Z" />
-      </svg>
+      <AtlasMark className="k-orb-g h-5 w-5" />
     </button>
   );
 }

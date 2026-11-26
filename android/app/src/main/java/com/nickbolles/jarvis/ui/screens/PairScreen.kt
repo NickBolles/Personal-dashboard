@@ -116,7 +116,7 @@ fun PairScreen(graph: AppGraph, link: PairLink?, signedOutReason: String?) {
             scanner.startScan()
                 .addOnSuccessListener { barcode ->
                     val l = PairLink.parse(barcode.rawValue)
-                    if (l == null) error = "That QR code isn't a Jarvis pairing code" else {
+                    if (l == null) error = "That QR code isn't an Atlas pairing code" else {
                         server = l.server
                         code = l.code
                         submit(l.server, l.code)
@@ -145,9 +145,9 @@ fun PairContent(
         horizontalAlignment = Alignment.Start,
     ) {
         Image(painterResource(R.drawable.jarvis_logo), contentDescription = null, modifier = Modifier.padding(top = 32.dp).size(64.dp))
-        Text("Connect to Jarvis", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
+        Text("Connect to Atlas", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
         Text(
-            "In Jarvis on the web, open Settings → Phones → Show pairing code. Then scan the QR code here.",
+            "In Atlas on the web, open Settings → Phones → Show pairing code. Then scan the QR code here.",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -181,7 +181,7 @@ fun PairContent(
             Text(if (busy) "Connecting…" else "Connect")
         }
         Text(
-            "Jarvis stores a revocable token for this phone. Sign it out any time from this app or from Settings → Phones on the web.",
+            "Atlas stores a revocable token for this phone. Sign it out any time from this app or from Settings → Phones on the web.",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

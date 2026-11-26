@@ -17,7 +17,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 /**
  * Firebase is configured at runtime from the Jarvis server (Settings → Phones
  * → Firebase on the web), so the APK carries no google-services.json and works
- * with anyone's Jarvis. Registration sends the FCM token to /api/devices/me.
+ * with anyone's Atlas. Registration sends the FCM token to /api/devices/me.
  */
 object PushRegistrar {
     private const val TAG = "JarvisPush"

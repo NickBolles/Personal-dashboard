@@ -412,7 +412,7 @@ export function renderContext(c: BriefContext): string {
 
   const sections = [
     block(
-      "things you may pick: ref | bucket | where | title | due | why Jarvis ranks it there",
+      "things you may pick: ref | bucket | where | title | due | why Atlas ranks it there",
       c.candidates.map(
         ({ ref, action: a, bucket }) =>
           `${ref} | ${bucket} | ${line(a.sourceLabel ?? a.source, 40)} | ${line(a.title)} | ${when(a, c.today, tz)} | ${line((a.why ?? []).join("; "), 140) || "-"}`,

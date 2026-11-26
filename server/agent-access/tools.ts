@@ -49,7 +49,7 @@ const handle = z
   .min(1)
   .max(200)
   .regex(/^[\w.:@\-/]+$/, "letters, digits and . : @ - / _ only");
-/** A transcript path on the agent's host: shown as copyable text only (Jarvis never opens it). */
+/** A transcript path on the agent's host: shown as copyable text only (Atlas never opens it). */
 const pathText = z
   .string()
   .trim()
@@ -367,7 +367,7 @@ export const TOOLS: ToolDef[] = [
   }),
   tool({
     name: "jarvis_link",
-    description: "Link a GitHub PR or issue URL, or an https URL (e.g. an artifacts board), to an item. Jarvis doesn't fetch the URL.",
+    description: "Link a GitHub PR or issue URL, or an https URL (e.g. an artifacts board), to an item. Atlas doesn't fetch the URL.",
     scope: "work.write",
     input: z.object({ itemId: id, url: z.string().trim().max(2000), title: text(300).optional(), kind: z.enum(["pr", "issue", "url"]).optional() }).strict(),
     run: async ({ itemId, url, title, kind }, { agent, correlationId }) => {
@@ -475,7 +475,7 @@ export const TOOLS: ToolDef[] = [
   tool({
     name: "jarvis_file_conversation",
     description:
-      "File one of this agent's own Hermes conversations (by session id, on this token's profile) under an item or area so it shows in Jarvis. Hidden, Bot Chat and sub-agent sessions are refused.",
+      "File one of this agent's own Hermes conversations (by session id, on this token's profile) under an item or area so it shows in Atlas. Hidden, Bot Chat and sub-agent sessions are refused.",
     scope: "conversations.file",
     input: z.object({ sessionId: z.string().trim().min(1).max(200), itemId: id }).strict(),
     run: async ({ sessionId, itemId }, { agent, correlationId }) => {

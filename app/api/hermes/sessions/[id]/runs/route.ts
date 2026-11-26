@@ -74,7 +74,7 @@ export const POST = api<z.infer<typeof schema>, { id: string }>(
     const modeHint = agentMode && agentMode.trim().toLowerCase() !== onProfile ? agentMode : null;
     const areaInstructions =
       s && (modeHint || s.instructions)
-        ? [`Jarvis area: ${area!.area.title}.`, modeHint ? `Agent mode: ${modeHint}.` : "", s.instructions ?? ""].filter(Boolean).join(" ")
+        ? [`Atlas area: ${area!.area.title}.`, modeHint ? `Agent mode: ${modeHint}.` : "", s.instructions ?? ""].filter(Boolean).join(" ")
         : undefined;
     const smart = body.capabilities?.includes(SMART_CAPABILITY) && getSmartSettings(user.id).enabled ? smartInstructions() : undefined;
     // Every filed (non-excluded) conversation tells the agent where it is and what's open there,

@@ -34,8 +34,8 @@ function orb(page: Page) {
 /** Orb tap → command palette. */
 async function openPalette(page: Page) {
   await expect(async () => {
-    if (!(await page.getByRole("combobox", { name: "Search Jarvis" }).count())) await orb(page).click();
-    await expect(page.getByRole("combobox", { name: "Search Jarvis" })).toBeFocused({ timeout: 1000 });
+    if (!(await page.getByRole("combobox", { name: "Search Atlas" }).count())) await orb(page).click();
+    await expect(page.getByRole("combobox", { name: "Search Atlas" })).toBeFocused({ timeout: 1000 });
   }).toPass();
 }
 async function actionMapOpen(page: Page) {
@@ -125,7 +125,7 @@ test("settings → connections → GitHub: add, test, warn, webhook secret; assi
   await expect(edit).toHaveCount(0);
   await expect(row).toContainText("•••• 0003");
   await row.getByRole("button", { name: "Test Momentum org" }).click();
-  await expect(row.getByTestId("gh-warning").first()).toHaveText("This token can write — Jarvis only needs read. Prefer a fine-grained read-only token.");
+  await expect(row.getByTestId("gh-warning").first()).toHaveText("This token can write — Atlas only needs read. Prefer a fine-grained read-only token.");
   await expect(row).toContainText("scopes: repo, workflow, read:org");
   // Back to the read-only one for the rest of the test.
   await row.getByRole("button", { name: "Edit Momentum org" }).click();
@@ -227,11 +227,11 @@ test("command dock: tap opens the palette, ↑ opens the radial menu, hold-and-s
   // Search in the radial menu → command palette.
   await actionMapOpen(page);
   await actionMap(page).click();
-  await expect(page.getByRole("combobox", { name: "Search Jarvis" })).toBeFocused();
+  await expect(page.getByRole("combobox", { name: "Search Atlas" })).toBeFocused();
   await page.keyboard.press("Escape");
   // Tap → command palette with Work commands.
   await openPalette(page);
-  const box = page.getByRole("combobox", { name: "Search Jarvis" });
+  const box = page.getByRole("combobox", { name: "Search Atlas" });
   await box.fill("inbox");
   await expect(page.locator('[data-command="work.inbox"]')).toBeVisible();
   await page.keyboard.press("Enter");
@@ -260,7 +260,7 @@ test("command dock: tap opens the palette, ↑ opens the radial menu, hold-and-s
   await page.mouse.move(o2.x + 3, o2.y - 3);
   await page.mouse.up();
   await expect(actionMap(page)).toHaveCount(0);
-  await expect(page.getByRole("combobox", { name: "Search Jarvis" })).toHaveCount(0);
+  await expect(page.getByRole("combobox", { name: "Search Atlas" })).toHaveCount(0);
   await expect(page).toHaveURL(/\/areas\/timeline/);
 
   // Keyboard: Ctrl+. opens the map; arrows choose, Tab opens a sub-menu, Enter runs, Esc closes.
@@ -298,7 +298,7 @@ test("palette commands act on the open item: start focused work and record valid
   await page.goto(`/areas?item=${item.id}`);
   await expect(page.getByRole("heading", { level: 2, name: "Hydration perf" })).toBeVisible();
   await openPalette(page);
-  await page.getByRole("combobox", { name: "Search Jarvis" }).fill("focused");
+  await page.getByRole("combobox", { name: "Search Atlas" }).fill("focused");
   await page.locator('[data-command="work.packet"]').click();
   await expect(page.getByRole("dialog", { name: "Start focused work" })).toBeVisible();
   // Non-Home/Misc area: validation required by default.
@@ -306,7 +306,7 @@ test("palette commands act on the open item: start focused work and record valid
   await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
 
   await openPalette(page);
-  await page.getByRole("combobox", { name: "Search Jarvis" }).fill("record validation");
+  await page.getByRole("combobox", { name: "Search Atlas" }).fill("record validation");
   await page.keyboard.press("Enter");
   await expect(page.getByLabel("Observed value for p95 hydration")).toBeFocused();
   await page.getByLabel("Observed value for p95 hydration").fill("0.9");

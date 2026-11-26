@@ -33,7 +33,7 @@ describe("filedChatContext", () => {
     expect(text).toContain(`Lantern settle check (thread, id ${open.id}) — next: Confirm the merge`);
     expect(text).not.toContain("Old abandoned idea");
     expect(text).not.toContain("Elsewhere thread");
-    expect(text).toContain("no Jarvis item tools");
+    expect(text).toContain("no Atlas item tools");
 
     mintAgentToken(owner, { name: "Dev", profile: "devchief", scopes: ["work.read"] }, cid);
     expect(filedChatContext(owner, "api_settle", "devchief")).toContain("jarvis_request_change");
@@ -49,7 +49,7 @@ describe("filedChatContext", () => {
     store.placeConversation(owner, { sessionId: "api_fin", parentId: finance.id, title: "Budget" }, cid);
     store.createItem(owner, { kind: "thread", title: "Pay card ending 4111111111111111", parentId: finance.id }, cid);
     const fin = filedChatContext(owner, "api_fin", null);
-    expect(fin).toContain("filed in Jarvis under: Finance");
+    expect(fin).toContain("filed in Atlas under: Finance");
     expect(fin).not.toContain("4111111111111111");
     // Exclude from AI still wins on a Finance area.
     store.updateItem(owner, finance.id, { settings: { aiPolicy: "excluded" } }, cid);

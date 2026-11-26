@@ -156,10 +156,10 @@ it("reports a not_undoable conflict without claiming success", async () => {
 });
 
 it("keeps Retry available after a failed request", async () => {
-  vi.mocked(api.post).mockRejectedValueOnce(new Error("Couldn't reach Jarvis"));
+  vi.mocked(api.post).mockRejectedValueOnce(new Error("Couldn't reach Atlas"));
   mount(<CaptureTriageChip triage={{ ...base, state: "failed" }} />);
   fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-  await waitFor(() => expect(toast).toHaveBeenCalledWith("Couldn't reach Jarvis", "danger"));
+  await waitFor(() => expect(toast).toHaveBeenCalledWith("Couldn't reach Atlas", "danger"));
   await waitFor(() => expect((screen.getByRole("button", { name: "Retry" }) as HTMLButtonElement).disabled).toBe(false));
 });
 
@@ -185,7 +185,7 @@ it.each(["done", "filed"] as const)("shows the capture card and only reminds don
   const card = await screen.findByTestId("capture-triage-card");
   expect(card.getAttribute("role")).toBe("status");
   expect(card.textContent).toContain("From your capture");
-  expect(card.textContent?.includes("Check it and settle when you're happy — Jarvis never settles on its own.")).toBe(state === "done");
+  expect(card.textContent?.includes("Check it and settle when you're happy — Atlas never settles on its own.")).toBe(state === "done");
 });
 
 it("refetches the capture card after Undo and shows the verified response", async () => {
@@ -269,7 +269,7 @@ it("defaults capture actions for older settings without an actions block", async
   const mode = screen.getByRole("combobox", { name: "When it can act" }) as HTMLSelectElement;
   expect(mode.value).toBe("act");
   expect(mode.id).toBe("ai-capture-actions-mode");
-  for (const name of ["Skylight list items", "Skylight calendar events", "Jarvis to-dos"]) {
+  for (const name of ["Skylight list items", "Skylight calendar events", "Atlas to-dos"]) {
     const allow = screen.getByRole("checkbox", { name }) as HTMLInputElement;
     expect(allow.checked).toBe(true);
     expect(allow.disabled).toBe(false);
@@ -280,7 +280,7 @@ it("disables capture mode and allowlist when auto-handle is off", async () => {
   mountSettings({ ...DEFAULT_AI_SETTINGS, capture: { ...DEFAULT_AI_SETTINGS.capture, actions: { ...DEFAULT_CAPTURE_ACTIONS, autoHandle: false } } });
   await screen.findByRole("checkbox", { name: /^Auto-handle captures/ });
   expect((screen.getByRole("combobox", { name: "When it can act" }) as HTMLSelectElement).disabled).toBe(true);
-  for (const name of ["Skylight list items", "Skylight calendar events", "Jarvis to-dos"]) {
+  for (const name of ["Skylight list items", "Skylight calendar events", "Atlas to-dos"]) {
     expect((screen.getByRole("checkbox", { name }) as HTMLInputElement).disabled).toBe(true);
   }
 });
@@ -290,7 +290,7 @@ it.each([
   ["mode", "When it can act"],
   ["skylightList", "Skylight list items"],
   ["skylightEvent", "Skylight calendar events"],
-  ["jarvisTask", "Jarvis to-dos"],
+  ["jarvisTask", "Atlas to-dos"],
 ] as const)("saves capture %s without dropping existing settings", async (key, label) => {
   const actions = { ...DEFAULT_CAPTURE_ACTIONS, minConfidence: 0.9 };
   const settings = { ...DEFAULT_AI_SETTINGS, capture: { ...DEFAULT_AI_SETTINGS.capture, stripLocation: true, actions } };

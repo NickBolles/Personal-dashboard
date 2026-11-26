@@ -4,7 +4,7 @@ export type AssistantBackend = (typeof ASSISTANT_BACKENDS)[number];
 
 export const BACKEND_LABELS: Record<AssistantBackend, { label: string; description: string }> = {
   hermes: { label: "Hermes", description: "Your agent: tools, skills, memory and approvals. Slower, can act." },
-  claude: { label: "Claude", description: "Direct to Claude: fast answers, no tools. Uses Jarvis context you attach." },
+  claude: { label: "Claude", description: "Direct to Claude: fast answers, no tools. Uses Atlas context you attach." },
 };
 
 /** Models offered for the Claude backend (Claude Opus 5.5 is the default). */

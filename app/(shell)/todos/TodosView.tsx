@@ -123,7 +123,7 @@ export function TodosView() {
           </Button>
         }
         subtitle={
-          provider ? `Canonical list: ${provider === "google_tasks" ? "Google Tasks" : provider === "home_assistant" ? "Home Assistant" : "Jarvis"}` : undefined
+          provider ? `Canonical list: ${provider === "google_tasks" ? "Google Tasks" : provider === "home_assistant" ? "Home Assistant" : "Atlas"}` : undefined
         }
       />
       {q.isLoading ? <LoadingState label="Loading todos…" /> : null}

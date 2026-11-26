@@ -110,10 +110,10 @@ describe("composer target by route (pure)", () => {
     expect(t).toMatchObject({ agent: "momentumchief", routed: true, areaId: "n1", context: `${NODE_CTX_PREFIX}n1` });
     expect(composerLabel(t)).toBe("Ask momentumchief · Momentum bets");
     const off = composerTargetFor(node, { requested: "momentumchief", profile: null, routed: false, reason: "routing_off" });
-    expect(off).toMatchObject({ agent: "Jarvis", routed: false, areaId: "n1" });
+    expect(off).toMatchObject({ agent: "Atlas", routed: false, areaId: "n1" });
     expect(composerTargetFor(node, routed, true)).toBe(JARVIS_TARGET);
     expect(composerTargetFor(null, routed)).toBe(JARVIS_TARGET);
-    expect(composerLabel(JARVIS_TARGET)).toBe("Ask Jarvis");
+    expect(composerLabel(JARVIS_TARGET)).toBe("Ask Atlas");
   });
 });
 

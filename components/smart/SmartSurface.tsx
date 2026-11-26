@@ -254,8 +254,8 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
       <div className="smart-surface my-2" data-testid="smart-surface">
         <div className="svh border-b border-line">
           {/* The root's human label; never the component's internal name. */}
-          <span className="sv-tag">{smartLabel(spec.elements[spec.root]?.type) ?? "Jarvis"}</span>
-          <span className="sv-label">{stageable ? "Proposed changes" : "Jarvis view"}</span>
+          <span className="sv-tag">{smartLabel(spec.elements[spec.root]?.type) ?? "Atlas"}</span>
+          <span className="sv-label">{stageable ? "Proposed changes" : "Atlas view"}</span>
           <span className="sv-meta">
             Proposed by <span className="text-ai">@jarvis</span>
           </span>
@@ -342,7 +342,7 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
           open
           onClose={() => setConfirmApply(false)}
           title={`Apply ${n} ${n === 1 ? "change" : "changes"}?`}
-          description="These changes write to your Jarvis items. You can Undo after applying."
+          description="These changes write to your Atlas items. You can Undo after applying."
           footer={
             <>
               <Button onClick={() => setConfirmApply(false)}>Cancel</Button>
@@ -364,7 +364,7 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
           open
           onClose={() => setApproveCal(false)}
           title={`Add ${external.length} ${external.length === 1 ? "block" : "blocks"} to the calendar?`}
-          description="These are written to the household calendar in Home Assistant and read back. Jarvis can't remove them later; delete them in the calendar if you change your mind."
+          description="These are written to the household calendar in Home Assistant and read back. Atlas can't remove them later; delete them in the calendar if you change your mind."
           footer={
             <>
               <Button onClick={() => setApproveCal(false)}>Cancel</Button>

@@ -141,7 +141,7 @@ test("the global composer asks the open area's agent, files the chat there; the 
   await page.goto("/home");
   await page.getByRole("heading", { name: "Now" }).waitFor();
   await openPalette();
-  await expect(palette.getByTestId("composer-target")).toHaveAttribute("data-agent", "Jarvis");
+  await expect(palette.getByTestId("composer-target")).toHaveAttribute("data-agent", "Atlas");
   await page.keyboard.press("Escape");
 
   await page.goto(`/areas?item=${areaId}`);
@@ -164,7 +164,7 @@ test("the global composer asks the open area's agent, files the chat there; the 
   await expect(chip).toHaveAttribute("data-agent", "momentumchief");
   await expect(chip).toHaveAttribute("data-routed", "1");
   await chip.click();
-  await expect(chip).toHaveAttribute("data-agent", "Jarvis");
+  await expect(chip).toHaveAttribute("data-agent", "Atlas");
   await expect(chip).toHaveAttribute("aria-pressed", "false");
   await chip.click();
   await expect(chip).toHaveAttribute("data-agent", "momentumchief");

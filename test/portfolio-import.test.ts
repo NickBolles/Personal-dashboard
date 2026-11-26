@@ -115,7 +115,7 @@ describe("portfolio import planner (pure)", () => {
     const by = (k: string) => plan.entries.find((e) => e.key === k)!;
     // existing containers gain links only
     expect(by("project:jarvis")).toMatchObject({ action: "update", matchedId: "jv", links: [{ kind: "url" }] });
-    expect(by("project:momentum")).toMatchObject({ action: "skip", matchedId: "mb", reason: "already in Jarvis" });
+    expect(by("project:momentum")).toMatchObject({ action: "skip", matchedId: "mb", reason: "already in Atlas" });
     // a project with no container lands under Portfolio
     expect(by("project:garden")).toMatchObject({ action: "create", kind: "project", parentId: "pf", status: "in_progress" });
     const p1 = by("node:0");

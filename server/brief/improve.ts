@@ -52,7 +52,7 @@ export function eligibleAreas(items: WorkItem[]) {
 
 /**
  * Where a request goes unless the person says otherwise: the area they picked
- * last time, else an area called "Jarvis", else the portfolio coordinator's
+ * last time, else the existing area called "Jarvis", else the portfolio coordinator's
  * area. Null means Miscellaneous (Hermes' default profile).
  */
 export function improveArea(user: CurrentUser, items: WorkItem[] = listItems(user.id)): WorkItem | null {
@@ -169,9 +169,9 @@ export function resultFor(user: CurrentUser, row: Row): { improvement: BriefImpr
 /** What the agent is sent: the person's words, and the item that tracks them. */
 export function improvePrompt(text: string, item: Pick<WorkItem, "id" | "title">) {
   return [
-    "I want to change how Jarvis works for me. I am asking from my daily brief (the Home screen).",
+    "I want to change how Atlas works for me. I am asking from my daily brief (the Home screen).",
     `What I want:\n${text}`,
-    `This is tracked as the Jarvis item "${item.title}" (id ${item.id}). Work out what it takes, ask me whenever a decision is mine to make, and keep that item up to date as you go. This is a request to change the app, not to rewrite today's brief.`,
+    `This is tracked as the Atlas item "${item.title}" (id ${item.id}). Work out what it takes, ask me whenever a decision is mine to make, and keep that item up to date as you go. This is a request to change the app, not to rewrite today's brief.`,
   ].join("\n\n");
 }
 
@@ -236,7 +236,7 @@ export async function launch(user: CurrentUser, l: Launch, correlationId: string
     const modeHint = mode && mode.trim().toLowerCase() !== onProfile ? mode : null;
     const areaInstructions =
       where && s && (modeHint || s.instructions)
-        ? [`Jarvis area: ${where.area.title}.`, modeHint ? `Agent mode: ${modeHint}.` : "", s.instructions ?? ""].filter(Boolean).join(" ")
+        ? [`Atlas area: ${where.area.title}.`, modeHint ? `Agent mode: ${modeHint}.` : "", s.instructions ?? ""].filter(Boolean).join(" ")
         : undefined;
     // Where it is filed and whether the agent has Jarvis tools, and no more: not the open items under it. A
     // sparkle on an initiative sends that one task, never its child tasks and notes; Improve sends only the words.

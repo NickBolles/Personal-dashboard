@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { AndroidWrapperMarker } from "@/components/AndroidWrapperMarker";
+import { BRAND_NAME, BRAND_INTRO } from "@/lib/brand";
 import { ThemeSync } from "@/components/ui/ThemeSync";
 
 // Self-hosted at build time by next/font: no font CDN request at runtime.
@@ -10,11 +11,11 @@ const geist = Geist({ subsets: ["latin"], variable: "--font-geist", display: "sw
 const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono", display: "swap" });
 
 export const metadata: Metadata = {
-  title: { default: "Jarvis", template: "%s · Jarvis" },
-  description: "Hermes-first command center: next actions, alerts, and household systems.",
-  applicationName: "Jarvis",
+  title: { default: BRAND_NAME, template: `%s · ${BRAND_NAME}` },
+  description: BRAND_INTRO,
+  applicationName: BRAND_NAME,
   manifest: "/manifest.webmanifest",
-  appleWebApp: { capable: true, title: "Jarvis", statusBarStyle: "default" },
+  appleWebApp: { capable: true, title: BRAND_NAME, statusBarStyle: "default" },
   icons: {
     icon: [
       { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },

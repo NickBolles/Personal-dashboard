@@ -68,7 +68,7 @@ describe("fenced block parser", () => {
   it("splits text and blocks; summary text never shows JSON", () => {
     const segs = splitBlocks(text);
     expect(segs.map((s) => s.kind)).toEqual(["text", "block", "text"]);
-    expect(summaryText(text)).toBe("Here's a pass.\n\nApply when ready.\n\n_Structured reply (open in Jarvis)_");
+    expect(summaryText(text)).toBe("Here's a pass.\n\nApply when ready.\n\n_Structured reply (open in Atlas)_");
   });
 
   it("never throws on a stream cut at any byte; open blocks are reported unclosed", () => {

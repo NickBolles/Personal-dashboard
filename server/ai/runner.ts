@@ -725,7 +725,7 @@ function notifyReport(row: typeof J.$inferSelect, reportId: string, title: strin
         category: "ai_report",
         severity: "normal",
         title: `${recent + 1} reports ready`,
-        body: "Open Today to see what Jarvis prepared.",
+        body: "Open Today to see what Atlas prepared.",
         source: "work",
         deepLink: "/areas?view=today",
         dedupeKey: `ai:reports:${bucket}`,

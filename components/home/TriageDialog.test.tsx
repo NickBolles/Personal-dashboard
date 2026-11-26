@@ -47,7 +47,7 @@ it("keeps partial success separate from writes with failed readback or lost HTTP
   vi.mocked(api.post)
     .mockResolvedValueOnce({ ok: true, message: "Snoozed" })
     .mockRejectedValueOnce(new ApiError(502, "Home Assistant did not confirm the new due date", "upstream_bad_response"))
-    .mockRejectedValueOnce(new ApiError(0, "Couldn't reach Jarvis", "network"));
+    .mockRejectedValueOnce(new ApiError(0, "Couldn't reach Atlas", "network"));
   confirm();
   await waitFor(() => expect(screen.getByRole("button", { name: "Close" }).hasAttribute("disabled")).toBe(false));
   const rows = screen.getAllByRole("listitem");

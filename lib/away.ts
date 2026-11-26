@@ -479,11 +479,11 @@ export const isSilentReport = (report: string, proposals: Proposal[]) => proposa
 /** Policy text appended to every scheduled run's prompt. */
 export function policyInstructions(mode: EffectiveAutonomy) {
   return [
-    "You are running unattended on a schedule (the owner is away). Do not make changes yourself with tools: Jarvis refuses direct write tools from this profile while the run is active.",
+    "You are running unattended on a schedule (the owner is away). Do not make changes yourself with tools: Atlas refuses direct write tools from this profile while the run is active.",
     `At the end, list proposed changes as a fenced block \`\`\`${PROPOSALS_FENCE}\\n[ {"intent": …, "itemId"?: …, "title"?: …, "text"?: …, "why"?: …} ]\\n\`\`\` (JSON array, at most ${MAX_PROPOSALS_PER_RUN}).`,
     `Intents: ${PROPOSAL_INTENTS.join(", ")}.`,
     mode === "low_risk"
-      ? `This area allows Jarvis to apply low-risk proposals (${LOW_RISK_INTENTS.join(", ")}) automatically with undo; everything else goes to the owner as a decision.`
+      ? `This area allows Atlas to apply low-risk proposals (${LOW_RISK_INTENTS.join(", ")}) automatically with undo; everything else goes to the owner as a decision.`
       : "Every proposal goes to the owner as a decision; nothing is applied automatically.",
     "Never settle, abandon, supersede, merge, deploy, spend money or message anyone; propose instead. Never include credentials, tokens or full account numbers. Device changes (Home Assistant) are device_control proposals with {entityId, service, data?}; the owner confirms them.",
     `If nothing changed since your last check-in, reply exactly ${NOTHING_NEW}.`,

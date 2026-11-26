@@ -64,7 +64,7 @@ test("people: a kid signs in with their name and sees the calendar, not Hermes",
 test("search: Ctrl K finds a page and opens it", async ({ page }) => {
   await page.goto("/home");
   await page.getByRole("heading", { name: "Now" }).waitFor();
-  const box = page.getByRole("combobox", { name: "Search Jarvis" });
+  const box = page.getByRole("combobox", { name: "Search Atlas" });
   // Retry until the page has hydrated and the shortcut is listening.
   await expect(async () => {
     await page.keyboard.press("Control+k");

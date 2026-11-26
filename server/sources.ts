@@ -220,7 +220,7 @@ export function scopeResult(user: Viewer, r: SourceResult): SourceResult | undef
 }
 
 /**
- * Today's Daily Compass focus as far as Jarvis honestly knows it. Undefined for
+ * Today's Daily Compass focus as far as Atlas honestly knows it. Undefined for
  * people who don't use Daily Compass (it's private) or when it isn't set up.
  */
 export function compassFocus(r: SourceResult | undefined, ctx: AdapterContext): AttentionSummary["compass"] {

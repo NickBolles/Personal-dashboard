@@ -60,7 +60,7 @@ object Notifications {
         val n = NotificationCompat.Builder(context, channelFor(data["category"], data["severity"]))
             .setSmallIcon(R.drawable.ic_stat_jarvis)
             .setColor(ContextCompat.getColor(context, R.color.brand))
-            .setContentTitle(data["title"] ?: "Jarvis")
+            .setContentTitle(data["title"] ?: "Atlas")
             .setContentText(data["body"])
             .setStyle(NotificationCompat.BigTextStyle().bigText(data["body"]))
             .setContentIntent(openIntent(context, path, notifId))

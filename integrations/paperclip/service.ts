@@ -203,7 +203,7 @@ export async function track(r: TrackRequest, user: CurrentUser, correlationId: s
     const backlink = config.publicOrigin ? `${config.publicOrigin}/chat/${encodeURIComponent(r.sessionId)}` : `Hermes session ${r.sessionId}`;
     issue = await PaperclipClient.createIssue(c, {
       title: r.title.trim(),
-      description: [r.description?.trim(), `Originated from Jarvis conversation: ${backlink}`].filter(Boolean).join("\n\n"),
+      description: [r.description?.trim(), `Originated from Atlas conversation: ${backlink}`].filter(Boolean).join("\n\n"),
       parentId,
       idempotencyKey: trackIdempotencyKey({ title: r.title, parentId }),
     });

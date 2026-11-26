@@ -5,17 +5,17 @@ import { setComposerJarvis, type ComposerTargetState } from "./useComposerTarget
 
 /**
  * "✦ momentumchief · Momentum bets": who the global composer asks. Inside an area it is a toggle,
- * so the owner can ask plain Jarvis instead (and back). Outside Areas it is a quiet "Jarvis" label.
+ * so the owner can ask plain Jarvis instead (and back). Outside Areas it is a quiet "Atlas" label.
  */
 export function ComposerTargetChip({ target, className }: { target: ComposerTargetState; className?: string }) {
   if (!target.available)
     return (
-      <span className={cx("chip shrink-0", className)} data-testid="composer-target" data-agent="Jarvis">
-        <span aria-hidden="true">✦</span> Jarvis
+      <span className={cx("chip shrink-0", className)} data-testid="composer-target" data-agent="Atlas">
+        <span aria-hidden="true">✦</span> Atlas
       </span>
     );
   const area = target.node?.title ?? "";
-  const label = target.switchedToJarvis ? `Asking Jarvis. Switch to ${area}'s agent` : `Asking ${target.agent} in ${area}. Switch to Jarvis`;
+  const label = target.switchedToJarvis ? `Asking Atlas. Switch to ${area}'s agent` : `Asking ${target.agent} in ${area}. Switch to Atlas`;
   return (
     <ChipButton
       type="button"
@@ -30,7 +30,7 @@ export function ComposerTargetChip({ target, className }: { target: ComposerTarg
       onClick={() => setComposerJarvis(!target.switchedToJarvis)}
     >
       <span aria-hidden="true">✦</span>
-      <span className="truncate font-semibold">{target.switchedToJarvis ? "Jarvis" : target.agent}</span>
+      <span className="truncate font-semibold">{target.switchedToJarvis ? "Atlas" : target.agent}</span>
       {!target.switchedToJarvis ? <span className="hidden truncate text-muted sm:inline">· {area}</span> : null}
     </ChipButton>
   );

@@ -34,7 +34,7 @@ describe("chat refinements", () => {
     expect(screen.getByText("Arguments and output")).toBeTruthy();
     expect(screen.getByRole("button").getAttribute("aria-expanded")).toBe("true");
   });
-  it("only links returned Jarvis item metadata and never treats proposals as completion", () => {
+  it("only links returned Atlas item metadata and never treats proposals as completion", () => {
     expect(toolOutcome("jarvis_update_item", '{"item":{"id":"wk_abc","title":"Item","status":"active"}}')).toEqual({
       label: "Updated task · Item",
       href: "/areas?item=wk_abc",

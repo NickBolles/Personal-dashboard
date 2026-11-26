@@ -93,7 +93,7 @@ export function logSetupCodeIfUnclaimed() {
 }
 
 export function claimInstance(input: { setupCode: string; name: string; passcode: string }) {
-  if (isClaimed()) throw new AuthError("already_claimed", "This Jarvis instance is already set up.");
+  if (isClaimed()) throw new AuthError("already_claimed", "This Atlas instance is already set up.");
   if (!safeEqual(input.setupCode.trim().toUpperCase(), getSetupCode().toUpperCase())) {
     throw new AuthError("bad_setup_code", "That setup code is not correct. Check the server logs.");
   }

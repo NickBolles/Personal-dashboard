@@ -172,7 +172,7 @@ function Panel({ theme }: { theme: "dark" | "light" }) {
       </div>
       <LockBar locked={locked} onUnlock={() => setLocked(false)} />
       <div className="flex items-center gap-4">
-        <Orb expanded={orb} onClick={() => setOrb((o) => !o)} label={`Jarvis commands (${t})`} />
+        <Orb expanded={orb} onClick={() => setOrb((o) => !o)} label={`Atlas commands (${t})`} />
         <SpendRing spent={3.2} budget={10} />
       </div>
       <AgentCard agent="cos" title="Chief of staff" status="Working" live actions={<Button size="sm">Open</Button>}>

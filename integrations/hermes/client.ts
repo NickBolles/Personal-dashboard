@@ -52,7 +52,7 @@ type CallRequest = Omit<UpstreamRequest, "source" | "baseUrl"> & {
   holdsSlot?: boolean;
 };
 
-export const HERMES_BUSY_MESSAGE = "Hermes is busy right now (too many requests at once). Jarvis kept trying for a few seconds; try again in a moment.";
+export const HERMES_BUSY_MESSAGE = "Hermes is busy right now (too many requests at once). Atlas kept trying for a few seconds; try again in a moment.";
 
 function sleepFor(ms: number, signal?: AbortSignal) {
   return new Promise<void>((resolve, reject) => {

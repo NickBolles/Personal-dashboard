@@ -1,18 +1,19 @@
 import type { MetadataRoute } from "next";
+import { BRAND_NAME, BRAND_INTRO } from "@/lib/brand";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/home",
-    name: "Jarvis",
-    short_name: "Jarvis",
-    description: "Hermes-first command center: next actions, alerts, and household systems.",
+    name: BRAND_NAME,
+    short_name: BRAND_NAME,
+    description: BRAND_INTRO,
     start_url: "/home?source=pwa",
     scope: "/",
     display: "standalone",
     display_override: ["standalone", "minimal-ui"],
     orientation: "any",
-    background_color: "#f6f6f3",
-    theme_color: "#2749d8",
+    background_color: "#0c0d0f",
+    theme_color: "#0c0d0f",
     categories: ["productivity", "utilities"],
     icons: [
       { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },

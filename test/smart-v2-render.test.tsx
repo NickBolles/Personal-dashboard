@@ -132,7 +132,7 @@ describe("v2 live surface", () => {
     const first = mount(form);
     const next = await screen.findByLabelText("Next week (required)");
     await waitFor(() => expect((next as HTMLTextAreaElement).disabled).toBe(false));
-    expect(screen.getByText("proposed · from Jarvis data, editable")).toBeTruthy();
+    expect(screen.getByText("proposed · from Atlas data, editable")).toBeTruthy();
     fireEvent.change(next, { target: { value: "Iris next one\nIris next two" } });
     fireEvent.click(screen.getByRole("button", { name: "Submit" }));
     await waitFor(() => expect(view.state.pending).toBe(2));

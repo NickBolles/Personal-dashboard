@@ -24,7 +24,7 @@ import {
  * - `rulesBrief`: the brief Jarvis builds without a model, straight from the
  *   Home ranking. Always available, so the page never waits on AI.
  * - `resolveOutput`: turns a model answer into a stored document. Refs the
- *   model didn't get are dropped, titles always come from Jarvis' own data,
+ *   model didn't get are dropped, titles always come from Atlas' own data,
  *   and a malformed card is dropped on its own instead of failing the brief.
  */
 

@@ -1,7 +1,7 @@
 import { agentOf } from "@/lib/activity";
 
 /**
- * #180 "by @profile" chip: a change an agent token made on the owner's behalf (Jarvis MCP,
+ * #180 "by @profile" chip: a change an agent token made on the owner's behalf (Atlas MCP,
  * docs/agent-tools.md). Only rendered from recorded actor data (work_events.via, work_items
  * created_via/updated_via); never inferred.
  */

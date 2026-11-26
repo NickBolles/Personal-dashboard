@@ -89,7 +89,7 @@ function skylightOp(a: Extract<ResolvedAction, { type: "skylight_list_add" | "sk
 }
 
 const SUGGEST_WHY: Record<Extract<TriageOutcome, { kind: "suggest" }>["reason"], string> = {
-  risky: "Jarvis only suggests this; do it yourself if it's right.",
+  risky: "Atlas only suggests this; do it yourself if it's right.",
   not_allowed: "Auto-handle is off for this kind of action.",
   triage_only: "Captures are set to triage only.",
   low_confidence: "Not sure enough to do it alone.",
@@ -223,7 +223,7 @@ async function applyOne(r: Row) {
           choices: outcome.choices.map((c) => c.label),
           ...(outcome.recommended ? { recommended: outcome.recommended } : {}),
           pack: {
-            why: `From your capture “${entry.title.slice(0, 200)}”. Jarvis won't guess dates or times.`.slice(0, 600),
+            why: `From your capture “${entry.title.slice(0, 200)}”. Atlas won't guess dates or times.`.slice(0, 600),
             facts: [
               { label: "Captured", value: entry.title.slice(0, 400) },
               ...(outcome.missing.length ? [{ label: "Missing", value: outcome.missing.join(", ").slice(0, 400) }] : []),
@@ -315,7 +315,7 @@ async function applyOne(r: Row) {
       setRow(r.id, { itemId });
     } else withVia(via, () => updateItem(user, itemId!, { nextAction: a.nextAction }, correlationId));
     acceptInto(entry, itemId);
-    const summary = `Filed “${title}” as a Jarvis to-do.`;
+    const summary = `Filed “${title}” as an Atlas to-do.`;
     const runId = recordRun(user, r, itemId, title, summary, correlationId);
     audit({
       actor: via,
@@ -330,7 +330,7 @@ async function applyOne(r: Row) {
   }
   const body = [
     done,
-    `You captured “${entry.title}”. If that's wrong, Undo it here or correct it in Skylight. Jarvis never settles: settle it when you're happy.`,
+    `You captured “${entry.title}”. If that's wrong, Undo it here or correct it in Skylight. Atlas never settles: settle it when you're happy.`,
   ].join("\n\n");
   if (!itemId) {
     const item = withVia(via, () => createItem(user, { kind: "thread", parentId: destination(user.id, entry), title, summary: body }, correlationId));
@@ -447,7 +447,7 @@ export function applySuggestion(user: CurrentUser, id: string) {
     text: [entry.title, entry.note].join("\n"),
     chosen: true,
   });
-  if (out.kind !== "auto") throw new HttpError(409, "not_applicable", "Jarvis can't do this one for you");
+  if (out.kind !== "auto") throw new HttpError(409, "not_applicable", "Atlas can't do this one for you");
   const next = setRow(r.id, { state: "planned", chosenJson: JSON.stringify(out.action), notBefore: nowIso() });
   fireHook("triagePlanned");
   return toView(next);

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { presentTool, redactToolText, toolResultState } from "./tool-presentation";
 describe("semantic tool presentation", () => {
-  it("unwraps Jarvis batches without displaying JSON", () => {
+  it("unwraps Atlas batches without displaying JSON", () => {
     const v = presentTool(
       "tool_call",
       JSON.stringify({ calls: [{ name: "mcp__jarvis__jarvis_update_item", arguments: { id: "wk_123", summary: "private large body" } }] }),

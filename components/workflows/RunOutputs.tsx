@@ -390,7 +390,7 @@ export function SummaryCard({ sessionId, run }: { sessionId: string; run: RunOut
           >
             Draft a summary
           </Button>
-          <p className="mt-1 text-xs text-muted">Jarvis suggests one from your notes; nothing is saved until you accept it.</p>
+          <p className="mt-1 text-xs text-muted">Atlas suggests one from your notes; nothing is saved until you accept it.</p>
         </div>
       )}
     </section>
@@ -471,7 +471,7 @@ export function ExportBar({ sessionId, run }: { sessionId: string; run: RunOutpu
           .
         </p>
       ) : (
-        <p className="mt-1 text-xs text-muted">Save to Google Drive isn&apos;t available yet: Jarvis has no Drive connection.</p>
+        <p className="mt-1 text-xs text-muted">Save to Google Drive isn&apos;t available yet: Atlas has no Drive connection.</p>
       )}
       {run.driveExport ? (
         <p className="mt-1 text-xs text-muted" data-testid="workflow-drive-saved">
@@ -511,7 +511,7 @@ function DriveConfirm({ sessionId, run, plan, onClose }: { sessionId: string; ru
       open
       onClose={onClose}
       title="Save to Google Drive?"
-      description="Jarvis only sees files it creates in your Drive."
+      description="Atlas only sees files it creates in your Drive."
       footer={
         <>
           <Button type="button" variant="ghost" onClick={onClose}>

@@ -100,7 +100,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
         label: "Operator dashboard URL",
         type: "url",
         placeholder: "https://hermes.example.com",
-        help: "Used for deep links to settings Jarvis does not manage.",
+        help: "Used for deep links to settings Atlas does not manage.",
         env: "HERMES_DASHBOARD_URL",
       },
       {
@@ -109,15 +109,15 @@ export const INTEGRATIONS: IntegrationDef[] = [
         type: "text",
         default: "jarvis",
         advanced: true,
-        help: "Recorded on sessions created from Jarvis.",
+        help: "Recorded on sessions created from Atlas.",
       },
     ],
   },
   {
     kind: "todos",
     label: "Todos",
-    tagline: "One canonical todo list: Google Tasks, a Home Assistant list, or Jarvis itself.",
-    uses: ["Overdue and due-soon actions on Home", "Complete and snooze from Jarvis"],
+    tagline: "One canonical todo list: Google Tasks, a Home Assistant list, or Atlas itself.",
+    uses: ["Overdue and due-soon actions on Home", "Complete and snooze from Atlas"],
     recommended: true,
     fields: [
       {
@@ -129,7 +129,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
         options: [
           { value: "google_tasks", label: "Google Tasks" },
           { value: "home_assistant", label: "Home Assistant to-do list" },
-          { value: "jarvis", label: "Built into Jarvis" },
+          { value: "jarvis", label: "Built into Atlas" },
         ],
       },
       {
@@ -138,7 +138,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
         type: "text",
         showWhen: { field: "provider", oneOf: ["google_tasks"] },
         env: "GOOGLE_CLIENT_ID",
-        help: "Create a Web OAuth client in Google Cloud with redirect URI <your Jarvis URL>/api/integrations/todos/oauth/callback.",
+        help: "Create a Web OAuth client in Google Cloud with redirect URI <your Atlas URL>/api/integrations/todos/oauth/callback.",
       },
       {
         key: "clientSecret",
@@ -209,8 +209,8 @@ export const INTEGRATIONS: IntegrationDef[] = [
         type: "select",
         default: "hermes",
         options: [
-          { value: "hermes", label: "Hermes owns Daily Compass (Jarvis asks Hermes for today's state)" },
-          { value: "jarvis", label: "Stored in Jarvis (check-in is a Hermes conversation)" },
+          { value: "hermes", label: "Hermes owns Daily Compass (Atlas asks Hermes for today's state)" },
+          { value: "jarvis", label: "Stored in Atlas (check-in is a Hermes conversation)" },
           { value: "http", label: "External HTTP endpoint" },
         ],
       },
@@ -230,7 +230,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
         type: "number",
         default: 15,
         showWhen: { field: "mode", oneOf: ["hermes"] },
-        help: "How often Jarvis asks Hermes for today's check-in state.",
+        help: "How often Atlas asks Hermes for today's check-in state.",
       },
       {
         key: "statusPrompt",
@@ -239,7 +239,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
         default: COMPASS_STATUS_PROMPT,
         advanced: true,
         showWhen: { field: "mode", oneOf: ["hermes"] },
-        help: "Placeholders: {date}, {timezone}. Must be read-only; Jarvis appends a JSON answer contract.",
+        help: "Placeholders: {date}, {timezone}. Must be read-only; Atlas appends a JSON answer contract.",
       },
       {
         key: "completePrompt",
@@ -248,7 +248,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
         default: COMPASS_COMPLETE_PROMPT,
         advanced: true,
         showWhen: { field: "mode", oneOf: ["hermes"] },
-        help: "Placeholders: {date}, {timezone}. Hermes must read the state back; Jarvis only reports done when the answer says completed.",
+        help: "Placeholders: {date}, {timezone}. Hermes must read the state back; Atlas only reports done when the answer says completed.",
       },
       {
         key: "url",
@@ -295,7 +295,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
         label: "Allowed controls",
         type: "textarea",
         default: HA_DEFAULT_CONTROLS,
-        help: "entity_id: service, service — or domain.*: service for every entity in a domain. Defaults cover lights, switches, fans, climate, media, scenes, scripts, vacuums, covers (incl. garage), locks and alarm panels. Only services in the Jarvis policy can run; locks, alarm and opening a garage are high-risk (explicit confirm, rate-limited). Every control is confirmed and read back.",
+        help: "entity_id: service, service — or domain.*: service for every entity in a domain. Defaults cover lights, switches, fans, climate, media, scenes, scripts, vacuums, covers (incl. garage), locks and alarm panels. Only services in the Atlas policy can run; locks, alarm and opening a garage are high-risk (explicit confirm, rate-limited). Every control is confirmed and read back.",
       },
       {
         key: "lightControl",
@@ -328,14 +328,14 @@ export const INTEGRATIONS: IntegrationDef[] = [
     fields: [
       {
         key: "mode",
-        label: "How Jarvis reads Skylight",
+        label: "How Atlas reads Skylight",
         type: "select",
         default: "hermes",
         options: [
           { value: "hermes", label: "Via Hermes (Hermes owns Skylight)" },
           { value: "direct", label: "Directly (unofficial API, refresh token)" },
         ],
-        help: "Via Hermes: Jarvis sends Hermes a read-only structured request and caches the validated answer. Needs Hermes connected with its Skylight tools.",
+        help: "Via Hermes: Atlas sends Hermes a read-only structured request and caches the validated answer. Needs Hermes connected with its Skylight tools.",
       },
       {
         key: "syncMinutes",
@@ -352,7 +352,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
         default: SKYLIGHT_DEFAULT_PROMPT,
         advanced: true,
         showWhen: { field: "mode", oneOf: ["hermes"] },
-        help: "Placeholders: {from}, {to}, {timezone}. Jarvis appends a JSON answer contract; keep this read-only.",
+        help: "Placeholders: {from}, {to}, {timezone}. Atlas appends a JSON answer contract; keep this read-only.",
       },
       {
         key: "refreshToken",
@@ -360,7 +360,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
         type: "secret",
         env: "SKYLIGHT_REFRESH_TOKEN",
         showWhen: { field: "mode", oneOf: ["direct"] },
-        help: "Use “Sign in to Skylight” below, or paste one from `skycli auth login`. Skylight rotates it on every refresh; Jarvis stores the new one automatically.",
+        help: "Use “Sign in to Skylight” below, or paste one from `skycli auth login`. Skylight rotates it on every refresh; Atlas stores the new one automatically.",
       },
       {
         key: "frameId",
@@ -382,7 +382,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
         label: "Whose tasks to show (you)",
         type: "text",
         showWhen: { field: "mode", oneOf: ["direct"] },
-        help: "Your Skylight member(s), comma-separated ids. “Test connection” lists the frame's members to pick from. Blank: Jarvis matches your name, else shows everyone's until you pick.",
+        help: "Your Skylight member(s), comma-separated ids. “Test connection” lists the frame's members to pick from. Blank: Atlas matches your name, else shows everyone's until you pick.",
       },
       {
         key: "includeUpForGrabs",
@@ -415,7 +415,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
       },
       {
         key: "writes",
-        label: "Let Jarvis change Skylight",
+        label: "Let Atlas change Skylight",
         type: "select",
         default: "true",
         options: [
@@ -524,7 +524,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
         default: 60,
         advanced: true,
         showWhen: { field: "balanceSource", oneOf: ["monarch"] },
-        help: "After asking Monarch to sync, Jarvis waits this long for fresh balances before reading what's there (and saying so).",
+        help: "After asking Monarch to sync, Atlas waits this long for fresh balances before reading what's there (and saying so).",
       },
     ],
   },

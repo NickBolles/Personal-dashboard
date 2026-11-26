@@ -35,7 +35,7 @@ val SOURCE_LABELS = mapOf(
     "skylight" to "Skylight",
     "daily_compass" to "Daily Compass",
     "home_assistant" to "Home",
-    "jarvis" to "Jarvis",
+    "jarvis" to "Atlas",
 )
 
 fun parseInstant(iso: String?): Instant? = iso?.let { runCatching { Instant.parse(it) }.getOrNull() }

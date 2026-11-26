@@ -23,7 +23,7 @@ export const APP_EVENTS = ["pull_request", "pull_request_review", "issues", "che
 /** How long a manifest `state` stays valid (GitHub's code itself is valid for an hour). */
 export const STATE_TTL_MS = 10 * 60_000;
 
-/** "Jarvis (jarvis.example.com)", trimmed to GitHub's 34-character limit. */
+/** Legacy external registration default "Jarvis (jarvis.example.com)", kept for compatibility. */
 export function defaultAppName(origin: string) {
   let host = origin;
   try {
@@ -39,7 +39,7 @@ export function buildManifest(origin: string, name: string) {
   return {
     name,
     url: origin,
-    description: "Read-only access for the Jarvis Work hub: pull request, issue and CI state. Jarvis never writes to GitHub.",
+    description: "Read-only access for the Atlas Work hub: pull request, issue and CI state. Atlas never writes to GitHub.",
     hook_attributes: { url: `${origin}${WEBHOOK_PATH}`, active: true },
     redirect_url: `${origin}${APP_CALLBACK_PATH}`,
     // After installing, GitHub sends the browser back to Settings, which refreshes the installations.

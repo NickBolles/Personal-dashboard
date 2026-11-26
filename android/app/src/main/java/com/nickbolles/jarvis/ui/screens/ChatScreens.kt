@@ -345,7 +345,7 @@ fun ConversationContent(
         }
         if (detail?.session?.readOnly == true) {
             Text(
-                "Shared with you, read only. Fork it in Jarvis on the web to continue it as your own.",
+                "Shared with you, read only. Fork it in Atlas on the web to continue it as your own.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth().padding(16.dp),

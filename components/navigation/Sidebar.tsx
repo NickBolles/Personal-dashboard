@@ -1,4 +1,5 @@
 "use client";
+import { AtlasMark } from "@/components/brand/AtlasMark";
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -209,9 +210,9 @@ export function Sidebar({
     >
       <div className={cx("flex h-11 items-center gap-1 px-2", collapsed && "justify-center")}>
         {!collapsed ? (
-          <Link href="/home" aria-label="Jarvis home" className="flex min-h-11 flex-1 items-center gap-2 px-1.5 text-[0.9375rem] font-bold">
-            <span aria-hidden="true" className="brand-mark" />
-            <span>Jarvis</span>
+          <Link href="/home" aria-label="Atlas home" className="flex min-h-11 flex-1 items-center gap-2 px-1.5 text-[0.9375rem] font-bold">
+            <AtlasMark className="brand-mark" />
+            <span>Atlas</span>
           </Link>
         ) : null}
         <button

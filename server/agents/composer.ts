@@ -75,7 +75,7 @@ export function nodeContextBlock(userId: string, nodeId: string): string {
     return s.length > n ? `${s.slice(0, n - 1)}…` : s;
   };
   const lines = [
-    `Asked from Jarvis ${node.kind}: ${node.path.join(" › ")}`,
+    `Asked from Atlas ${node.kind}: ${node.path.join(" › ")}`,
     row?.status ? `Status: ${row.status}` : "",
     row?.summary ? `Summary: ${clip(row.summary, 600)}` : "",
     row?.nextAction ? `Next action: ${clip(row.nextAction, 200)}` : "",

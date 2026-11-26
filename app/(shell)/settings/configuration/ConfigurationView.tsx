@@ -65,7 +65,7 @@ export function ConfigurationView() {
         Back to Settings
       </Link>
       <p className="text-sm text-muted">
-        Move stored integration settings between Jarvis instances. This is not a backup: no people, sign-ins, conversations, finance records, or deployment
+        Move stored integration settings between Atlas instances. This is not a backup: no people, sign-ins, conversations, finance records, or deployment
         environment are included.
       </p>
       <Card>

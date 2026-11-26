@@ -300,7 +300,7 @@ function ImportDialog({ onClose, onApplied }: { onClose: () => void; onApplied: 
         {preview && c ? (
           <section aria-label="Import preview" data-testid="import-preview" className="flex flex-col gap-2">
             <p className="text-[13px]">
-              <b>{c.create}</b> new · <b>{c.update}</b> updated · <b>{c.unchanged}</b> already in Jarvis · <b>{c.skip}</b> skipped · <b>{c.links}</b> links
+              <b>{c.create}</b> new · <b>{c.update}</b> updated · <b>{c.unchanged}</b> already in Atlas · <b>{c.skip}</b> skipped · <b>{c.links}</b> links
               {preview.plan.skippedLinks ? ` (${preview.plan.skippedLinks} non-https links left out)` : ""}
             </p>
             {preview.plan.notes.map((n) => (
@@ -322,7 +322,7 @@ function ImportDialog({ onClose, onApplied }: { onClose: () => void; onApplied: 
                 ))}
               </ul>
             ) : (
-              <p className="text-[13px] text-muted">Everything on the board is already in Jarvis.</p>
+              <p className="text-[13px] text-muted">Everything on the board is already in Atlas.</p>
             )}
           </section>
         ) : null}

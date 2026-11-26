@@ -94,7 +94,7 @@ test("scheduled run: low-risk change, owner decision, refused deploy and dismiss
     await page.reload();
     await expect(runRow.getByRole("button", { name: "1 change", exact: true })).toBeVisible();
     await expect(runRow.getByRole("link", { name: "1 needs you", exact: true })).toBeVisible();
-    await expect(runRow).toContainText("Skipped: deploy (Jarvis never deploys)");
+    await expect(runRow).toContainText("Skipped: deploy (Atlas never deploys)");
   }).toPass({ timeout: 60_000, intervals: [1000, 2000, 4000] });
   await expectNoHorizontalOverflow(page);
   await runRow.getByRole("link", { name: "1 needs you", exact: true }).click();

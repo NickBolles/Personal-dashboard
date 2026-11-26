@@ -24,7 +24,7 @@ export function DriveConnection() {
       qc.setQueryData(["drive-status"], r);
       toast(
         r.keptSharedGrant
-          ? "Google Drive disconnected. Google access stays on because Google Tasks shares it; remove Jarvis in your Google account to revoke both."
+          ? "Google Drive disconnected. Google access stays on because Google Tasks shares it; remove the existing app grant in your Google account to revoke both."
           : "Google Drive disconnected",
         "ok",
       );
@@ -43,13 +43,13 @@ export function DriveConnection() {
         asks first and shows the folder.
       </p>
       <p className="text-muted">
-        Access: only files Jarvis creates (<code className="break-all">drive.file</code>). Jarvis can&apos;t read or change anything else in your Drive. This is
-        a separate permission from any other Google access.
+        Access: only files Atlas creates (<code className="break-all">drive.file</code>). Atlas can&apos;t read or change anything else in your Drive. This is a
+        separate permission from any other Google access.
       </p>
       {result === "error" && message ? <ErrorNote error={message} /> : null}
       {!s.available ? (
         <p className="text-muted" data-testid="drive-off">
-          Not turned on for this Jarvis. The owner enables it on the server once the Google OAuth client allows the redirect{" "}
+          Not turned on for this Atlas. The owner enables it on the server once the Google OAuth client allows the redirect{" "}
           <code className="break-all">{s.redirectPath}</code> and the Google Drive API.
         </p>
       ) : !s.configured ? (

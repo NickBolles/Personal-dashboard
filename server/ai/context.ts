@@ -11,7 +11,7 @@ import { areaPolicyFor } from "./jobs";
  * that context source, secrets or other people's data. ≤ 8000 chars.
  */
 export const CONTEXT_MAX = 8000;
-export const TRUNCATED = "\n[…context truncated by Jarvis]";
+export const TRUNCATED = "\n[…context truncated by Atlas]";
 
 /** Untrusted text goes in a <data> block; a closing tag inside it is neutralised. */
 export function wrap(source: string, text: string) {

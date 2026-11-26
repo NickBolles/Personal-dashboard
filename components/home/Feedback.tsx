@@ -135,7 +135,7 @@ export function FeedbackBar({ target, canHide = true, rate = false }: { target: 
         onClose={() => {
           if (!fb.isPending) setWrong(false);
         }}
-        title={target.kind === "assist" ? "What did Jarvis get wrong?" : "Why is this ranked wrong?"}
+        title={target.kind === "assist" ? "What did Atlas get wrong?" : "Why is this ranked wrong?"}
         description={
           target.kind === "assist"
             ? "The suggestion stays hidden until its data changes. Your note is saved for you (and for Hermes when you ask it to tune Home)."

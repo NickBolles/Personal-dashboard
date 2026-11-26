@@ -63,7 +63,7 @@ type JobRow = typeof J.$inferSelect;
 
 export function aiStatus(): { available: boolean; reason?: string } {
   if (!getAiSettings().enabled) return { available: false, reason: "AI is turned off in Settings → AI." };
-  if (!isConfigured("hermes")) return { available: false, reason: "Connect Hermes so Jarvis can write your brief." };
+  if (!isConfigured("hermes")) return { available: false, reason: "Connect Hermes so Atlas can write your brief." };
   return { available: true };
 }
 

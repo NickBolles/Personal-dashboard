@@ -163,7 +163,7 @@ export function CaptureSheet({
     if (r.ok) {
       qc.invalidateQueries({ queryKey: ["work"] });
       const triage = (r.body as { triage?: string }).triage;
-      toast(triage === "queued" ? "Captured · Jarvis is looking into it" : "Captured to the inbox", "ok");
+      toast(triage === "queued" ? "Captured · Atlas is looking into it" : "Captured to the inbox", "ok");
       void flushQueue();
       onDone?.({ queued: false });
       return;

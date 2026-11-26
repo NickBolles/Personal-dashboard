@@ -344,7 +344,7 @@ describe("workflow surfaces (Jarvis-built, flag-gated)", () => {
       expect(requests[0]).toMatchObject({
         method: "POST",
         path: "/api/frames/smart-frame/calendar_events",
-        body: { summary: "Renew registration", description: "Planned in Jarvis", starts_at: "2026-10-30T18:00:00.000Z" },
+        body: { summary: "Renew registration", description: "Planned in Atlas", starts_at: "2026-10-30T18:00:00.000Z" },
       });
       vi.setSystemTime(Date.now() + 300);
       await undoIntent(user, { surfaceId: s.id, intentHash: result.results[0].intentHash }, cid);

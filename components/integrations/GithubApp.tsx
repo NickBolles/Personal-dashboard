@@ -8,7 +8,7 @@ import { Button, ButtonLink, Dialog, Field, Input, Pill, Textarea, cx, useToast 
 
 /**
  * Settings → Connections → GitHub → GitHub App (admin). "Create GitHub App"
- * runs GitHub's manifest flow from this browser: Jarvis prepares the manifest
+ * runs GitHub's manifest flow from this browser: Atlas prepares the manifest
  * and a one-time state, the browser POSTs it to GitHub, you confirm there
  * (passkey/password: Jarvis never sees it), and GitHub sends you back to
  * /api/github/app/callback. The App's credentials stay on the server.
@@ -79,11 +79,11 @@ function CreateApp({ s }: { s: GithubSettingsResponse }) {
       <p className="text-muted">
         One App replaces per-owner tokens: install it on your account and on each organization. It can only read (metadata, pull requests, issues, checks,
         commit statuses, actions) and sends webhooks for pull requests, reviews, issues, check suites and workflow runs. GitHub asks you to confirm with your
-        passkey or password; Jarvis never sees it, and the App&apos;s keys stay on the server.
+        passkey or password; Atlas never sees it, and the App&apos;s keys stay on the server.
       </p>
       {!s.appSetup.https ? (
         <p className="rounded-lg bg-warn-soft p-2 text-warn" data-testid="gh-app-http-warning">
-          This page isn&apos;t served over https ({s.appSetup.origin}). GitHub can&apos;t deliver webhooks here; open Jarvis at its public https address (or set{" "}
+          This page isn&apos;t served over https ({s.appSetup.origin}). GitHub can&apos;t deliver webhooks here; open Atlas at its public https address (or set{" "}
           <code>JARVIS_PUBLIC_ORIGIN</code>) before creating the App.
         </p>
       ) : null}
@@ -160,7 +160,7 @@ function ConnectExisting() {
           connect.mutate();
         }}
       >
-        <p className="text-muted">Jarvis checks the App ID and private key with GitHub before saving. Both secrets are write-only.</p>
+        <p className="text-muted">Atlas checks the App ID and private key with GitHub before saving. Both secrets are write-only.</p>
         <Field id="gh-app-id" label="App ID">
           <Input id="gh-app-id" required inputMode="numeric" pattern="[0-9]+" value={appId} onChange={(e) => setAppId(e.target.value)} />
         </Field>
@@ -336,7 +336,7 @@ function AppDetails({ app, autoRefresh }: { app: PublicGithubApp; autoRefresh: b
         open={confirm}
         onClose={() => setConfirm(false)}
         title="Forget the GitHub App?"
-        description="Jarvis deletes its keys and installation list. The App still exists on GitHub: delete it there (Settings → Developer settings → GitHub Apps) to revoke it."
+        description="Atlas deletes its keys and installation list. The App still exists on GitHub: delete it there (Settings → Developer settings → GitHub Apps) to revoke it."
         footer={
           <>
             <Button onClick={() => setConfirm(false)}>Cancel</Button>
@@ -372,7 +372,7 @@ function AllowlistForm({ app }: { app: PublicGithubApp }) {
     >
       <Field
         id="gh-app-allowlist"
-        label="Accounts Jarvis accepts"
+        label="Accounts Atlas accepts"
         hint={
           app.allowlistIsDefault
             ? "Default: the owners of your saved tokens plus the App's owner. Installations on other accounts are ignored."

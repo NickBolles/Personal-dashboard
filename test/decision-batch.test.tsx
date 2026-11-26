@@ -174,12 +174,12 @@ it("preserves multiline fields and enclosing section instructions in the reviewe
   );
   const ui = render(draw());
   expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("Draft note");
-  expect(screen.getByText("Proposed by Jarvis · editable")).toBeTruthy();
+  expect(screen.getByText("Proposed by Atlas · editable")).toBeTruthy();
   fireEvent.change(screen.getByRole("textbox"), { target: { value: "Owner's edited note" } });
   ui.unmount();
   render(draw());
   expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("Owner's edited note");
-  expect(screen.queryByText("Proposed by Jarvis · editable")).toBeNull();
+  expect(screen.queryByText("Proposed by Atlas · editable")).toBeNull();
   expect(reply).not.toHaveBeenCalled();
   expect(answerPayload(qs, { [qs[0].id]: { choice: "text", other: "First line\nSecond line" } })).toContain("First line\nSecond line");
   expect(answerComplete(qs[0], { choice: "text", other: "" })).toBe(true);

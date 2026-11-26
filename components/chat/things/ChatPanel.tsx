@@ -75,7 +75,7 @@ export function RunningSection({
         ))}
       {!records.length && allOk ? <p className="text-muted">No agents or jobs for this chat</p> : null}
       {/* Not every source answered freshly, so "none" is not claimed: only that nothing is known to be running. */}
-      {!records.length && !allOk && !failed && execution ? <p className="text-muted">Nothing running that Jarvis knows of</p> : null}
+      {!records.length && !allOk && !failed && execution ? <p className="text-muted">Nothing running that Atlas knows of</p> : null}
     </div>
   );
 }

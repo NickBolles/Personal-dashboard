@@ -1,4 +1,5 @@
 "use client";
+import { AtlasMark } from "@/components/brand/AtlasMark";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -243,11 +244,11 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
           <nav aria-label="Primary" className="flex min-w-0 flex-1 items-center gap-1">
             <Link
               href="/home"
-              aria-label="Jarvis home"
+              aria-label="Atlas home"
               className="mr-1 flex min-h-11 min-w-11 items-center justify-center gap-2 px-1.5 text-[0.9375rem] font-bold tracking-[-0.01em] lg:hidden"
             >
-              <span aria-hidden="true" className="brand-mark" />
-              <span className="hidden xl:inline">Jarvis</span>
+              <AtlasMark className="brand-mark" />
+              <span className="hidden xl:inline">Atlas</span>
             </Link>
             <ul className="flex min-w-0 items-center gap-0.5 lg:hidden">{topItems.map(topItem)}</ul>
             <Suspense fallback={null}>
@@ -260,7 +261,7 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
           {!pathname.startsWith("/chat") ? (
             <div
               role="search"
-              aria-label="Ask Jarvis"
+              aria-label="Ask Atlas"
               className="jv-dock-inline mx-2 hidden w-[clamp(220px,30vw,420px)] min-w-0 lg:block"
               data-testid="dock-top"
             >

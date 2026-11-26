@@ -325,7 +325,7 @@ test("raycast palette: axe clean and no overflow at 200% text zoom (root, typed,
   const made = await page.request.post("/api/work/items", { data: { kind: "area", title: `Zoom aviary ${nonce}` }, headers: { "x-jarvis-csrf": "1" } });
   expect(made.ok()).toBeTruthy();
   await page.getByRole("heading", { name: "Now" }).waitFor();
-  const box = page.getByRole("combobox", { name: "Search Jarvis" });
+  const box = page.getByRole("combobox", { name: "Search Atlas" });
   await expect(async () => {
     await page.keyboard.press("Control+k");
     await expect(box).toBeFocused({ timeout: 1000 });

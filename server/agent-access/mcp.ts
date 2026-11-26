@@ -70,7 +70,7 @@ export async function handleMcp(agent: AgentPrincipal, raw: unknown, correlation
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: "jarvis", version: "1.0.0" },
         instructions:
-          "Jarvis work items for the owner. Writes are attributed to you, logged and undoable. You can't settle, archive, move, split, merge or delete — propose those with jarvis_request_change. AI-excluded subtrees are hidden. Never include credentials, tokens or full account numbers.",
+          "Atlas work items for the owner. Writes are attributed to you, logged and undoable. You can't settle, archive, move, split, merge or delete — propose those with jarvis_request_change. AI-excluded subtrees are hidden. Never include credentials, tokens or full account numbers.",
       });
     }
     case "ping":
@@ -107,13 +107,13 @@ async function callTool(agent: AgentPrincipal, params: Record<string, unknown>, 
   }
   if (SCHEDULED_GUARDED.has(t.name) && activeScheduledRunFor(agent.user.id, agent.profile)) {
     // A scheduled run's direct writes would bypass the area's autonomy policy: route them through the
-    // run's proposals block, where Jarvis applies Propose-only / Act-on-low-risk (#230).
+    // run's proposals block, where Atlas applies Propose-only / Act-on-low-risk (#230).
     log("rejected", "scheduled_run");
     return textResult(
       {
         error: "scheduled_run",
         message:
-          "A scheduled run for this agent is active, so direct writes are off. List the change in the jarvis-proposals block instead; Jarvis applies the area's autonomy policy (decisions in Needs you, low-risk changes only where allowed).",
+          "A scheduled run for this agent is active, so direct writes are off. List the change in the jarvis-proposals block instead; Atlas applies the area's autonomy policy (decisions in Needs you, low-risk changes only where allowed).",
       },
       true,
     );

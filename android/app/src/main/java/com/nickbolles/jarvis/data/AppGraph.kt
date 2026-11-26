@@ -37,7 +37,7 @@ class AppGraph(val context: Context, val store: SessionStore = SessionStore(cont
     private var cachedApi: Pair<Pairing, JarvisApi>? = null
 
     suspend fun api(): JarvisApi {
-        val p = store.current() ?: throw ApiException(401, "unpaired", "This phone isn't paired with Jarvis")
+        val p = store.current() ?: throw ApiException(401, "unpaired", "This phone isn't paired with Atlas")
         cachedApi?.let { (key, api) -> if (key == p) return api }
         return JarvisApi(p.server, p.token).also { cachedApi = p to it }
     }
@@ -47,7 +47,7 @@ class AppGraph(val context: Context, val store: SessionStore = SessionStore(cont
         try {
             return block(api())
         } catch (e: ApiException) {
-            if (e.isAuth && e.code != "unpaired") signOutLocally("Jarvis signed this phone out. Pair it again from Settings → Phones.")
+            if (e.isAuth && e.code != "unpaired") signOutLocally("Atlas signed this phone out. Pair it again from Settings → Phones.")
             throw e
         }
     }

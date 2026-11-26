@@ -123,7 +123,7 @@ const short = (n: string) => (n.length > 60 ? `${n.slice(0, 57)}…` : n);
 
 // --- Message encoding ---
 
-/** Hidden marker in the "Context from Jarvis" section so the bubble can show its attachments. */
+/** Hidden marker in the "Context from Atlas" section so the bubble can show its attachments. */
 export const FILE_MARK = "jarvis-file:";
 const FILE_ID_RE = /jarvis-file:(cf_[A-Za-z0-9_-]{6,64})/g;
 

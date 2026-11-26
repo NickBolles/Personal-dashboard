@@ -128,12 +128,12 @@ export function updatePerson(id: string, patch: PersonPatch, actorId: string) {
   const role = patch.role ?? asRole(user.role);
   const losesAdmin = (patch.role && patch.role !== "admin") || patch.disabled;
   if (user.role === "admin" && losesAdmin && adminsLeft(id) === 0) {
-    throw new HttpError(409, "last_admin", "Jarvis needs at least one admin.");
+    throw new HttpError(409, "last_admin", "Atlas needs at least one admin.");
   }
   if (id === actorId && patch.disabled) throw new HttpError(409, "self", "You can't disable yourself.");
   if (losesAdmin && id === getOwner()?.id) {
     // Ownership decides who passcode-only sign-in checks and who owns Hermes-direct conversations.
-    throw new HttpError(409, "owner", "The person who set up Jarvis stays an active admin.");
+    throw new HttpError(409, "owner", "The person who set up Atlas stays an active admin.");
   }
   const set: Partial<typeof schema.users.$inferInsert> = {};
   if (patch.name !== undefined) set.name = patch.name.trim();
@@ -169,10 +169,10 @@ export function updatePerson(id: string, patch: PersonPatch, actorId: string) {
 
 export function deletePerson(id: string, actorId: string) {
   if (id === actorId) throw new HttpError(409, "self", "You can't remove yourself.");
-  if (id === getOwner()?.id) throw new HttpError(409, "owner", "The person who set up Jarvis can't be removed. Disable them instead.");
+  if (id === getOwner()?.id) throw new HttpError(409, "owner", "The person who set up Atlas can't be removed. Disable them instead.");
   const user = getDb().select().from(schema.users).where(eq(schema.users.id, id)).get();
   if (!user) throw new HttpError(404, "not_found", "Person not found");
-  if (user.role === "admin" && adminsLeft(id) === 0) throw new HttpError(409, "last_admin", "Jarvis needs at least one admin.");
+  if (user.role === "admin" && adminsLeft(id) === 0) throw new HttpError(409, "last_admin", "Atlas needs at least one admin.");
   getDb().delete(schema.users).where(eq(schema.users.id, id)).run();
 }
 

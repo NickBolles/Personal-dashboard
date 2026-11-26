@@ -173,7 +173,7 @@ export function assistPrompt(intent: BriefAssistIntent, task: { title: string; w
     ASK[intent],
     "Keep the answer short, then give me the next steps, first one first: five at most, one line each.",
     "This is research only. Do not book, buy, send, call or change anything, and do not mark the task done. Ask me when a choice is mine to make.",
-    `It is tracked as the Jarvis item "${item.title}" (id ${item.id}). If you have Jarvis tools, set that item's next action to the first step and add a note on it titled "Next steps" with one step per line.`,
+    `It is tracked as the Atlas item "${item.title}" (id ${item.id}). If you have Atlas tools, set that item's next action to the first step and add a note on it titled "Next steps" with one step per line.`,
   ].join("\n\n");
 }
 

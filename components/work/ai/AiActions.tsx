@@ -234,7 +234,7 @@ export function ActionSheet({
             ))}
           </div>
         ) : (
-          <p className="text-xs text-muted">Fast model estimates the effort. Your calendars are read by Jarvis only and never sent to AI.</p>
+          <p className="text-xs text-muted">Fast model estimates the effort. Your calendars are read by Atlas only and never sent to AI.</p>
         )}
         <ModelCombobox backend="hermes" value={model} onChange={setModel} defaultHint="tier default" />
         <Field id="ai-focus" label="Focus (optional)">

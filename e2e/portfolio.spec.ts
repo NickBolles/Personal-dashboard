@@ -115,7 +115,7 @@ test("portfolio tab: project lanes, then import a map with preview, undo and no 
   await expect(imported).toBeVisible();
   dialog = await importOnce();
   await expect(dialog.getByTestId("import-preview")).toContainText("0 new");
-  await expect(dialog.getByTestId("import-preview")).toContainText("Everything on the board is already in Jarvis.");
+  await expect(dialog.getByTestId("import-preview")).toContainText("Everything on the board is already in Atlas.");
   await dialog.getByRole("button", { name: "Cancel" }).click();
 
   // The decision shows in Needs you on the same page; the tab is landing-only.

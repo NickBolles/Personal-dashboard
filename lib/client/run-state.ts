@@ -37,7 +37,7 @@ export type RunState = {
   output?: string;
   lastSeq?: number;
   attempts: number;
-  /** Why the run shows "Queued": Hermes' own queue, or Jarvis waiting for a free Hermes connection. */
+  /** Why the run shows "Queued": Hermes' own queue, or Atlas waiting for a free Hermes connection. */
   queueReason?: "connections";
 };
 

@@ -38,9 +38,9 @@ export function GithubConnections() {
   return (
     <div className="space-y-5">
       <p className="text-sm text-muted">
-        Read-only access for the Work hub: linked PR, CI and issue state, and issues assigned to you (into the Work inbox). Jarvis only ever reads; it never
-        writes to GitHub. Use the GitHub App, or one token per GitHub owner (your user, each organization). For each repository Jarvis uses the App first, then
-        a token.
+        Read-only access for the Work hub: linked PR, CI and issue state, and issues assigned to you (into the Work inbox). Atlas only ever reads; it never
+        writes to GitHub. Use the GitHub App, or one token per GitHub owner (your user, each organization). For each repository Atlas uses the App first, then a
+        token.
       </p>
       {s.envToken ? (
         <p className="rounded-lg bg-surface-2 p-2 text-sm">
@@ -85,7 +85,7 @@ function TokenHelp() {
       <summary className="tap cursor-pointer font-medium text-accent">How to create a read-only token</summary>
       <ol className="mt-2 list-decimal space-y-1 pl-5">
         <li>Use a fine-grained personal access token, one per owner, with only Pull requests: Read and Issues: Read.</li>
-        <li>Pick the owner (your user or the organization) and the repositories Jarvis may read.</li>
+        <li>Pick the owner (your user or the organization) and the repositories Atlas may read.</li>
         <li>Paste the token here, then press Test.</li>
       </ol>
       <div className="mt-2 flex flex-wrap items-end gap-2">
@@ -197,7 +197,7 @@ function ConnectionRow({ c }: { c: PublicGithubConnection }) {
         open={confirm}
         onClose={() => setConfirm(false)}
         title={`Remove ${c.label}?`}
-        description="Jarvis forgets the token. Links to this owner's PRs stop refreshing (unless JARVIS_GITHUB_TOKEN is set)."
+        description="Atlas forgets the token. Links to this owner's PRs stop refreshing (unless JARVIS_GITHUB_TOKEN is set)."
         footer={
           <>
             <Button onClick={() => setConfirm(false)}>Cancel</Button>
@@ -228,7 +228,7 @@ function ConnectionDialog({ c, onClose }: { c?: PublicGithubConnection; onClose:
       open
       onClose={onClose}
       title={c ? `Edit ${c.label}` : "Add a GitHub token"}
-      description="Stored encrypted on the Jarvis server. It's never shown again after you save."
+      description="Stored encrypted on the Atlas server. It's never shown again after you save."
       footer={
         <>
           <Button onClick={onClose}>Cancel</Button>
@@ -288,9 +288,9 @@ function WebhookSettings({ s }: { s: GithubSettingsResponse }) {
         Webhook (optional, read-only)
       </h3>
       <p className="text-sm text-muted">
-        The GitHub App sends its webhooks here with its own secret; nothing to set up. Without the App (tokens only), GitHub can still tell Jarvis the moment a
-        linked PR or issue changes. Jarvis doesn&apos;t register it for you: in the repository or organization settings, add a webhook with this URL, content
-        type <code>application/json</code>, this secret, and the events “Pull requests” and “Issues”. Jarvis checks the signature on every delivery and only
+        The GitHub App sends its webhooks here with its own secret; nothing to set up. Without the App (tokens only), GitHub can still tell Atlas the moment a
+        linked PR or issue changes. Atlas doesn&apos;t register it for you: in the repository or organization settings, add a webhook with this URL, content
+        type <code>application/json</code>, this secret, and the events “Pull requests” and “Issues”. Atlas checks the signature on every delivery and only
         updates PRs and issues already linked to Work items.
       </p>
       <Field id="gh-webhook-url" label="Payload URL">
@@ -385,7 +385,7 @@ function PollSettings({ s }: { s: GithubSettingsResponse }) {
         </p>
       ) : null}
       <p className="text-xs text-muted">
-        0 turns it off. At most 50 links per check, each at most every 5 minutes; Jarvis waits when GitHub rate-limits.{" "}
+        0 turns it off. At most 50 links per check, each at most every 5 minutes; Atlas waits when GitHub rate-limits.{" "}
         {s.poller.running ? "Running" : "Not running"}
         {s.poller.lastTickAt ? ` · last check ${new Date(s.poller.lastTickAt).toLocaleTimeString()}: ${s.poller.lastResult ?? ""}` : ""}.
       </p>
